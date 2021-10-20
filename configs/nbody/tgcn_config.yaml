@@ -1,0 +1,34 @@
+datamodule:
+  batch_size: 4
+  shuffle: True
+
+model:
+  hidden_size: 128
+  normalise: True
+  dropout: 0.0
+  gru_dim: 40
+
+regressor:
+  noise: null
+  lr: 3.0e-4
+  weight_decay: 0.0001
+  log_norm: False
+
+trainer:
+  check_val_every_n_epoch: 1
+  max_epochs: 10
+  deterministic: True
+
+logger:
+  offline: False
+  version: tgcn_08
+  project: trajectory_forecasting_baseline
+
+misc:
+  seed: 1
+  model_type: TGCNGNN
+  dm_type: SequentialNBodyDataModule
+  regressor_type: SequentialModule
+  checkpoint: True
+  train: True
+
