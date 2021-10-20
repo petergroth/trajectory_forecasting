@@ -640,6 +640,3 @@ class NormalisationBlock:
             x = torch.mul(self.node_out_std, x)
             x = torch.add(x, self.node_out_mean)
         return x
-
-
-
