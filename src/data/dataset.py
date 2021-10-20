@@ -10,7 +10,7 @@ from typing import Optional
 
 
 class OneStepTrainDataset(InMemoryDataset):
-    def __init__(self, root='', transform=None, pre_transform=None):
+    def __init__(self, root="", transform=None, pre_transform=None):
         super(OneStepTrainDataset, self).__init__(root, transform, pre_transform)
         self.data, self.slices = torch.load(self.processed_paths[0])
 
@@ -42,7 +42,7 @@ class OneStepTrainDataset(InMemoryDataset):
         # Move through training samples and save all graphs separately
         for i, raw_path in enumerate(self.raw_file_names[:5000]):
             full_arr = load_simulations(
-                self.raw_dir+"/"+raw_path
+                self.raw_dir + "/" + raw_path
             )  # [n_steps, n_nodes, 5]
             n_steps = full_arr.shape[0]
             n_nodes = full_arr.shape[1]
@@ -63,7 +63,7 @@ class OneStepTrainDataset(InMemoryDataset):
 
 
 class SequentialTrainDataset(InMemoryDataset):
-    def __init__(self, root='', transform=None, pre_transform=None):
+    def __init__(self, root="", transform=None, pre_transform=None):
         super(SequentialTrainDataset, self).__init__(root, transform, pre_transform)
         self.data, self.slices = torch.load(self.processed_paths[0])
 
@@ -94,7 +94,7 @@ class SequentialTrainDataset(InMemoryDataset):
 
         for j, raw_path in enumerate(self.raw_file_names[:5000]):
             full_arr = load_simulations(
-                self.raw_dir+"/" + raw_path
+                self.raw_dir + "/" + raw_path
             )  # [n_steps, n_nodes, 5]
             n_steps = full_arr.shape[0]
             n_nodes = full_arr.shape[1]
@@ -111,7 +111,7 @@ class SequentialTrainDataset(InMemoryDataset):
 
 
 class SequentialValDataset(InMemoryDataset):
-    def __init__(self, root='', transform=None, pre_transform=None):
+    def __init__(self, root="", transform=None, pre_transform=None):
         super(SequentialValDataset, self).__init__(root, transform, pre_transform)
         self.data, self.slices = torch.load(self.processed_paths[0])
 
@@ -142,7 +142,7 @@ class SequentialValDataset(InMemoryDataset):
 
         for j, raw_path in enumerate(self.raw_file_names[5000:7500]):
             full_arr = load_simulations(
-                self.raw_dir+"/" + raw_path
+                self.raw_dir + "/" + raw_path
             )  # [n_steps, n_nodes, 5]
             n_steps = full_arr.shape[0]
             n_nodes = full_arr.shape[1]
@@ -159,7 +159,7 @@ class SequentialValDataset(InMemoryDataset):
 
 
 class SequentialTestDataset(InMemoryDataset):
-    def __init__(self, root='', transform=None, pre_transform=None):
+    def __init__(self, root="", transform=None, pre_transform=None):
         super(SequentialTestDataset, self).__init__(root, transform, pre_transform)
         self.data, self.slices = torch.load(self.processed_paths[0])
 
@@ -190,7 +190,7 @@ class SequentialTestDataset(InMemoryDataset):
 
         for j, raw_path in enumerate(self.raw_file_names[7500:]):
             full_arr = load_simulations(
-                self.raw_dir+"/" + raw_path
+                self.raw_dir + "/" + raw_path
             )  # [n_steps, n_nodes, 5]
             n_steps = full_arr.shape[0]
             n_nodes = full_arr.shape[1]
@@ -207,7 +207,13 @@ class SequentialTestDataset(InMemoryDataset):
 
 
 class OneStepNBodyDataModule(pl.LightningDataModule):
-    def __init__(self, data_dir="data/processed/nbody", batch_size=1, shuffle=False, val_batch_size: int = 1):
+    def __init__(
+        self,
+        data_dir="data/processed/nbody",
+        batch_size=1,
+        shuffle=False,
+        val_batch_size: int = 1,
+    ):
         super().__init__(data_dir, batch_size, shuffle)
         self.data_dir = data_dir
         self.batch_size = batch_size
@@ -231,10 +237,14 @@ class OneStepNBodyDataModule(pl.LightningDataModule):
         assert len(self.train_dataset) == 450000
 
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=self.shuffle)
+        return DataLoader(
+            self.train_dataset, batch_size=self.batch_size, shuffle=self.shuffle
+        )
 
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_size=self.val_batch_size, shuffle=False)
+        return DataLoader(
+            self.val_dataset, batch_size=self.val_batch_size, shuffle=False
+        )
 
     def test_dataloader(self):
         return DataLoader(self.test_dataset, batch_size=1, shuffle=False)
@@ -244,7 +254,13 @@ class OneStepNBodyDataModule(pl.LightningDataModule):
 
 
 class SequentialNBodyDataModule(pl.LightningDataModule):
-    def __init__(self, data_dir="data/processed/nbody", batch_size: int = 1, shuffle: bool = False, val_batch_size: int = 1):
+    def __init__(
+        self,
+        data_dir="data/processed/nbody",
+        batch_size: int = 1,
+        shuffle: bool = False,
+        val_batch_size: int = 1,
+    ):
         super().__init__(data_dir, batch_size, shuffle)
         self.data_dir = data_dir
         self.batch_size = batch_size
@@ -268,10 +284,17 @@ class SequentialNBodyDataModule(pl.LightningDataModule):
         assert len(self.train_dataset) == 5000
 
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=self.shuffle, num_workers=4)
+        return DataLoader(
+            self.train_dataset,
+            batch_size=self.batch_size,
+            shuffle=self.shuffle,
+            num_workers=4,
+        )
 
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_size=self.val_batch_size, shuffle=False)
+        return DataLoader(
+            self.val_dataset, batch_size=self.val_batch_size, shuffle=False
+        )
 
     def test_dataloader(self):
         return DataLoader(self.test_dataset, batch_size=1, shuffle=False)
@@ -281,7 +304,7 @@ class SequentialNBodyDataModule(pl.LightningDataModule):
 
 
 class OneStepWaymoTrainDataset(InMemoryDataset):
-    def __init__(self, root='', transform=None, pre_transform=None):
+    def __init__(self, root="", transform=None, pre_transform=None):
         super(OneStepWaymoTrainDataset, self).__init__(root, transform, pre_transform)
         self.data, self.slices = torch.load(self.processed_paths[0])
 
@@ -309,8 +332,18 @@ class OneStepWaymoTrainDataset(InMemoryDataset):
     def process(self):
         data_list = []
         # Node attributes
-        key_values = ["x", "y", "velocity_x", "velocity_y", "bbox_yaw", "vel_yaw", "width", "length", "height",
-                      "valid"]
+        key_values = [
+            "x",
+            "y",
+            "velocity_x",
+            "velocity_y",
+            "bbox_yaw",
+            "vel_yaw",
+            "width",
+            "length",
+            "height",
+            "valid",
+        ]
 
         # Dimensions
         n_nodes = 128
@@ -322,7 +355,9 @@ class OneStepWaymoTrainDataset(InMemoryDataset):
         # Move through raw files
         for i, raw_path in enumerate(self.raw_file_names):
             # Load file
-            dataset = tf.data.TFRecordDataset(self.raw_dir+"/"+raw_path, compression_type='')
+            dataset = tf.data.TFRecordDataset(
+                self.raw_dir + "/" + raw_path, compression_type=""
+            )
             for seq_idx, data in enumerate(dataset.as_numpy_iterator()):
                 # Parse sequence
                 parsed = parse_sequence(data)
@@ -332,9 +367,15 @@ class OneStepWaymoTrainDataset(InMemoryDataset):
                 # Fill in all values
                 for j, key in enumerate(key_values):
                     # Encode history
-                    feature_matrix[:, :10, i] = torch.Tensor(parsed["state/past/" + key].numpy())
-                    feature_matrix[:, 10, i] = torch.Tensor(parsed["state/current/" + key].numpy()).squeeze()
-                    feature_matrix[:, 11:, i] = torch.Tensor(parsed["state/future/" + key].numpy())
+                    feature_matrix[:, :10, i] = torch.Tensor(
+                        parsed["state/past/" + key].numpy()
+                    )
+                    feature_matrix[:, 10, i] = torch.Tensor(
+                        parsed["state/current/" + key].numpy()
+                    ).squeeze()
+                    feature_matrix[:, 11:, i] = torch.Tensor(
+                        parsed["state/future/" + key].numpy()
+                    )
 
                 # Determine input/target pairs
                 for t in range(n_steps - 1):
@@ -351,8 +392,10 @@ class OneStepWaymoTrainDataset(InMemoryDataset):
 
 
 class SequentialWaymoTrainDataset(InMemoryDataset):
-    def __init__(self, root='', transform=None, pre_transform=None):
-        super(SequentialWaymoTrainDataset, self).__init__(root, transform, pre_transform)
+    def __init__(self, root="", transform=None, pre_transform=None):
+        super(SequentialWaymoTrainDataset, self).__init__(
+            root, transform, pre_transform
+        )
         self.data, self.slices = torch.load(self.processed_paths[0])
 
     @property
@@ -379,8 +422,18 @@ class SequentialWaymoTrainDataset(InMemoryDataset):
     def process(self):
         data_list = []
         # Node attributes
-        key_values = ["x", "y", "velocity_x", "velocity_y", "bbox_yaw", "vel_yaw", "width", "length", "height",
-                      "valid"]
+        key_values = [
+            "x",
+            "y",
+            "velocity_x",
+            "velocity_y",
+            "bbox_yaw",
+            "vel_yaw",
+            "width",
+            "length",
+            "height",
+            "valid",
+        ]
 
         # Dimensions
         n_nodes = 128
@@ -390,7 +443,9 @@ class SequentialWaymoTrainDataset(InMemoryDataset):
         # Move through raw files
         for i, raw_path in enumerate(self.raw_file_names):
             # Load file
-            dataset = tf.data.TFRecordDataset(self.raw_dir+"/"+raw_path, compression_type='')
+            dataset = tf.data.TFRecordDataset(
+                self.raw_dir + "/" + raw_path, compression_type=""
+            )
             for seq_idx, data in enumerate(dataset.as_numpy_iterator()):
                 # Parse sequence
                 parsed = parse_sequence(data)
@@ -400,9 +455,15 @@ class SequentialWaymoTrainDataset(InMemoryDataset):
                 # Fill in all values
                 for j, key in enumerate(key_values):
                     # Encode history
-                    feature_matrix[:, :10, i] = torch.Tensor(parsed["state/past/" + key].numpy())
-                    feature_matrix[:, 10, i] = torch.Tensor(parsed["state/current/" + key].numpy()).squeeze()
-                    feature_matrix[:, 11:, i] = torch.Tensor(parsed["state/future/" + key].numpy())
+                    feature_matrix[:, :10, i] = torch.Tensor(
+                        parsed["state/past/" + key].numpy()
+                    )
+                    feature_matrix[:, 10, i] = torch.Tensor(
+                        parsed["state/current/" + key].numpy()
+                    ).squeeze()
+                    feature_matrix[:, 11:, i] = torch.Tensor(
+                        parsed["state/future/" + key].numpy()
+                    )
 
                 data = Data(x=feature_matrix, edge_index=None)
                 data_list.append(data)
@@ -413,7 +474,7 @@ class SequentialWaymoTrainDataset(InMemoryDataset):
 
 
 class SequentialWaymoValDataset(InMemoryDataset):
-    def __init__(self, root='', transform=None, pre_transform=None):
+    def __init__(self, root="", transform=None, pre_transform=None):
         super(SequentialWaymoValDataset, self).__init__(root, transform, pre_transform)
         self.data, self.slices = torch.load(self.processed_paths[0])
 
@@ -441,8 +502,18 @@ class SequentialWaymoValDataset(InMemoryDataset):
     def process(self):
         data_list = []
         # Node attributes
-        key_values = ["x", "y", "velocity_x", "velocity_y", "bbox_yaw", "vel_yaw", "width", "length", "height",
-                      "valid"]
+        key_values = [
+            "x",
+            "y",
+            "velocity_x",
+            "velocity_y",
+            "bbox_yaw",
+            "vel_yaw",
+            "width",
+            "length",
+            "height",
+            "valid",
+        ]
 
         # Dimensions
         n_nodes = 128
@@ -452,7 +523,9 @@ class SequentialWaymoValDataset(InMemoryDataset):
         # Move through raw files
         for i, raw_path in enumerate(self.raw_file_names):
             # Load file
-            dataset = tf.data.TFRecordDataset(self.raw_dir+"/"+raw_path, compression_type='')
+            dataset = tf.data.TFRecordDataset(
+                self.raw_dir + "/" + raw_path, compression_type=""
+            )
             for seq_idx, data in enumerate(dataset.as_numpy_iterator()):
                 # Parse sequence
                 parsed = parse_sequence(data)
@@ -462,9 +535,15 @@ class SequentialWaymoValDataset(InMemoryDataset):
                 # Fill in all values
                 for j, key in enumerate(key_values):
                     # Encode history
-                    feature_matrix[:, :10, i] = torch.Tensor(parsed["state/past/" + key].numpy())
-                    feature_matrix[:, 10, i] = torch.Tensor(parsed["state/current/" + key].numpy()).squeeze()
-                    feature_matrix[:, 11:, i] = torch.Tensor(parsed["state/future/" + key].numpy())
+                    feature_matrix[:, :10, i] = torch.Tensor(
+                        parsed["state/past/" + key].numpy()
+                    )
+                    feature_matrix[:, 10, i] = torch.Tensor(
+                        parsed["state/current/" + key].numpy()
+                    ).squeeze()
+                    feature_matrix[:, 11:, i] = torch.Tensor(
+                        parsed["state/future/" + key].numpy()
+                    )
 
                 data = Data(x=feature_matrix, edge_index=None)
                 data_list.append(data)
@@ -475,7 +554,13 @@ class SequentialWaymoValDataset(InMemoryDataset):
 
 
 class OneStepWaymoDataModule(pl.LightningDataModule):
-    def __init__(self, data_dir="data/processed/waymo", batch_size=1, shuffle=False, val_batch_size: int = 1):
+    def __init__(
+        self,
+        data_dir="data/processed/waymo",
+        batch_size=1,
+        shuffle=False,
+        val_batch_size: int = 1,
+    ):
         super().__init__(data_dir, batch_size, shuffle)
         self.data_dir = data_dir
         self.batch_size = batch_size
@@ -496,10 +581,14 @@ class OneStepWaymoDataModule(pl.LightningDataModule):
         # self.test_dataset = SequentialTestDataset()
 
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=self.shuffle)
+        return DataLoader(
+            self.train_dataset, batch_size=self.batch_size, shuffle=self.shuffle
+        )
 
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_size=self.val_batch_size, shuffle=False)
+        return DataLoader(
+            self.val_dataset, batch_size=self.val_batch_size, shuffle=False
+        )
 
     def test_dataloader(self):
         raise NotImplementedError
@@ -510,7 +599,13 @@ class OneStepWaymoDataModule(pl.LightningDataModule):
 
 
 class SequentialWaymoDataModule(pl.LightningDataModule):
-    def __init__(self, data_dir="data/processed/waymo", batch_size: int = 1, shuffle: bool = False, val_batch_size: int = 1):
+    def __init__(
+        self,
+        data_dir="data/processed/waymo",
+        batch_size: int = 1,
+        shuffle: bool = False,
+        val_batch_size: int = 1,
+    ):
         super().__init__(data_dir, batch_size, shuffle)
         self.data_dir = data_dir
         self.batch_size = batch_size
@@ -532,10 +627,17 @@ class SequentialWaymoDataModule(pl.LightningDataModule):
         # self.test_dataset = SequentialTestDataset()
 
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=self.shuffle, num_workers=4)
+        return DataLoader(
+            self.train_dataset,
+            batch_size=self.batch_size,
+            shuffle=self.shuffle,
+            num_workers=4,
+        )
 
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_size=self.val_batch_size, shuffle=False)
+        return DataLoader(
+            self.val_dataset, batch_size=self.val_batch_size, shuffle=False
+        )
 
     def test_dataloader(self):
         raise NotImplementedError
@@ -543,8 +645,3 @@ class SequentialWaymoDataModule(pl.LightningDataModule):
 
     def predict_dataloader(self):
         raise NotImplementedError
-
-
-
-
-
