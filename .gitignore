@@ -93,3 +93,4 @@ target/
 /logs/
 /checkpoints/
 /wandb/
+todo.txt
