@@ -1,0 +1,51 @@
+datamodule:
+  batch_size: 64
+  shuffle: True
+  val_batch_size: 50
+
+model:
+  hidden_size: 64
+  normalise: True
+  dropout: 0.5
+  latent_edge_features: 128
+  node_features: 9
+  edge_features: 1
+  skip: True
+  aggregate: False
+  out_features: 6
+
+regressor:
+  out_features: 6
+  noise: 3.0e-4
+  lr: 1.0e-4
+  weight_decay: 0.001
+  edge_type: knn
+  min_dist: 0
+  n_neighbours: 10
+  edge_weight: True
+  fully_connected: True
+  self_loop: False
+  undirected: False
+
+trainer:
+  check_val_every_n_epoch: 1
+  max_epochs: 1
+  deterministic: True
+  num_sanity_val_steps: 2
+  limit_train_batches: 0.1
+  precision: 32 # Default
+  val_check_interval: 1.0 # Default 1.0
+
+logger:
+  offline: True
+  version: tmp
+  project: debug
+
+misc:
+  seed: 1
+  model_type: mlp_full_forward_model
+  dm_type: OneStepWaymoDataModule
+  regressor_type: OneStepModule
+  checkpoint: False
+  train: True
+  continue_training: null

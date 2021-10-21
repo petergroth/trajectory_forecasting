@@ -12,4 +12,9 @@ if __name__ == "__main__":
     run_n_simulations(
         output_path=sim_path, n_particles=args.n_particles, n_sim=args.n_sim
     )
-    create_gif(sim_path+"_sim0000.npy", "gifs/test2.gif", n_particles=args.n_particles, trunc=False)
+    create_gif(
+        sim_path + "_sim0000.npy",
+        "gifs/test2.gif",
+        n_particles=args.n_particles,
+        trunc=False,
+    )

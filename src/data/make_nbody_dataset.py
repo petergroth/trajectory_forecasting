@@ -1,5 +1,6 @@
 from data.dataset import OneStepNBodyDataModule, SequentialNBodyDataModule
 
+
 def main():
     batch_size = 64
     dm = OneStepNBodyDataModule(batch_size=batch_size)
@@ -10,6 +11,6 @@ def main():
     dm.prepare_data()
     dm.setup()
 
+
 if __name__ == "__main__":
     main()
-
