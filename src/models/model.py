@@ -13,8 +13,8 @@ from torch_geometric.nn import (
 from torch_geometric.nn.meta import MetaLayer
 import torch.nn.functional as F
 from torch_scatter import scatter_mean, scatter_add
-from data.dataset import SequentialNBodyDataModule, OneStepNBodyDataModule
-from models.node_edge_blocks import *
+from src.data.dataset import SequentialNBodyDataModule, OneStepNBodyDataModule
+from src.models.node_edge_blocks import *
 from torch_geometric.utils import dropout_adj
 from torch_geometric_temporal.nn import GConvLSTM, GCLSTM, TGCN
 
@@ -104,12 +104,14 @@ class mlp_full_forward_model(nn.Module):
         skip: bool = True,
         normalise: bool = True,
         aggregate: bool = False,
+        out_features: int = 4
     ):
         super(mlp_full_forward_model, self).__init__()
         self.NormBlock = NormalisationBlock(
             normalise=normalise,
             node_features=node_features,
             edge_features=edge_features,
+            out_features=out_features
         )
         self.hidden_size = hidden_size
         self.node_features = node_features
@@ -151,6 +153,7 @@ class mlp_full_forward_model(nn.Module):
                 node_features=GN2_node_input,
                 dropout=dropout,
                 edge_features=latent_edge_features,
+                out_features=out_features
             ),
         )
 
@@ -801,6 +804,7 @@ class NormalisationBlock:
         node_features: int = 5,
         edge_features: int = 2,
         subtract_edge_mean: bool = True,
+        out_features: int = 4
     ):
         self.normalise = normalise
         self.node_features = node_features
@@ -815,10 +819,10 @@ class NormalisationBlock:
         self.node_in_mean = torch.zeros(node_features)
 
         # Output normalisation parameters
-        self.node_out_sum = torch.zeros(4)
-        self.node_out_squaresum = torch.zeros(4)
-        self.node_out_std = torch.ones(4)
-        self.node_out_mean = torch.zeros(4)
+        self.node_out_sum = torch.zeros(out_features)
+        self.node_out_squaresum = torch.zeros(out_features)
+        self.node_out_std = torch.ones(out_features)
+        self.node_out_mean = torch.zeros(out_features)
 
         # Edge normalisation parameters
         self.edge_counter = torch.zeros(1)

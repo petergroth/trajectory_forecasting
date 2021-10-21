@@ -1,7 +1,7 @@
 import os
 import os.path as osp
 import torch
-from utils import load_simulations, parse_sequence, generate_fully_connected_edges
+from src.utils import load_simulations, parse_sequence, generate_fully_connected_edges
 from torch_geometric.data import Data, Dataset, InMemoryDataset
 from torch_geometric.loader import DataLoader
 import pytorch_lightning as pl
@@ -316,6 +316,18 @@ class OneStepWaymoTrainDataset(InMemoryDataset):
 
     @property
     def processed_file_names(self):
+        # # Determine number of files
+        # n_graphs = 0
+        # # Load all files and iterate through to determine length. Thanks TF
+        # for i, raw_path in enumerate(self.raw_file_names):
+        #     # Load file
+        #     dataset = tf.data.TFRecordDataset(
+        #         self.raw_dir + "/" + raw_path, compression_type=""
+        #     )
+        #     for seq_idx, data in enumerate(dataset.as_numpy_iterator()):
+        #         n_graphs += 1
+
+        # return [f"waymo_train_data_{i:04}.pt" for i in range(n_graphs)]
         return ["waymo_train_data.pt"]
 
     @property
@@ -330,7 +342,6 @@ class OneStepWaymoTrainDataset(InMemoryDataset):
         pass
 
     def process(self):
-        data_list = []
         # Node attributes
         key_values = [
             "x",
@@ -349,8 +360,7 @@ class OneStepWaymoTrainDataset(InMemoryDataset):
         n_nodes = 128
         n_features = len(key_values)
         n_steps = 91
-
-        edge_index = None
+        data_list = []
 
         # Move through raw files
         for i, raw_path in enumerate(self.raw_file_names):
@@ -367,13 +377,13 @@ class OneStepWaymoTrainDataset(InMemoryDataset):
                 # Fill in all values
                 for j, key in enumerate(key_values):
                     # Encode history
-                    feature_matrix[:, :10, i] = torch.Tensor(
+                    feature_matrix[:, :10, j] = torch.Tensor(
                         parsed["state/past/" + key].numpy()
                     )
-                    feature_matrix[:, 10, i] = torch.Tensor(
+                    feature_matrix[:, 10, j] = torch.Tensor(
                         parsed["state/current/" + key].numpy()
                     ).squeeze()
-                    feature_matrix[:, 11:, i] = torch.Tensor(
+                    feature_matrix[:, 11:, j] = torch.Tensor(
                         parsed["state/future/" + key].numpy()
                     )
 
@@ -383,8 +393,16 @@ class OneStepWaymoTrainDataset(InMemoryDataset):
                     x = torch.Tensor(feature_matrix[:, t, :])
                     # Targets
                     y = torch.Tensor(feature_matrix[:, t + 1, :])
-                    data = Data(x=x, y=y, edge_index=edge_index)
+
+                    # Determine valid pairs
+                    valid_x = x[:, -1] == 1
+                    valid_y = y[:, -1] == 1
+                    valid_mask = torch.logical_and(valid_x, valid_y)
+
+                    # Save data object to list
+                    data = Data(x=x[valid_mask, :-1], y=x[valid_mask, :6], edge_index=None)
                     data_list.append(data)
+
 
         # Collate and save
         data, slices = self.collate(data_list)
@@ -414,7 +432,7 @@ class SequentialWaymoTrainDataset(InMemoryDataset):
 
     @property
     def processed_dir(self) -> str:
-        return osp.join(self.root, "data/processed/waymo/train/sequential")
+        return osp.join(self.root, "data/processed/waymo/train")
 
     def download(self):
         pass
@@ -455,16 +473,16 @@ class SequentialWaymoTrainDataset(InMemoryDataset):
                 # Fill in all values
                 for j, key in enumerate(key_values):
                     # Encode history
-                    feature_matrix[:, :10, i] = torch.Tensor(
+                    feature_matrix[:, :10, j] = torch.Tensor(
                         parsed["state/past/" + key].numpy()
                     )
-                    feature_matrix[:, 10, i] = torch.Tensor(
+                    feature_matrix[:, 10, j] = torch.Tensor(
                         parsed["state/current/" + key].numpy()
                     ).squeeze()
-                    feature_matrix[:, 11:, i] = torch.Tensor(
+                    feature_matrix[:, 11:, j] = torch.Tensor(
                         parsed["state/future/" + key].numpy()
                     )
-
+                feature_matrix = feature_matrix[[feature_matrix[:, :, -1] == 1]]
                 data = Data(x=feature_matrix, edge_index=None)
                 data_list.append(data)
 
@@ -535,13 +553,13 @@ class SequentialWaymoValDataset(InMemoryDataset):
                 # Fill in all values
                 for j, key in enumerate(key_values):
                     # Encode history
-                    feature_matrix[:, :10, i] = torch.Tensor(
+                    feature_matrix[:, :10, j] = torch.Tensor(
                         parsed["state/past/" + key].numpy()
                     )
-                    feature_matrix[:, 10, i] = torch.Tensor(
+                    feature_matrix[:, 10, j] = torch.Tensor(
                         parsed["state/current/" + key].numpy()
                     ).squeeze()
-                    feature_matrix[:, 11:, i] = torch.Tensor(
+                    feature_matrix[:, 11:, j] = torch.Tensor(
                         parsed["state/future/" + key].numpy()
                     )
 
@@ -614,7 +632,7 @@ class SequentialWaymoDataModule(pl.LightningDataModule):
 
     @property
     def num_features(self) -> int:
-        return 5
+        return 9
 
     def prepare_data(self):
         SequentialWaymoTrainDataset()

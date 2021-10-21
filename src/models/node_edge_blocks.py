@@ -12,7 +12,7 @@ from torch_geometric.nn import (
 from torch_geometric.nn.meta import MetaLayer
 import torch.nn.functional as F
 from torch_scatter import scatter_mean, scatter_add
-from data.dataset import SequentialNBodyDataModule, OneStepNBodyDataModule
+from src.data.dataset import SequentialNBodyDataModule, OneStepNBodyDataModule
 from torch_geometric.utils import dropout_adj
 from torch_geometric_temporal.nn import GConvLSTM, GCLSTM, TGCN
 
@@ -62,9 +62,10 @@ class node_mlp_out(nn.Module):
         node_features: int = 5,
         dropout: float = 0.0,
         edge_features: int = 0,
+        out_features: int = 4,
     ):
         super(node_mlp_out, self).__init__()
-        self.out_features = 4
+        self.out_features = out_features
         self.node_mlp_1 = nn.Sequential(
             nn.Linear(
                 in_features=node_features + edge_features, out_features=hidden_size

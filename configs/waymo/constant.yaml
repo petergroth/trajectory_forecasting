@@ -4,6 +4,7 @@ datamodule:
 
 regressor:
   noise: null
+  out_features: 6
 
 trainer:
   check_val_every_n_epoch: 2
@@ -17,7 +18,7 @@ logger:
 misc:
   seed: 1
   model_type: ConstantModel
-  dm_type: OneStepNBodyDataModule
+  dm_type: OneStepWaymoDataModule
   regressor_type: ConstantPhysicalBaselineModule
   train: False
   checkpoint: False

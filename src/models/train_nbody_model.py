@@ -1245,17 +1245,14 @@ class ConstantBaselineModule(pl.LightningModule):
 
 
 class ConstantPhysicalBaselineModule(pl.LightningModule):
-    def __init__(self, model_type, noise, lr, weight_decay, log_norm):
+    def __init__(self, model, **kwargs):
         super().__init__()
+        assert model is None
         self.train_loss = torchmetrics.MeanSquaredError()
         self.val_ade_loss = torchmetrics.MeanSquaredError()
         self.val_fde_loss = torchmetrics.MeanSquaredError()
-        self.model = model_type
+        self.val_vel_loss = torchmetrics.MeanSquaredError()
         self.save_hyperparameters()
-        self.noise = noise
-        self.lr = lr
-        self.weight_decay = weight_decay
-        self.log_norm = log_norm
 
     def training_step(self, batch: Batch, batch_idx: int):
         pass
@@ -1290,13 +1287,16 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
             y_target[t - 10, :, :] = batch.x[:, t + 1, :4]
 
         # Compute and log loss
-        fde_loss = self.val_fde_loss(y_hat[-1, :, :], y_target[-1, :, :])
-        ade_loss = self.val_ade_loss(y_hat, y_target)
+        fde_loss = self.val_fde_loss(y_hat[-1, :, :2], y_target[-1, :, :2])
+        ade_loss = self.val_ade_loss(y_hat[:, :, :2], y_target[:, :, :2])
+        vel_loss = self.val_vel_loss(y_hat[:, :, 2:], y_target[:, :, 2:])
 
         self.log("val_ade_loss", ade_loss)
         self.log("val_fde_loss", fde_loss)
+        self.log("val_vel_loss", vel_loss)
+        self.log("val_total_loss", (ade_loss+vel_loss)/2)
 
-        return ade_loss
+        return ade_loss+vel_loss
 
     def predict_step(self, batch, batch_idx=None):
         # Extract dimensions and allocate target/prediction tensors
@@ -1334,7 +1334,7 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
 
     def configure_optimizers(self):
         return torch.optim.Adam(
-            self.parameters(), lr=self.lr, weight_decay=self.weight_decay
+            self.parameters(), lr=1e-4
         )
 
 
@@ -1356,7 +1356,7 @@ if __name__ == "__main__":
         # model = AbstractGNN(node_model=config["misc"]["model_type"], **config["model"])
         model = eval(config["misc"]["model_type"])(**config["model"])
     else:
-        model = ConstantModel()
+        model = None
 
     # Define LightningModule
     regressor = eval(config["misc"]["regressor_type"])(model, **config["regressor"])
