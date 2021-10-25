@@ -108,14 +108,14 @@ class OneStepModule(pl.LightningModule):
 
         # Update normalisation state and normalise
         if edge_attr is None:
-            self.model.NormBlock.update_in_normalisation(x.clone())
+            self.model.update_in_normalisation(x.clone())
         else:
-            self.model.NormBlock.update_in_normalisation(x.clone(), edge_attr.clone())
-        self.model.NormBlock.update_out_normalisation(y_target.clone())
+            self.model.update_in_normalisation(x.clone(), edge_attr.clone())
+        self.model.update_out_normalisation(y_target.clone())
 
         # Obtain normalised input graph and normalised target nodes
-        x_nrm, edge_attr_nrm = self.model.NormBlock.in_normalise(x, edge_attr)
-        y_target_nrm = self.model.NormBlock.out_normalise(y_target)
+        x_nrm, edge_attr_nrm = self.model.in_normalise(x, edge_attr)
+        y_target_nrm = self.model.out_normalise(y_target)
 
         # Obtain normalised predicted delta dynamics
         y_hat = self.model(
@@ -209,7 +209,7 @@ class OneStepModule(pl.LightningModule):
             ######################
 
             # Normalise input graph
-            x, edge_attr = self.model.NormBlock.in_normalise(x, edge_attr)
+            x, edge_attr = self.model.in_normalise(x, edge_attr)
             # Obtain normalised predicted delta dynamics
             x = self.model(
                 x=x, edge_index=edge_index, edge_attr=edge_attr, batch=batch.batch
