@@ -13,10 +13,10 @@ from torch_geometric.nn import (
 from torch_geometric.nn.meta import MetaLayer
 import torch.nn.functional as F
 from torch_scatter import scatter_mean, scatter_add
-from src.data.dataset import SequentialNBodyDataModule, OneStepNBodyDataModule
+# from src.data.dataset import SequentialNBodyDataModule, OneStepNBodyDataModule
 from src.models.node_edge_blocks import *
 from torch_geometric.utils import dropout_adj
-from torch_geometric_temporal.nn import GConvLSTM, GCLSTM, TGCN
+# from torch_geometric_temporal.nn import GConvLSTM, GCLSTM, TGCN
 
 
 class ConstantModel(nn.Module):
@@ -806,31 +806,37 @@ class NormalisationBlock:
         subtract_edge_mean: bool = True,
         out_features: int = 4
     ):
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.normalise = normalise
         self.node_features = node_features
         self.edge_features = edge_features
         self.subtract_edge_mean = subtract_edge_mean
 
         # Node normalisation parameters
-        self.node_counter = torch.zeros(1)
-        self.node_in_sum = torch.zeros(node_features)
-        self.node_in_squaresum = torch.zeros(node_features)
-        self.node_in_std = torch.ones(node_features)
-        self.node_in_mean = torch.zeros(node_features)
+        self.node_counter = torch.zeros(1).to(self.device)
+        # self.register_buffer('node_counter', torch.zeros(1))
+        self.node_in_sum = torch.zeros(node_features).to(self.device)
+        # self.register_buffer("node_in_sum", torch.zeros(node_features))
+        self.node_in_squaresum = torch.zeros(node_features).to(self.device)
+        # self.register_buffer("node_in_squaresum", torch.zeros(node_features))
+        self.node_in_std = torch.ones(node_features).to(self.device)
+        # self.register_buffer("node_in_std", torch.ones(node_features))
+        self.node_in_mean = torch.zeros(node_features).to(self.device)
+        # self.register_buffer("node_in_mean", torch.zeros(node_features))
 
         # Output normalisation parameters
-        self.node_out_sum = torch.zeros(out_features)
-        self.node_out_squaresum = torch.zeros(out_features)
-        self.node_out_std = torch.ones(out_features)
-        self.node_out_mean = torch.zeros(out_features)
+        self.node_out_sum = torch.zeros(out_features).to(self.device)
+        self.node_out_squaresum = torch.zeros(out_features).to(self.device)
+        self.node_out_std = torch.ones(out_features).to(self.device)
+        self.node_out_mean = torch.zeros(out_features).to(self.device)
 
         # Edge normalisation parameters
-        self.edge_counter = torch.zeros(1)
-        self.edge_in_sum = torch.zeros(edge_features)
-        self.edge_in_squaresum = torch.zeros(edge_features)
-        self.edge_in_std = torch.ones(edge_features)
-        self.edge_in_mean = torch.zeros(edge_features)
-        self.edge_in_mean = torch.zeros(edge_features, requires_grad=False)
+        self.edge_counter = torch.zeros(1).to(self.device)
+        self.edge_in_sum = torch.zeros(edge_features).to(self.device)
+        self.edge_in_squaresum = torch.zeros(edge_features).to(self.device)
+        self.edge_in_std = torch.ones(edge_features).to(self.device)
+        self.edge_in_mean = torch.zeros(edge_features).to(self.device)
+        self.edge_in_mean = torch.zeros(edge_features).to(self.device)
 
     def update_in_normalisation(self, x, edge_attr=None):
         if self.normalise:

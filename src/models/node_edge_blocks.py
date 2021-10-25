@@ -12,9 +12,9 @@ from torch_geometric.nn import (
 from torch_geometric.nn.meta import MetaLayer
 import torch.nn.functional as F
 from torch_scatter import scatter_mean, scatter_add
-from src.data.dataset import SequentialNBodyDataModule, OneStepNBodyDataModule
+# from src.data.dataset import SequentialNBodyDataModule, OneStepNBodyDataModule
 from torch_geometric.utils import dropout_adj
-from torch_geometric_temporal.nn import GConvLSTM, GCLSTM, TGCN
+# from torch_geometric_temporal.nn import GConvLSTM, GCLSTM, TGCN
 
 
 class node_mlp_1(nn.Module):

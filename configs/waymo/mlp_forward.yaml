@@ -1,13 +1,13 @@
 datamodule:
-  batch_size: 64
+  batch_size: 32
   shuffle: True
-  val_batch_size: 50
+  val_batch_size: 25
 
 model:
   hidden_size: 64
   normalise: True
   dropout: 0.5
-  latent_edge_features: 128
+  latent_edge_features: 64
   node_features: 9
   edge_features: 1
   skip: True
@@ -17,11 +17,11 @@ model:
 regressor:
   out_features: 6
   noise: 3.0e-4
-  lr: 1.0e-4
+  lr: 1.0e-5
   weight_decay: 0.001
   edge_type: knn
   min_dist: 0
-  n_neighbours: 10
+  n_neighbours: 5
   edge_weight: True
   fully_connected: True
   self_loop: False
@@ -29,17 +29,18 @@ regressor:
 
 trainer:
   check_val_every_n_epoch: 1
-  max_epochs: 1
+  max_epochs: 10
   deterministic: True
   num_sanity_val_steps: 2
-  limit_train_batches: 0.1
-  precision: 32 # Default
-  val_check_interval: 1.0 # Default 1.0
+  limit_train_batches: 1.0 # Default 1.0
+  precision: 32 # Default. Only available on GPU.
+  val_check_interval: 0.50 # Default 1.0
+  gpus: 1
 
 logger:
-  offline: True
-  version: tmp
-  project: debug
+  offline: False
+  version: full_run_03
+  project: waymo_forwardmodel
 
 misc:
   seed: 1
