@@ -8,7 +8,7 @@ from src.data.dataset import OneStepWaymoDataModule, SequentialWaymoDataModule
 import torchmetrics
 from torch_geometric.data import Batch, Data
 from src.models.model import *
-from src.utils import generate_fully_connected_edges
+# from src.utils import generate_fully_connected_edges
 import yaml
 
 # Features:
@@ -178,7 +178,9 @@ class OneStepModule(pl.LightningModule):
         # Allocate target/prediction tensors
         n_nodes = batch.num_nodes
         y_hat = torch.zeros((80, n_nodes, self.out_features))
+        y_hat = y_hat.type_as(batch.x)
         y_target = torch.zeros((80, n_nodes, self.out_features))
+        y_target = y_target.type_as(batch.x)
 
         batch.x = batch.x[:, :, :-1]
         static_features = batch.x[:, 0, self.out_features:]
@@ -223,12 +225,14 @@ class OneStepModule(pl.LightningModule):
 
             # Remove duplicates and sort
             edge_index = torch_geometric.utils.coalesce(edge_index)
+            # edge_index = edge_index.type_as(batch.x)
 
             # Create edge_attr if specified
             if self.edge_weight:
                 # Encode distance between nodes as edge_attr
                 row, col = edge_index
                 edge_attr = (x[row, :2] - x[col, :2]).norm(dim=-1).unsqueeze(1)
+                edge_attr = edge_attr.type_as(batch.x)
 
             ######################
             # Validation 1/2     #
@@ -246,6 +250,7 @@ class OneStepModule(pl.LightningModule):
             predicted_graph = torch.cat(
                 (batch.x[mask_t, t, :self.out_features] + x, static_features[mask_t]), dim=-1
             )
+            predicted_graph = predicted_graph.type_as(batch.x)
 
         # Save first prediction and target
         y_hat[0, mask_t, :] = predicted_graph[:, :self.out_features]
@@ -286,12 +291,14 @@ class OneStepModule(pl.LightningModule):
 
             # Remove duplicates and sort
             edge_index = torch_geometric.utils.coalesce(edge_index)
+            # edge_index = edge_index.type_as(batch.x)
 
             # Create edge_attr if specified
             if self.edge_weight:
                 # Encode distance between nodes as edge_attr
                 row, col = edge_index
                 edge_attr = (x[row, :2] - x[col, :2]).norm(dim=-1).unsqueeze(1)
+                edge_attr = edge_attr.type_as(batch.x)
 
             ######################
             # Validation 2/2     #
@@ -309,6 +316,7 @@ class OneStepModule(pl.LightningModule):
             predicted_graph = torch.cat(
                 (predicted_graph[:, :self.out_features] + x, static_features), dim=-1
             )
+            predicted_graph = predicted_graph.type_as(batch.x)
 
             # Save prediction alongside true value (next time step state)
             y_hat[t - 10, :, :] = predicted_graph[:, :self.out_features]
