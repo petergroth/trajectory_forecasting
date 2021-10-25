@@ -366,9 +366,6 @@ class OneStepModule(pl.LightningModule):
         # Initialisation     #
         ######################
 
-        # Validate on sequential dataset. First 11 observations are used to prime the model.
-        # Loss is computed on remaining 80 samples using rollout.
-
         # Determine valid initialisations at t=11
         mask = batch.x[:, :, -1]
         valid_mask = mask[:, 10] > 0
@@ -382,9 +379,9 @@ class OneStepModule(pl.LightningModule):
 
         # Allocate target/prediction tensors
         n_nodes = batch.num_nodes
-        y_hat = torch.zeros((90, n_nodes, self.out_features))
+        y_hat = torch.zeros((90, n_nodes, batch.x.size(2)-1))
         y_hat = y_hat.type_as(batch.x)
-        y_target = torch.zeros((90, n_nodes, self.out_features))
+        y_target = torch.zeros((90, n_nodes, batch.x.size(2)-1))
         y_target = y_target.type_as(batch.x)
 
         batch.x = batch.x[:, :, :-1]
@@ -454,8 +451,8 @@ class OneStepModule(pl.LightningModule):
             predicted_graph = predicted_graph.type_as(batch.x)
 
             # Save first prediction and target
-            y_hat[t, mask_t, :] = predicted_graph[:, :self.out_features]
-            y_target[t, mask_t, :] = batch.x[mask_t, t+1, :self.out_features]
+            y_hat[t, mask_t, :] = predicted_graph
+            y_target[t, mask_t, :] = batch.x[mask_t, t+1, :]
 
         ######################
         # Future             #
@@ -519,8 +516,8 @@ class OneStepModule(pl.LightningModule):
             predicted_graph = predicted_graph.type_as(batch.x)
 
             # Save prediction alongside true value (next time step state)
-            y_hat[t, :, :] = predicted_graph[:, :self.out_features]
-            y_target[t, :, :] = batch.x[:, t + 1, :self.out_features]
+            y_hat[t, :, :] = predicted_graph
+            y_target[t, :, :] = batch.x[:, t + 1, :]
 
         return y_hat, y_target, mask
 
