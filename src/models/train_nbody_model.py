@@ -145,8 +145,8 @@ class OneStepModule(pl.LightningModule):
 
         # Extract dimensions and allocate target/prediction tensors
         n_nodes = batch.num_nodes
-        y_hat = torch.zeros((80, n_nodes, 4), device=self.device)
-        y_target = torch.zeros((80, n_nodes, 4), device=self.device)
+        y_hat = torch.zeros((80, n_nodes, 4))
+        y_target = torch.zeros((80, n_nodes, 4))
         edge_index = batch.edge_index
         static_features = batch.x[:, 0, 4:]
         edge_attr = None
@@ -340,8 +340,8 @@ class OneStepModule(pl.LightningModule):
         # Extract dimensions and allocate target/prediction tensors
         n_nodes = batch.num_nodes
         n_features = 5
-        y_hat = torch.zeros((90, n_nodes, n_features), device=self.device)
-        y_target = torch.zeros((90, n_nodes, n_features), device=self.device)
+        y_hat = torch.zeros((90, n_nodes, n_features))
+        y_target = torch.zeros((90, n_nodes, n_features))
         edge_index = batch.edge_index
         static_features = batch.x[:, 0, 4:]
         edge_attr = None
@@ -540,7 +540,7 @@ class SequentialModule(pl.LightningModule):
 
         # Extract dimensions
         n_nodes = batch.num_nodes
-        y_predictions = torch.zeros((n_nodes, 90, 4), device=self.device)
+        y_predictions = torch.zeros((n_nodes, 90, 4))
         edge_index = batch.edge_index
         static_features = batch.x[:, 0, 4:]
         x = batch.x
@@ -788,8 +788,8 @@ class SequentialModule(pl.LightningModule):
 
         # Extract dimensions and allocate target/prediction tensors
         n_nodes = batch.num_nodes
-        y_hat = torch.zeros((80, n_nodes, 4), device=self.device)
-        y_target = torch.zeros((80, n_nodes, 4), device=self.device)
+        y_hat = torch.zeros((80, n_nodes, 4))
+        y_target = torch.zeros((80, n_nodes, 4))
         edge_index = batch.edge_index
         static_features = batch.x[:, 0, 4:]
         # Initial hidden state
@@ -992,8 +992,8 @@ class SequentialModule(pl.LightningModule):
         # Extract dimensions and allocate target/prediction tensors
         n_nodes = batch.num_nodes
         n_features = 5
-        y_hat = torch.zeros((90, n_nodes, n_features), device=self.device)
-        y_target = torch.zeros((90, n_nodes, n_features), device=self.device)
+        y_hat = torch.zeros((90, n_nodes, n_features))
+        y_target = torch.zeros((90, n_nodes, n_features))
         edge_index = batch.edge_index
         static_features = batch.x[:, 0, 4:]
         # Initial hidden state
@@ -1182,8 +1182,8 @@ class ConstantBaselineModule(pl.LightningModule):
 
         # Extract dimensions and allocate target/prediction tensors
         n_nodes = batch.num_nodes
-        y_hat = torch.zeros((80, n_nodes, 4), device=self.device)
-        y_target = torch.zeros((80, n_nodes, 4), device=self.device)
+        y_hat = torch.zeros((80, n_nodes, 4))
+        y_target = torch.zeros((80, n_nodes, 4))
 
         last_input = batch.x[:, 10, :4]
         last_delta = batch.x[:, 10, :4] - batch.x[:, 9, :4]
@@ -1212,8 +1212,8 @@ class ConstantBaselineModule(pl.LightningModule):
         # Extract dimensions and allocate target/prediction tensors
         n_nodes = batch.num_nodes
         n_features = 5
-        y_hat = torch.zeros((90, n_nodes, n_features), device=self.device)
-        y_target = torch.zeros((90, n_nodes, n_features), device=self.device)
+        y_hat = torch.zeros((90, n_nodes, n_features))
+        y_target = torch.zeros((90, n_nodes, n_features))
 
         # Fill in targets
         for t in range(0, 90):
@@ -1263,8 +1263,8 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
 
         # Extract dimensions and allocate target/prediction tensors
         n_nodes = batch.num_nodes
-        y_hat = torch.zeros((80, n_nodes, 4), device=self.device)
-        y_target = torch.zeros((80, n_nodes, 4), device=self.device)
+        y_hat = torch.zeros((80, n_nodes, 4))
+        y_target = torch.zeros((80, n_nodes, 4))
         static_features = batch.x[:, 0, 4]
         last_pos = batch.x[:, 10, :2]
         last_vel = batch.x[:, 10, 2:4]
@@ -1302,8 +1302,8 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
         # Extract dimensions and allocate target/prediction tensors
         n_nodes = batch.num_nodes
         n_features = 5
-        y_hat = torch.zeros((90, n_nodes, n_features), device=self.device)
-        y_target = torch.zeros((90, n_nodes, n_features), device=self.device)
+        y_hat = torch.zeros((90, n_nodes, n_features))
+        y_target = torch.zeros((90, n_nodes, n_features))
 
         # Fill in targets
         for t in range(0, 90):

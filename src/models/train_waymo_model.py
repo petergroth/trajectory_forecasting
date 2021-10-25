@@ -110,11 +110,6 @@ class OneStepModule(pl.LightningModule):
         # Determine whether to add random noise to dynamic states
         if self.noise is not None:
             x[:, :self.out_features] += self.noise*torch.rand_like(x[:, :self.out_features])
-            # x += self.noise * torch.rand_like(x)
-            # # Add noise to dynamic states
-            # x_d = x[:, :4] + self.noise*torch.rand_like(x[:, :4])
-            # # Concatenate dynamic and static states
-            # x = torch.cat((x_d, x[:, 4:]), dim=1)
 
         # Create edge_attr if specified
         if self.edge_weight:
@@ -357,8 +352,8 @@ class OneStepModule(pl.LightningModule):
         # Extract dimensions and allocate target/prediction tensors
         n_nodes = batch.num_nodes
         n_features = 5
-        y_hat = torch.zeros((90, n_nodes, n_features), device=self.device)
-        y_target = torch.zeros((90, n_nodes, n_features), device=self.device)
+        y_hat = torch.zeros((90, n_nodes, n_features))
+        y_target = torch.zeros((90, n_nodes, n_features))
         edge_index = batch.edge_index
         static_features = batch.x[:, 0, 4:]
         edge_attr = None
@@ -563,7 +558,7 @@ class SequentialModule(pl.LightningModule):
 
         # Extract dimensions
         n_nodes = batch.num_nodes
-        y_predictions = torch.zeros((n_nodes, 90, self.out_features), device=self.device)
+        y_predictions = torch.zeros((n_nodes, 90, self.out_features))
         edge_index = batch.edge_index
         mask = batch.x[:, :, -1]
         batch.x = batch.x[:, :, :-1]
@@ -798,8 +793,8 @@ class SequentialModule(pl.LightningModule):
 
         # Extract dimensions and allocate target/prediction tensors
         n_nodes = batch.num_nodes
-        y_hat = torch.zeros((80, n_nodes, self.out_features), device=self.device)
-        y_target = torch.zeros((80, n_nodes, self.out_features), device=self.device)
+        y_hat = torch.zeros((80, n_nodes, self.out_features))
+        y_target = torch.zeros((80, n_nodes, self.out_features))
         mask = batch.x[:, :, -1]
         batch.x = batch.x[:, :, :-1]
         static_features = batch.x[:, 0, self.out_features:]
@@ -991,8 +986,8 @@ class SequentialModule(pl.LightningModule):
         # Extract dimensions and allocate target/prediction tensors
         n_nodes = batch.num_nodes
         n_features = 5
-        y_hat = torch.zeros((90, n_nodes, n_features), device=self.device)
-        y_target = torch.zeros((90, n_nodes, n_features), device=self.device)
+        y_hat = torch.zeros((90, n_nodes, n_features))
+        y_target = torch.zeros((90, n_nodes, n_features))
         edge_index = batch.edge_index
         static_features = batch.x[:, 0, 4:]
         # Initial hidden state
@@ -1177,8 +1172,8 @@ class ConstantBaselineModule(pl.LightningModule):
 
         # Extract dimensions and allocate target/prediction tensors
         n_nodes = batch.num_nodes
-        y_hat = torch.zeros((80, n_nodes, self.out_features), device=self.device)
-        y_target = torch.zeros((80, n_nodes, self.out_features), device=self.device)
+        y_hat = torch.zeros((80, n_nodes, self.out_features))
+        y_target = torch.zeros((80, n_nodes, self.out_features))
 
         last_input = batch.x[:, 10, :self.out_features]
         last_delta = batch.x[:, 10, :self.out_features] - batch.x[:, 9, :self.out_features]
@@ -1207,8 +1202,8 @@ class ConstantBaselineModule(pl.LightningModule):
         # Extract dimensions and allocate target/prediction tensors
         n_nodes = batch.num_nodes
         n_features = 5
-        y_hat = torch.zeros((90, n_nodes, n_features), device=self.device)
-        y_target = torch.zeros((90, n_nodes, n_features), device=self.device)
+        y_hat = torch.zeros((90, n_nodes, n_features))
+        y_target = torch.zeros((90, n_nodes, n_features))
 
         # Fill in targets
         for t in range(0, 90):
