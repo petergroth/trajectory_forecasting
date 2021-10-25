@@ -110,11 +110,6 @@ class OneStepModule(pl.LightningModule):
         # Determine whether to add random noise to dynamic states
         if self.noise is not None:
             x[:, :self.out_features] += self.noise*torch.rand_like(x[:, :self.out_features])
-            # x += self.noise * torch.rand_like(x)
-            # # Add noise to dynamic states
-            # x_d = x[:, :4] + self.noise*torch.rand_like(x[:, :4])
-            # # Concatenate dynamic and static states
-            # x = torch.cat((x_d, x[:, 4:]), dim=1)
 
         # Create edge_attr if specified
         if self.edge_weight:

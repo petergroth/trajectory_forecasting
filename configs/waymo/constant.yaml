@@ -1,6 +1,7 @@
 datamodule:
   batch_size: 64
   shuffle: True
+  val_batch_size: 50
 
 regressor:
   noise: null

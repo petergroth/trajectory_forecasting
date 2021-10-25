@@ -533,7 +533,7 @@ class SequentialWaymoValDataset(InMemoryDataset):
             "width",
             "length",
             "height",
-            "valid",
+            "valid"
         ]
 
         # Dimensions
@@ -566,7 +566,11 @@ class SequentialWaymoValDataset(InMemoryDataset):
                         parsed["state/future/" + key].numpy()
                     )
 
+
                 data = Data(x=feature_matrix, edge_index=None)
+                data["tracks_to_predict"] = torch.where(
+                    torch.Tensor(parsed["state/tracks_to_predict"].numpy()) > 0, True, False
+                )
                 data_list.append(data)
 
         # Collate and save
