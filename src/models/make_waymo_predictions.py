@@ -111,18 +111,19 @@ if __name__ == '__main__':
             #     scale=1.0,
             #     alpha=0.1,
             # )
-            axglob[0].quiver(
-                y_target[t, agent, 0],
-                y_target[t, agent, 1],
-                y_target[t, agent, 2],
-                y_target[t, agent, 3],
-                width=0.003,
-                headwidth=5,
-                angles="xy",
-                scale_units="xy",
-                scale=1.0,
-                alpha=0.01,
-            )
+            if t == (n_steps - 1):
+                axglob[0].quiver(
+                    y_target[t, agent, 0],
+                    y_target[t, agent, 1],
+                    y_target[t, agent, 2],
+                    y_target[t, agent, 3],
+                    width=0.003,
+                    headwidth=5,
+                    angles="xy",
+                    scale_units="xy",
+                    scale=1.0,
+                    alpha=1,
+                )
 
         # lim = (ax[0].get_xlim(), ax[0].get_ylim())
         # ax[0].axis('equal')
@@ -155,18 +156,19 @@ if __name__ == '__main__':
             #     scale=1.0,
             #     alpha=0.1,
             # )
-            axglob[1].quiver(
-                y_hat[t, agent, 0],
-                y_hat[t, agent, 1],
-                y_hat[t, agent, 2],
-                y_hat[t, agent, 3],
-                width=0.003,
-                headwidth=5,
-                angles="xy",
-                scale_units="xy",
-                scale=1.0,
-                alpha=0.01,
-            )
+            if t == (n_steps-1):
+                axglob[1].quiver(
+                    y_hat[t, agent, 0],
+                    y_hat[t, agent, 1],
+                    y_hat[t, agent, 2],
+                    y_hat[t, agent, 3],
+                    width=0.003,
+                    headwidth=5,
+                    angles="xy",
+                    scale_units="xy",
+                    scale=1.0,
+                    alpha=1,
+                )
 
 
 
@@ -184,22 +186,4 @@ if __name__ == '__main__':
     axglob[1].set_xlim((x_min, x_max))
     axglob[1].set_ylim((y_min, y_max))
 
-    plt.show()
-
-#%%
-
-    # Features:
-    # #        key_values = [
-    #             "x",
-    #             "y",
-    #             "velocity_x",
-    #             "velocity_y",
-    #             "bbox_yaw",
-    #             "vel_yaw",
-    #             "width",
-    #             "length",
-    #             "height",
-    #             "valid",
-    #         ]
-
-
+    figglob.savefig(vis_dir+config["misc"]["model_type"]+"_sequence_"+f"{args.sequence_idx:03}.png")
