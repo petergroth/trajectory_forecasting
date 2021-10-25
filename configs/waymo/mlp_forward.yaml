@@ -5,7 +5,6 @@ datamodule:
 
 model:
   hidden_size: 64
-  normalise: True
   dropout: 0.5
   latent_edge_features: 64
   node_features: 9
@@ -26,6 +25,9 @@ regressor:
   fully_connected: True
   self_loop: False
   undirected: False
+  normalise: True
+  node_features: 9
+  edge_features: 1
 
 trainer:
   check_val_every_n_epoch: 1

@@ -67,9 +67,9 @@ class mlp_forward_model(nn.Module):
             )
         )
 
-        self.NormBlock = NormalisationBlock(
-            normalise=normalise, node_features=node_features, edge_features=0
-        )
+        # self.NormBlock = NormalisationBlock(
+        #     normalise=normalise, node_features=node_features, edge_features=0
+        # )
 
     def forward(self, x, edge_index, edge_attr, batch=None, u=None):
         # Normalisation is applied in regressor module
@@ -107,12 +107,12 @@ class mlp_full_forward_model(nn.Module):
         out_features: int = 4
     ):
         super(mlp_full_forward_model, self).__init__()
-        self.NormBlock = NormalisationBlock(
-            normalise=normalise,
-            node_features=node_features,
-            edge_features=edge_features,
-            out_features=out_features
-        )
+        # self.NormBlock = NormalisationBlock(
+        #     normalise=normalise,
+        #     node_features=node_features,
+        #     edge_features=edge_features,
+        #     out_features=out_features
+        # )
         self.hidden_size = hidden_size
         self.node_features = node_features
         self.dropout = dropout
@@ -274,12 +274,12 @@ class mpnn_forward_model(nn.Module):
             ),
         )
 
-        # Normalisation block
-        self.NormBlock = NormalisationBlock(
-            normalise=normalise,
-            node_features=node_features,
-            edge_features=edge_features,
-        )
+        # # Normalisation block
+        # self.NormBlock = NormalisationBlock(
+        #     normalise=normalise,
+        #     node_features=node_features,
+        #     edge_features=edge_features,
+        # )
 
     def forward(self, x, edge_index, edge_attr, batch=None, u=None):
         # Encoding to latent representation
@@ -381,11 +381,11 @@ class rnn_full_forward_model(nn.Module):
             ),
         )
 
-        self.NormBlock = NormalisationBlock(
-            normalise=normalise,
-            node_features=node_features,
-            edge_features=edge_features,
-        )
+        # self.NormBlock = NormalisationBlock(
+        #     normalise=normalise,
+        #     node_features=node_features,
+        #     edge_features=edge_features,
+        # )
 
     def forward(self, x, edge_index, edge_attr, batch=None, u=None, hidden=None):
         # Normalisation is applied in regressor module
@@ -470,12 +470,12 @@ class rnn_node_forward_model(nn.Module):
                 edge_features=latent_edge_features,
             ),
         )
-
-        self.NormBlock = NormalisationBlock(
-            normalise=normalise,
-            node_features=node_features,
-            edge_features=edge_features,
-        )
+        #
+        # self.NormBlock = NormalisationBlock(
+        #     normalise=normalise,
+        #     node_features=node_features,
+        #     edge_features=edge_features,
+        # )
 
     def forward(self, x, edge_index, edge_attr, batch=None, u=None, hidden=None):
         # Normalisation is applied in regressor module
@@ -529,11 +529,11 @@ class conv_model(nn.Module):
             )
         )
 
-        self.NormBlock = NormalisationBlock(
-            normalise=normalise,
-            node_features=node_features,
-            edge_features=edge_features,
-        )
+        # self.NormBlock = NormalisationBlock(
+        #     normalise=normalise,
+        #     node_features=node_features,
+        #     edge_features=edge_features,
+        # )
 
     def forward(self, x, edge_index, edge_attr, batch=None, u=None):
         # Normalisation is applied in regressor module
@@ -660,10 +660,10 @@ class mlp_baseline(nn.Module):
                 in_features=hidden_size, out_features=self.out_features * self.n_nodes
             ),
         )
-
-        self.NormBlock = NormalisationBlock(
-            normalise=normalise, node_features=node_features, edge_features=0
-        )
+        #
+        # self.NormBlock = NormalisationBlock(
+        #     normalise=normalise, node_features=node_features, edge_features=0
+        # )
 
     def forward(self, x, edge_index, edge_attr, batch=None, u=None):
         n_graphs = torch.max(batch) + 1
@@ -716,9 +716,9 @@ class rnn_baseline(nn.Module):
             nn.Linear(in_features=hidden_size, out_features=self.out_features),
         )
 
-        self.NormBlock = NormalisationBlock(
-            normalise=normalise, node_features=node_features, edge_features=0
-        )
+        # self.NormBlock = NormalisationBlock(
+        #     normalise=normalise, node_features=node_features, edge_features=0
+        # )
 
     def forward(self, x, edge_index, edge_attr, batch=None, u=None, hidden=None):
         h, c = hidden
@@ -774,9 +774,9 @@ class rnn_graph_baseline(nn.Module):
             ),
         )
 
-        self.NormBlock = NormalisationBlock(
-            normalise=normalise, node_features=node_features, edge_features=0
-        )
+        # self.NormBlock = NormalisationBlock(
+        #     normalise=normalise, node_features=node_features, edge_features=0
+        # )
 
     def forward(self, x, edge_index, edge_attr, batch=None, u=None, hidden=None):
         # Reshape input
@@ -813,15 +813,15 @@ class NormalisationBlock:
         self.subtract_edge_mean = subtract_edge_mean
 
         # Node normalisation parameters
-        self.node_counter = torch.zeros(1).to(self.device)
-        # self.register_buffer('node_counter', torch.zeros(1))
-        self.node_in_sum = torch.zeros(node_features).to(self.device)
-        # self.register_buffer("node_in_sum", torch.zeros(node_features))
-        self.node_in_squaresum = torch.zeros(node_features).to(self.device)
-        # self.register_buffer("node_in_squaresum", torch.zeros(node_features))
-        self.node_in_std = torch.ones(node_features).to(self.device)
-        # self.register_buffer("node_in_std", torch.ones(node_features))
-        self.node_in_mean = torch.zeros(node_features).to(self.device)
+        # self.node_counter = torch.zeros(1).to(self.device)
+        self.register_buffer('node_counter', torch.zeros(1))
+        # self.node_in_sum = torch.zeros(node_features).to(self.device)
+        self.register_buffer("node_in_sum", torch.zeros(node_features))
+        # self.node_in_squaresum = torch.zeros(node_features).to(self.device)
+        self.register_buffer("node_in_squaresum", torch.zeros(node_features))
+        # self.node_in_std = torch.ones(node_features).to(self.device)
+        self.register_buffer("node_in_std", torch.ones(node_features))
+        # self.node_in_mean = torch.zeros(node_features).to(self.device)
         # self.register_buffer("node_in_mean", torch.zeros(node_features))
 
         # Output normalisation parameters
