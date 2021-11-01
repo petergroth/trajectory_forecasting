@@ -17,7 +17,7 @@ regressor:
   out_features: 6
   noise: 1.0e-3
   lr: 1.0e-5
-  weight_decay: 0.01
+  weight_decay: 0.0001
   edge_type: knn
   min_dist: 0
   n_neighbours: 15
@@ -41,7 +41,7 @@ trainer:
 
 logger:
   offline: False
-  version: full_run_09
+  version: full_run_10
   project: waymo_forwardmodel
 
 misc:
