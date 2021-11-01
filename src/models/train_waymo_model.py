@@ -395,9 +395,6 @@ class OneStepModule(pl.LightningModule):
         # Initialisation     #
         ######################
 
-        # Validate on sequential dataset. First 11 observations are used to prime the model.
-        # Loss is computed on remaining 80 samples using rollout.
-
         # Determine valid initialisations at t=11
         mask = batch.x[:, :, -1]
         valid_mask = mask[:, 10] > 0
@@ -411,9 +408,9 @@ class OneStepModule(pl.LightningModule):
 
         # Allocate target/prediction tensors
         n_nodes = batch.num_nodes
-        y_hat = torch.zeros((90, n_nodes, self.out_features))
+        y_hat = torch.zeros((90, n_nodes, batch.x.size(2)-1))
         y_hat = y_hat.type_as(batch.x)
-        y_target = torch.zeros((90, n_nodes, self.out_features))
+        y_target = torch.zeros((90, n_nodes, batch.x.size(2)-1))
         y_target = y_target.type_as(batch.x)
 
         batch.x = batch.x[:, :, :-1]

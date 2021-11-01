@@ -126,10 +126,10 @@ if __name__ == "__main__":
             # )
             if t == (n_steps - 1):
                 axglob[0].quiver(
-                    y_target[t, agent, 0],
-                    y_target[t, agent, 1],
-                    y_target[t, agent, 2],
-                    y_target[t, agent, 3],
+                    y_target[t, agent, 0].detach().numpy(),
+                    y_target[t, agent, 1].detach().numpy(),
+                    y_target[t, agent, 2].detach().numpy(),
+                    y_target[t, agent, 3].detach().numpy(),
                     width=0.003,
                     headwidth=5,
                     angles="xy",
@@ -177,10 +177,10 @@ if __name__ == "__main__":
             # )
             if t == (n_steps - 1):
                 axglob[1].quiver(
-                    y_hat[t, agent, 0],
-                    y_hat[t, agent, 1],
-                    y_hat[t, agent, 2],
-                    y_hat[t, agent, 3],
+                    y_hat[t, agent, 0].detach().numpy(),
+                    y_hat[t, agent, 1].detach().numpy(),
+                    y_hat[t, agent, 2].detach().numpy(),
+                    y_hat[t, agent, 3].detach().numpy(),
                     width=0.003,
                     headwidth=5,
                     angles="xy",
