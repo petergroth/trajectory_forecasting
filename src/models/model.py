@@ -13,9 +13,11 @@ from torch_geometric.nn import (
 from torch_geometric.nn.meta import MetaLayer
 import torch.nn.functional as F
 from torch_scatter import scatter_mean, scatter_add
+
 # from src.data.dataset import SequentialNBodyDataModule, OneStepNBodyDataModule
 from src.models.node_edge_blocks import *
 from torch_geometric.utils import dropout_adj
+
 # from torch_geometric_temporal.nn import GConvLSTM, GCLSTM, TGCN
 
 
@@ -104,7 +106,7 @@ class mlp_full_forward_model(nn.Module):
         skip: bool = True,
         normalise: bool = True,
         aggregate: bool = False,
-        out_features: int = 4
+        out_features: int = 4,
     ):
         super(mlp_full_forward_model, self).__init__()
         # self.NormBlock = NormalisationBlock(
@@ -153,7 +155,7 @@ class mlp_full_forward_model(nn.Module):
                 node_features=GN2_node_input,
                 dropout=dropout,
                 edge_features=latent_edge_features,
-                out_features=out_features
+                out_features=out_features,
             ),
         )
 
@@ -679,6 +681,50 @@ class mlp_baseline(nn.Module):
         return torch.reshape(out, (self.n_nodes * n_graphs, self.out_features))
 
 
+class mlp_node_baseline(nn.Module):
+    # Forward model without edge update function
+    def __init__(
+        self,
+        hidden_size: int = 64,
+        node_features: int = 5,
+        n_nodes: int = 10,
+        dropout: float = 0.0,
+        **kwargs
+    ):
+        super(mlp_node_baseline, self).__init__()
+        self.hidden_size = hidden_size
+        self.node_features = node_features
+        self.n_nodes = n_nodes
+        self.dropout = dropout
+        self.out_features = 4
+
+        self.mlp_1 = nn.Sequential(
+            nn.Linear(in_features=node_features, out_features=hidden_size),
+            nn.Dropout(p=dropout),
+            nn.ReLU(),
+            nn.Linear(in_features=hidden_size, out_features=hidden_size),
+        )
+
+        self.mlp_2 = nn.Sequential(
+            nn.Linear(
+                in_features=node_features + hidden_size,
+                out_features=hidden_size,
+            ),
+            nn.Dropout(p=dropout),
+            nn.ReLU(),
+            nn.Linear(in_features=hidden_size, out_features=self.out_features),
+        )
+
+    def forward(self, x, edge_index, edge_attr, batch=None, u=None):
+        # Forward pass
+        x_latent = self.mlp_1(x)
+        # Skip connection
+        x_latent = torch.cat([x, x_latent], dim=1)
+        # Second pass
+        out = self.mlp_2(x_latent)
+        return out
+
+
 class rnn_baseline(nn.Module):
     # Forward model without edge update function
     def __init__(
@@ -804,7 +850,7 @@ class NormalisationBlock:
         node_features: int = 5,
         edge_features: int = 2,
         subtract_edge_mean: bool = True,
-        out_features: int = 4
+        out_features: int = 4,
     ):
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.normalise = normalise
@@ -814,7 +860,7 @@ class NormalisationBlock:
 
         # Node normalisation parameters
         # self.node_counter = torch.zeros(1).to(self.device)
-        self.register_buffer('node_counter', torch.zeros(1))
+        self.register_buffer("node_counter", torch.zeros(1))
         # self.node_in_sum = torch.zeros(node_features).to(self.device)
         self.register_buffer("node_in_sum", torch.zeros(node_features))
         # self.node_in_squaresum = torch.zeros(node_features).to(self.device)
