@@ -7,14 +7,14 @@ model:
   hidden_size: 64
   dropout: 0.5
   latent_edge_features: 64
-  node_features: 9
+  node_features: 15
   edge_features: 1
   skip: True
   aggregate: False
-  out_features: 6
+  out_features: 7
 
 regressor:
-  out_features: 6
+  out_features: 7
   noise: 1.0e-3
   lr: 1.0e-5
   weight_decay: 0.01
@@ -26,15 +26,15 @@ regressor:
   self_loop: False
   undirected: False
   normalise: True
-  node_features: 9
+  node_features: 15
   edge_features: 1
 
 trainer:
   check_val_every_n_epoch: 1
   max_epochs: 3
   deterministic: True
-  num_sanity_val_steps: 2
-#  limit_train_batches: 1.0 # Default 1.0
+  num_sanity_val_steps: 0
+  limit_train_batches: 0.01 # Default 1.0
   precision: 32 # Default. Only available on GPU.
 #  val_check_interval: 0.50 # Default 1.0
   gpus: 1
