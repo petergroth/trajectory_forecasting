@@ -423,7 +423,6 @@ class rnn_node_forward_model(nn.Module):
         edge_features: int = 0,
         latent_edge_features: int = 0,
         skip: bool = True,
-        normalise: bool = True,
         num_layers: int = 1,
         rnn_size: int = 20,
     ):
@@ -472,12 +471,6 @@ class rnn_node_forward_model(nn.Module):
                 edge_features=latent_edge_features,
             ),
         )
-        #
-        # self.NormBlock = NormalisationBlock(
-        #     normalise=normalise,
-        #     node_features=node_features,
-        #     edge_features=edge_features,
-        # )
 
     def forward(self, x, edge_index, edge_attr, batch=None, u=None, hidden=None):
         # Normalisation is applied in regressor module
