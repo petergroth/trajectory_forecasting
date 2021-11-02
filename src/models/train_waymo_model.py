@@ -166,6 +166,10 @@ class OneStepModule(pl.LightningModule):
         vel_loss = self.train_pos_loss(y_hat[:, 3:5], y_target_nrm[:, 3:5])
         yaw_loss = self.train_pos_loss(y_hat[:, 5:7], y_target_nrm[:, 5:7])
 
+        # Compute new positions using old velocities
+        pos_expected = x_nrm[:, :2] + 0.1*x_nrm[:, 3:5]
+        pos_diff = torch.linalg.norm(pos_expected-y_hat[:, :2])
+
         self.log("train_pos_loss", pos_loss, on_step=True, on_epoch=True)
         self.log("train_vel_loss", vel_loss, on_step=True, on_epoch=True)
         self.log("train_yaw_loss", vel_loss, on_step=True, on_epoch=True)
@@ -175,8 +179,9 @@ class OneStepModule(pl.LightningModule):
             on_step=True,
             on_epoch=True,
         )
+        self.log("position_difference", pos_diff, on_step=True, on_epoch=True)
 
-        return pos_loss + vel_loss + yaw_loss
+        return pos_loss + vel_loss + yaw_loss + pos_diff
 
     def validation_step(self, batch: Batch, batch_idx: int):
 
