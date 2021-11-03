@@ -778,6 +778,7 @@ class SequentialModule(pl.LightningModule):
         # Initial hidden state
         if self.rnn_type == "GRU":
             h = torch.zeros((self.model.num_layers, 1, self.model.rnn_size))
+            h = h.type_as(batch.x)
         elif self.rnn_type == "LSTM":
             h = torch.zeros((self.model.num_layers, 1, self.model.rnn_size))
             c = torch.zeros((self.model.num_layers, 1, self.model.rnn_size))
@@ -894,7 +895,7 @@ class SequentialModule(pl.LightningModule):
         for t in range(11, 90):
             # Use groundtruth 'teacher_forcing_ratio' % of the time
             if use_groundtruth:
-                x_t = torch.cat([batch.x[:, t, :], batch.type])
+                x_t = torch.cat([batch.x[:, t, :], batch.type], dim=1)
             x_prev = x_t
             y_t = y_target_abs[:, t, :]
 
@@ -1035,6 +1036,7 @@ class SequentialModule(pl.LightningModule):
         # Initial hidden state
         if self.rnn_type == "GRU":
             h = torch.zeros((self.model.num_layers, 1, self.model.rnn_size))
+            h = h.type_as(batch.x)
         elif self.rnn_type == "LSTM":
             h = torch.zeros((self.model.num_layers, 1, self.model.rnn_size))
             c = torch.zeros((self.model.num_layers, 1, self.model.rnn_size))
