@@ -104,7 +104,6 @@ class mlp_full_forward_model(nn.Module):
         edge_features: int = 0,
         latent_edge_features: int = 0,
         skip: bool = True,
-        normalise: bool = True,
         aggregate: bool = False,
         out_features: int = 4,
     ):
@@ -425,6 +424,7 @@ class rnn_node_forward_model(nn.Module):
         skip: bool = True,
         num_layers: int = 1,
         rnn_size: int = 20,
+        out_features: int = 7
     ):
         super(rnn_node_forward_model, self).__init__()
         self.hidden_size = hidden_size
@@ -469,6 +469,7 @@ class rnn_node_forward_model(nn.Module):
                 node_features=GN2_node_input,
                 dropout=dropout,
                 edge_features=latent_edge_features,
+                out_features=out_features,
             ),
         )
 

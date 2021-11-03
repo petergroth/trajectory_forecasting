@@ -5,31 +5,33 @@ datamodule:
 
 model:
   hidden_size: 128
-  dropout: 0.2
-  latent_edge_features: 128
-  node_features: 15
+  dropout: 0.5
   edge_features: 1
+  node_features: 15
   skip: True
-  aggregate: False
+  rnn_size: 64
+  num_layers: 1
+  latent_edge_features: 128
   out_features: 7
 
 regressor:
   out_features: 7
   noise: 1.0e-3
-  lr: 1.0e-3
+  lr: 1.0e-4
   weight_decay: 0.0001
   edge_type: knn
   min_dist: 0
   n_neighbours: 15
   edge_weight: True
   fully_connected: True
-  self_loop: True
+  self_loop: False
   undirected: False
   normalise: True
+  teacher_forcing: True
+  teacher_forcing_ratio: 0.2
+  rnn_type: GRU
   node_features: 15
   edge_features: 1
-  rnn_type: null
-  teacher_forcing: True
 
 trainer:
   check_val_every_n_epoch: 1
@@ -42,13 +44,13 @@ trainer:
   gpus: 1
 
 logger:
-  offline: False
-  version: seq_02
-  project: waymo_forwardmodel
+  offline: True
+  version: rnn_01
+  project: waymo_rec_forwardmodel
 
 misc:
   seed: 1
-  model_type: mlp_full_forward_model
+  model_type: rnn_node_forward_model
   dm_type: SequentialWaymoDataModule
   regressor_type: SequentialModule
   checkpoint: False
