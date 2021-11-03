@@ -469,7 +469,7 @@ class rnn_node_forward_model(nn.Module):
                 node_features=GN2_node_input,
                 dropout=dropout,
                 edge_features=latent_edge_features,
-                out_features=7,
+                out_features=out_features,
             ),
         )
 
