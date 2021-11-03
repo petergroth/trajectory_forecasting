@@ -119,16 +119,16 @@ class OneStepModule(pl.LightningModule):
             )
 
         if self.undirected:
-            edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
+            edge_index, _ = torch_geometric.utils.to_undirected(edge_index)
 
         # Remove duplicates and sort
         edge_index = torch_geometric.utils.coalesce(edge_index)
 
         # Determine whether to add random noise to dynamic states
-        if self.noise is not None:
-            x[:, : self.out_features] += self.noise * torch.rand_like(
-                x[:, : self.out_features]
-            )
+        # if self.noise is not None:
+        #     x[:, : self.out_features] += self.noise * torch.rand_like(
+        #         x[:, : self.out_features]
+        #     )
 
         # Create edge_attr if specified
         if self.edge_weight:
@@ -156,6 +156,12 @@ class OneStepModule(pl.LightningModule):
         x_nrm, edge_attr_nrm = self.in_normalise(x, edge_attr)
         y_target_nrm = self.out_normalise(y_target)
 
+        # Determine whether to add random noise to dynamic states
+        if self.noise is not None:
+            x_nrm[:, : self.out_features] += self.noise * torch.rand_like(
+                x_nrm[:, : self.out_features]
+            )
+
         # Obtain normalised predicted delta dynamics
         y_hat = self.model(
             x=x_nrm, edge_index=edge_index, edge_attr=edge_attr_nrm, batch=batch.batch
@@ -173,13 +179,8 @@ class OneStepModule(pl.LightningModule):
         self.log("train_pos_loss", pos_loss, on_step=True, on_epoch=True)
         self.log("train_vel_loss", vel_loss, on_step=True, on_epoch=True)
         self.log("train_yaw_loss", yaw_loss, on_step=True, on_epoch=True)
-        # self.log(
-        #     "train_total_loss",
-        #     (pos_loss + vel_loss + yaw_loss) / 3,
-        #     on_step=True,
-        #     on_epoch=True,
-        # )
         self.log("position_difference", pos_diff, on_step=True, on_epoch=True)
+
         loss = pos_loss + vel_loss + yaw_loss + pos_diff
         self.log("train_total_loss", loss, on_step=True, on_epoch=True)
 
@@ -213,6 +214,7 @@ class OneStepModule(pl.LightningModule):
         y_target = torch.zeros((80, n_nodes, self.out_features))
         y_target = y_target.type_as(batch.x)
 
+        # Discard mask from features and extract static features
         batch.x = batch.x[:, :, :-1]
         static_features = torch.cat(
             [batch.x[:, 10, self.out_features:], batch.type], dim=1
@@ -251,7 +253,7 @@ class OneStepModule(pl.LightningModule):
                 )
 
             if self.undirected:
-                edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
+                edge_index, _ = torch_geometric.utils.to_undirected(edge_index)
 
             # Remove duplicates and sort
             edge_index = torch_geometric.utils.coalesce(edge_index)
@@ -320,7 +322,7 @@ class OneStepModule(pl.LightningModule):
                 )
 
             if self.undirected:
-                edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
+                edge_index, _ = torch_geometric.utils.to_undirected(edge_index)
 
             # Remove duplicates and sort
             edge_index = torch_geometric.utils.coalesce(edge_index)

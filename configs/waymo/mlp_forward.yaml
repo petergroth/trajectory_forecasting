@@ -5,7 +5,7 @@ datamodule:
 
 model:
   hidden_size: 128
-  dropout: 0.2
+  dropout: 0.5
   latent_edge_features: 128
   node_features: 15
   edge_features: 1
@@ -16,14 +16,14 @@ model:
 regressor:
   out_features: 7
   noise: 1.0e-2
-  lr: 1.0e-5
+  lr: 1.0e-4
   weight_decay: 0.0001
-  edge_type: knn
-  min_dist: 0
+  edge_type: distance
+  min_dist: 10
   n_neighbours: 15
   edge_weight: True
   fully_connected: False
-  self_loop: True
+  self_loop: False
   undirected: False
   normalise: True
   node_features: 15
@@ -40,8 +40,8 @@ trainer:
   gpus: 1
 
 logger:
-  offline: False
-  version: full_run_all_features_15
+  offline: True
+  version: distance_based_01
   project: waymo_forwardmodel
 
 misc:
