@@ -1,11 +1,11 @@
 import os
 import os.path as osp
 import torch
-# from src.utils import parse_sequence
+from src.utils import parse_sequence
 from torch_geometric.data import Data, Dataset, InMemoryDataset
 from torch_geometric.loader import DataLoader
 import pytorch_lightning as pl
-# import tensorflow as tf
+import tensorflow as tf
 from typing import Optional
 
 
@@ -108,7 +108,7 @@ class OneStepWaymoTrainDataset(InMemoryDataset):
 
                     # Save data object to list
                     data = Data(
-                        x=x[valid_mask, :-1], y=x[valid_mask, :7], edge_index=None
+                        x=x[valid_mask, :-1], y=y[valid_mask, :7], edge_index=None
                     )
                     data["tracks_to_predict"] = torch.where(
                         torch.Tensor(parsed["state/tracks_to_predict"].numpy())[
