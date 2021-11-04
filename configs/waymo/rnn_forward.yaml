@@ -11,24 +11,24 @@ model:
   skip: True
   rnn_size: 64
   num_layers: 1
-  latent_edge_features: 128
+  latent_edge_features: 32
   out_features: 7
 
 regressor:
   out_features: 7
-  noise: 1.0e-3
+  noise: null
   lr: 1.0e-4
   weight_decay: 0.0001
-  edge_type: knn
-  min_dist: 0
+  edge_type: distance
+  min_dist: 10
   n_neighbours: 15
   edge_weight: True
-  fully_connected: True
+  fully_connected: False
   self_loop: False
   undirected: False
   normalise: True
   teacher_forcing: True
-  teacher_forcing_ratio: 0.2
+  teacher_forcing_ratio: 0.3
   rnn_type: GRU
   node_features: 15
   edge_features: 1
@@ -44,8 +44,8 @@ trainer:
   gpus: 1
 
 logger:
-  offline: True
-  version: rnn_01
+  offline: False
+  version: rnn_04
   project: waymo_rec_forwardmodel
 
 misc:
