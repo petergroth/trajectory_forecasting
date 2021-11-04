@@ -189,7 +189,6 @@ class mpnn_forward_model(nn.Module):
         dropout: float = 0.0,
         edge_features: int = 0,
         latent_edge_features: int = 0,
-        normalise: bool = True,
         rounds: int = 1,
         shared_params: bool = True,
         **kwargs
@@ -274,13 +273,6 @@ class mpnn_forward_model(nn.Module):
                 edge_features=latent_edge_features,
             ),
         )
-
-        # # Normalisation block
-        # self.NormBlock = NormalisationBlock(
-        #     normalise=normalise,
-        #     node_features=node_features,
-        #     edge_features=edge_features,
-        # )
 
     def forward(self, x, edge_index, edge_attr, batch=None, u=None):
         # Encoding to latent representation
