@@ -40,14 +40,14 @@ trainer:
   gpus: 0
 
 logger:
-  offline: False
+  offline: True
   version: distance_based_03
   project: waymo_forwardmodel
 
 misc:
   seed: 1
   model_type: mlp_full_forward_model
-  dm_type: SequentialWaymoDataModule
+  dm_type: OneStepWaymoDataModule
   regressor_type: OneStepModule
   checkpoint: False
   train: True
