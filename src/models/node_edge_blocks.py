@@ -340,8 +340,8 @@ class node_rnn_1(nn.Module):
         out = torch.cat([x, edge_attr], dim=1)
         out = out.unsqueeze(1)
         # Ensure size of hidden by repeating if necessary. Required for 1st step.
-        if hidden.shape[1] != out.shape[0]:
-            hidden = torch.repeat_interleave(input=hidden, repeats=out.shape[0], dim=1)
+        # if hidden.shape[1] != out.shape[0]:
+        #     hidden = torch.repeat_interleave(input=hidden, repeats=out.shape[0], dim=1)
 
         out, hidden = self.node_rnn(out, hidden)
         return out.squeeze(), hidden

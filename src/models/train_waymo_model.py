@@ -776,7 +776,7 @@ class SequentialModule(pl.LightningModule):
 
         # Initial hidden state
         if self.rnn_type == "GRU":
-            h = torch.zeros((self.model.num_layers, 1, self.model.rnn_size))
+            h = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
             h = h.type_as(batch.x)
         elif self.rnn_type == "LSTM":
             h = torch.zeros((self.model.num_layers, 1, self.model.rnn_size))
@@ -860,13 +860,16 @@ class SequentialModule(pl.LightningModule):
                     batch=batch.batch[mask_t],
                 )
             else:
-                y_pred_t, h = self.model(
+                # Add zero rows for new columns
+                assert self.rnn_type == 'GRU'
+                y_pred_t, h_t = self.model(
                     x=x_t_nrm,
                     edge_index=edge_index,
                     edge_attr=edge_attr_nrm,
                     batch=batch.batch[mask_t],
-                    hidden=h,
+                    hidden=h[:, mask_t],
                 )
+                h[:, mask_t] = h_t
 
             # Save deltas for loss computation
             y_predictions[mask_t, t, :] = y_pred_t
@@ -963,7 +966,6 @@ class SequentialModule(pl.LightningModule):
                     hidden=h,
                 )
 
-
             # Save deltas for loss computation
             y_predictions[:, t, :] = y_pred_t
             # Renormalise output dynamics
@@ -1048,7 +1050,7 @@ class SequentialModule(pl.LightningModule):
 
         # Initial hidden state
         if self.rnn_type == "GRU":
-            h = torch.zeros((self.model.num_layers, 1, self.model.rnn_size))
+            h = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
             h = h.type_as(batch.x)
         elif self.rnn_type == "LSTM":
             h = torch.zeros((self.model.num_layers, 1, self.model.rnn_size))
@@ -1069,20 +1071,19 @@ class SequentialModule(pl.LightningModule):
 
             mask_t = mask[:, t]
             x = torch.cat([batch.x[mask_t, t, :], batch.type[mask_t]], dim=1)
-            batch_t = batch.batch[mask_t]
 
             # Construct edges
             if self.edge_type == "knn":
                 # Neighbour-based graph
                 edge_index = torch_geometric.nn.knn_graph(
-                    x=x[:, :2], k=self.n_neighbours, batch=batch_t, loop=self.self_loop
+                    x=x[:, :2], k=self.n_neighbours, batch=batch.batch[mask_t], loop=self.self_loop
                 )
             else:
                 # Distance-based graph
                 edge_index = torch_geometric.nn.radius_graph(
                     x=x[:, :2],
                     r=self.min_dist,
-                    batch=batch_t,
+                    batch=batch.batch[mask_t],
                     loop=self.self_loop,
                     max_num_neighbors=128,
                     flow="source_to_target",
@@ -1113,16 +1114,18 @@ class SequentialModule(pl.LightningModule):
                     x=x,
                     edge_index=edge_index,
                     edge_attr=edge_attr,
-                    batch=batch.batch,
+                    batch=batch.batch[mask_t],
                 )
             else:
-                x, h = self.model(
+                x, h_t = self.model(
                     x=x,
                     edge_index=edge_index,
                     edge_attr=edge_attr,
-                    batch=batch.batch,
-                    hidden=h,
+                    batch=batch.batch[mask_t],
+                    hidden=h[:, mask_t],
                 )
+                h[:, mask_t] = h_t
+
             # Renormalise output dynamics
             x = self.out_renormalise(x)
             # Add deltas to input graph
@@ -1290,7 +1293,7 @@ class SequentialModule(pl.LightningModule):
 
         # Initial hidden state
         if self.rnn_type == "GRU":
-            h = torch.zeros((self.model.num_layers, 1, self.model.rnn_size))
+            h = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
             h = h.type_as(batch.x)
         elif self.rnn_type == "LSTM":
             h = torch.zeros((self.model.num_layers, 1, self.model.rnn_size))
@@ -1355,16 +1358,18 @@ class SequentialModule(pl.LightningModule):
                     x=x,
                     edge_index=edge_index,
                     edge_attr=edge_attr,
-                    batch=batch.batch,
+                    batch=batch.batch[mask_t],
                 )
             else:
-                x, h = self.model(
+                x, h_t = self.model(
                     x=x,
                     edge_index=edge_index,
                     edge_attr=edge_attr,
-                    batch=batch.batch,
-                    hidden=h,
+                    batch=batch.batch[mask_t],
+                    hidden=h[:, mask_t],
                 )
+                h[:, mask_t] = h_t
+
             # Renormalise output dynamics
             x = self.out_renormalise(x)
             # Add deltas to input graph
