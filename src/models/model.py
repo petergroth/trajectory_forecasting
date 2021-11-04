@@ -276,13 +276,6 @@ class mpnn_forward_model(nn.Module):
             ),
         )
 
-        # # Normalisation block
-        # self.NormBlock = NormalisationBlock(
-        #     normalise=normalise,
-        #     node_features=node_features,
-        #     edge_features=edge_features,
-        # )
-
     def forward(self, x, edge_index, edge_attr, batch=None, u=None):
         # Encoding to latent representation
         x_latent_prev, edge_attr_latent_prev, _ = self.encoder(
