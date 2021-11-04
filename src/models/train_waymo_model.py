@@ -412,18 +412,22 @@ class OneStepModule(pl.LightningModule):
         batch.x = batch.x[valid_mask]
         batch.batch = batch.batch[valid_mask]
         batch.tracks_to_predict = batch.tracks_to_predict[valid_mask]
+        types = batch.type[valid_mask]
+        batch.type = one_hot(batch.type[valid_mask], num_classes=5)
         # Update mask
         mask = batch.x[:, :, -1].bool()
 
         # Allocate target/prediction tensors
         n_nodes = batch.num_nodes
-        y_hat = torch.zeros((90, n_nodes, batch.x.size(2) - 1))
+        y_hat = torch.zeros((90, n_nodes, self.node_features))
         y_hat = y_hat.type_as(batch.x)
-        y_target = torch.zeros((90, n_nodes, batch.x.size(2) - 1))
+        y_target = torch.zeros((90, n_nodes, self.node_features))
         y_target = y_target.type_as(batch.x)
 
         batch.x = batch.x[:, :, :-1]
-        static_features = batch.x[:, 0, self.out_features:]
+        static_features = torch.cat(
+            [batch.x[:, 10, self.out_features:], batch.type], dim=1
+        )
         edge_attr = None
 
         ######################
@@ -437,7 +441,7 @@ class OneStepModule(pl.LightningModule):
             ######################
 
             mask_t = mask[:, t]
-            x = batch.x[mask_t, t, :]
+            x = torch.cat([batch.x[mask_t, t, :], batch.type[mask_t]], dim=1)
             batch_t = batch.batch[mask_t]
 
             # Construct edges
@@ -490,8 +494,8 @@ class OneStepModule(pl.LightningModule):
             predicted_graph = predicted_graph.type_as(batch.x)
 
             # Save first prediction and target
-            y_hat[t, mask_t, :] = predicted_graph[:, : self.out_features]
-            y_target[t, mask_t, :] = batch.x[mask_t, t + 1, : self.out_features]
+            y_hat[t, mask_t, :] = predicted_graph
+            y_target[t, mask_t, :] = torch.cat([batch.x[mask_t, t + 1, :], batch.type[mask_t]], dim=-1)
 
         ######################
         # Future             #
@@ -558,8 +562,8 @@ class OneStepModule(pl.LightningModule):
             predicted_graph = predicted_graph.type_as(batch.x)
 
             # Save prediction alongside true value (next time step state)
-            y_hat[t, :, :] = predicted_graph[:, : self.out_features]
-            y_target[t, :, :] = batch.x[:, t + 1, : self.out_features]
+            y_hat[t, :, :] = predicted_graph
+            y_target[t, :, :] = torch.cat([batch.x[:, t + 1], batch.type], dim=-1)
 
         return y_hat, y_target, mask
 
@@ -1769,7 +1773,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("config_file")
     args = parser.parse_args()
-    torch.autograd.set_detect_anomaly(True)
+    # torch.autograd.set_detect_anomaly(True)
     with open(args.config_file, "r") as file:
         config = yaml.safe_load(file)
 

@@ -97,3 +97,6 @@ todo.txt
 /src/predictions/raw_preds/waymo/baseline/sequence_000.pt
 /src/predictions/raw_preds/waymo/baseline/sequence_001.pt
 /src/predictions/
+/jobfiles/
+*.err
+*.out

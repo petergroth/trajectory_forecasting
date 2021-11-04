@@ -108,7 +108,7 @@ class OneStepWaymoTrainDataset(InMemoryDataset):
 
                     # Save data object to list
                     data = Data(
-                        x=x[valid_mask, :-1], y=x[valid_mask, :7], edge_index=None
+                        x=x[valid_mask, :-1], y=y[valid_mask, :7], edge_index=None
                     )
                     data["tracks_to_predict"] = torch.where(
                         torch.Tensor(parsed["state/tracks_to_predict"].numpy())[
@@ -330,7 +330,7 @@ class OneStepWaymoDataModule(pl.LightningDataModule):
 
     @property
     def num_features(self) -> int:
-        return 11
+        return 15
 
     def prepare_data(self):
         OneStepWaymoTrainDataset()
@@ -343,12 +343,12 @@ class OneStepWaymoDataModule(pl.LightningDataModule):
 
     def train_dataloader(self):
         return DataLoader(
-            self.train_dataset, batch_size=self.batch_size, shuffle=self.shuffle
+            self.train_dataset, batch_size=self.batch_size, shuffle=self.shuffle, num_workers=16
         )
 
     def val_dataloader(self):
         return DataLoader(
-            self.val_dataset, batch_size=self.val_batch_size, shuffle=False
+            self.val_dataset, batch_size=self.val_batch_size, shuffle=False, num_workers=8
         )
 
     def test_dataloader(self):
