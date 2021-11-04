@@ -5,7 +5,7 @@ datamodule:
 
 regressor:
   noise: null
-  out_features: 6
+  out_features: 7
 
 trainer:
   check_val_every_n_epoch: 2

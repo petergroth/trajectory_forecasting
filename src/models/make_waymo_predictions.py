@@ -31,7 +31,7 @@ def make_predictions(path, config_file, sequence_idx=0):
     # Setup
     regressor.eval()
     datamodule.setup()
-    loader = datamodule.train_dataloader()
+    loader = datamodule.val_dataloader()
     # Define output path
     dirpath = "src/predictions/raw_preds/waymo/" + config["logger"]["version"]
     os.makedirs(dirpath, exist_ok=True)
@@ -84,25 +84,38 @@ if __name__ == "__main__":
     for agent in range(n_agents):
         color = (np.random.random(), np.random.random(), np.random.random())
         for t in range(n_steps):
-            x = y_target[t, agent, 0].item()
-            y = y_target[t, agent, 1].item()
-            width = y_target[t, agent, 7].item()
-            length = y_target[t, agent, 8].item()
-            angle = y_target[t, agent, 5].item()
-            c, s = np.cos(angle), np.sin(angle)
-            R = np.array(((c, -s), (s, c)))
-            anchor = np.dot(R, np.array([-length / 2, -width / 2])) + np.array([x, y])
-            rect = Rectangle(
-                xy=anchor,
-                width=length,
-                height=width,
-                angle=angle * 180 / np.pi,
-                edgecolor=color,
-                facecolor="none",
-                alpha=0.2,
-            )
-            axglob[0].add_patch(rect)
-            if t == (n_steps - 1):
+            # if t == 0 or t == 10 or t == 89:
+            if True:
+                x = y_target[t, agent, 0].item()
+                y = y_target[t, agent, 1].item()
+                width = y_target[t, agent, 7].item()
+                length = y_target[t, agent, 8].item()
+                angle = y_target[t, agent, 5].item()
+                # If car
+                if int(y_target[t, agent, 11].item()) == 1:
+                    c, s = np.cos(angle), np.sin(angle)
+                    R = np.array(((c, -s), (s, c)))
+                    anchor = np.dot(R, np.array([-length / 2, -width / 2])) + np.array([x, y])
+                    rect = Rectangle(
+                        xy=anchor,
+                        width=length,
+                        height=width,
+                        angle=angle * 180 / np.pi,
+                        edgecolor='k',
+                        facecolor=color,
+                        alpha=0.05,
+                    )
+                    axglob[0].add_patch(rect)
+                # Pedestrian
+                elif int(y_target[t, agent, 12].item()) == 1:
+                    axglob[0].plot(x, y, marker='o', color=color, alpha=0.05, markerfacecolor=None)
+                # Bike
+                elif int(y_target[t, agent, 13].item()) == 1:
+                    axglob[0].plot(x, y, marker='+', color=color, alpha=0.05, markerfacecolor=None)
+                else:
+                    axglob[0].plot(x, y, marker='x', color=color,  alpha=0.05)
+
+            if t == (n_steps - 1) or t == 0 or t == 10:
                 axglob[0].quiver(
                     y_target[t, agent, 0].detach().numpy(),
                     y_target[t, agent, 1].detach().numpy(),
@@ -117,25 +130,38 @@ if __name__ == "__main__":
                 )
 
         for t in range(n_steps):
-            x = y_hat[t, agent, 0].item()
-            y = y_hat[t, agent, 1].item()
-            width = y_hat[t, agent, 7].item()
-            length = y_hat[t, agent, 8].item()
-            angle = y_hat[t, agent, 5].item()
-            c, s = np.cos(angle), np.sin(angle)
-            R = np.array(((c, -s), (s, c)))
-            anchor = np.dot(R, np.array([-length / 2, -width / 2])) + np.array([x, y])
-            rect = Rectangle(
-                xy=anchor,
-                width=length,
-                height=width,
-                angle=angle * 180 / np.pi,
-                edgecolor=color,
-                facecolor="none",
-                alpha=0.2,
-            )
-            axglob[1].add_patch(rect)
-            if t == (n_steps - 1):
+            # if t == 0 or t == 10 or t == 89:
+            if True:
+                x = y_hat[t, agent, 0].item()
+                y = y_hat[t, agent, 1].item()
+                width = y_hat[t, agent, 7].item()
+                length = y_hat[t, agent, 8].item()
+                angle = y_hat[t, agent, 5].item()
+                # If car
+                if int(y_hat[t, agent, 11].item()) == 1:
+                    c, s = np.cos(angle), np.sin(angle)
+                    R = np.array(((c, -s), (s, c)))
+                    anchor = np.dot(R, np.array([-length / 2, -width / 2])) + np.array([x, y])
+                    rect = Rectangle(
+                        xy=anchor,
+                        width=length,
+                        height=width,
+                        angle=angle * 180 / np.pi,
+                        edgecolor='k',
+                        facecolor=color,
+                        alpha=0.05,
+                    )
+                    axglob[1].add_patch(rect)
+                # Pedestrian
+                elif int(y_hat[t, agent, 12].item()) == 1:
+                    axglob[1].plot(x, y, marker='o', color=color, alpha=0.05, markerfacecolor=None)
+                # Bike
+                elif int(y_hat[t, agent, 13].item()) == 1:
+                    axglob[1].plot(x, y, marker='+', color=color, alpha=0.05, markerfacecolor=None)
+                else:
+                    axglob[1].plot(x, y, marker='x', color=color, alpha=0.05)
+
+            if t == (n_steps - 1) or t == 0 or t == 10:
                 axglob[1].quiver(
                     y_hat[t, agent, 0].detach().numpy(),
                     y_hat[t, agent, 1].detach().numpy(),
@@ -155,7 +181,11 @@ if __name__ == "__main__":
     axglob[1].axis("equal")
     axglob[1].set_xlim((x_min, x_max))
     axglob[1].set_ylim((y_min, y_max))
+    axglob[0].set_title("Groundtruth trajectories")
+    axglob[1].set_title("Predicted trajectories")
 
+
+    plt.show()
     figglob.savefig(
         vis_dir
         + config["misc"]["model_type"]

@@ -125,10 +125,10 @@ class OneStepModule(pl.LightningModule):
         edge_index = torch_geometric.utils.coalesce(edge_index)
 
         # Determine whether to add random noise to dynamic states
-        # if self.noise is not None:
-        #     x[:, : self.out_features] += self.noise * torch.rand_like(
-        #         x[:, : self.out_features]
-        #     )
+        if self.noise is not None:
+            x[:, : self.out_features] += self.noise * torch.rand_like(
+                x[:, : self.out_features]
+            )
 
         # Create edge_attr if specified
         if self.edge_weight:
@@ -155,12 +155,6 @@ class OneStepModule(pl.LightningModule):
         # Obtain normalised input graph and normalised target nodes
         x_nrm, edge_attr_nrm = self.in_normalise(x, edge_attr)
         y_target_nrm = self.out_normalise(y_target)
-
-        # Determine whether to add random noise to dynamic states
-        if self.noise is not None:
-            x_nrm[:, : self.out_features] += self.noise * torch.rand_like(
-                x_nrm[:, : self.out_features]
-            )
 
         # Obtain normalised predicted delta dynamics
         y_hat = self.model(
@@ -1633,6 +1627,7 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
         batch.x = batch.x[valid_mask]
         batch.batch = batch.batch[valid_mask]
         batch.tracks_to_predict = batch.tracks_to_predict[valid_mask]
+        batch.type = one_hot(batch.type[valid_mask], num_classes=5)
         # Update mask
         mask = batch.x[:, :, -1].bool()
 
@@ -1643,19 +1638,22 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
         # Remove valid flag from features
         batch.x = batch.x[:, :, :-1]
         # Extract static features
-        static_features = batch.x[:, 0, self.out_features:]
+        static_features = torch.cat(
+            [batch.x[:, 10, self.out_features:], batch.type], dim=1
+        )
         # Find valid agents at time t=11
         initial_mask = mask[:, 10]
         # Extract final dynamic states to use for predictions
-        last_pos = batch.x[initial_mask, 10, :2]
-        last_vel = batch.x[initial_mask, 10, 2:4]
-        last_yaw = batch.x[initial_mask, 10, 4:6]
+        last_pos = batch.x[initial_mask, 10, 0:2]
+        last_z = batch.x[initial_mask, 10, 2]
+        last_vel = batch.x[initial_mask, 10, 3:5]
+        last_yaw = batch.x[initial_mask, 10, 5:7]
         # Constant change in positions
         delta_pos = last_vel * 0.1
         # First updated position
         predicted_pos = last_pos + delta_pos
         predicted_graph = torch.cat(
-            (predicted_pos, last_vel, last_yaw, static_features), dim=1
+            (predicted_pos, last_z.unsqueeze(1), last_vel, last_yaw, static_features), dim=1
         )
         # Save first prediction and target
         y_hat[0, :, :] = predicted_graph[:, : self.out_features]
@@ -1665,55 +1663,56 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
         for t in range(11, 90):
             predicted_pos += delta_pos
             predicted_graph = torch.cat(
-                (predicted_pos, last_vel, static_features), dim=1
+                (predicted_pos, last_z.unsqueeze(1), last_vel, static_features), dim=1
             )
             y_hat[t - 10, :, :] = predicted_graph[:, : self.out_features]
             y_target[t - 10, :, :] = batch.x[:, t + 1, : self.out_features]
 
-        # Masks for loss computation
         fde_mask = mask[:, -1]
         val_mask = mask[:, 11:].permute(1, 0)
 
         # Compute and log loss
         fde_loss = self.val_fde_loss(
-            y_hat[-1, fde_mask, :2], y_target[-1, fde_mask, :2]
+            y_hat[-1, fde_mask, :3], y_target[-1, fde_mask, :3]
         )
         ade_loss = self.val_ade_loss(
-            y_hat[:, :, 0:2][val_mask], y_target[:, :, 0:2][val_mask]
+            y_hat[:, :, 0:3][val_mask], y_target[:, :, 0:3][val_mask]
         )
         vel_loss = self.val_vel_loss(
-            y_hat[:, :, 2:4][val_mask], y_target[:, :, 2:4][val_mask]
+            y_hat[:, :, 3:5][val_mask], y_target[:, :, 3:5][val_mask]
         )
         yaw_loss = self.val_yaw_loss(
-            y_hat[:, :, 4:6][val_mask], y_target[:, :, 4:6][val_mask]
+            y_hat[:, :, 5:7][val_mask], y_target[:, :, 5:7][val_mask]
         )
 
         # Compute losses on "tracks_to_predict"
         fde_ttp_mask = torch.logical_and(fde_mask, batch.tracks_to_predict)
         fde_ttp_loss = self.val_fde_ttp_loss(
-            y_hat[-1, fde_ttp_mask, :2], y_target[-1, fde_ttp_mask, :2]
+            y_hat[-1, fde_ttp_mask, :3], y_target[-1, fde_ttp_mask, :3]
         )
         ade_ttp_mask = torch.logical_and(
             val_mask, batch.tracks_to_predict.expand((80, mask.size(0)))
         )
         ade_ttp_loss = self.val_ade_loss(
-            y_hat[:, :, 0:2][ade_ttp_mask], y_target[:, :, 0:2][ade_ttp_mask]
+            y_hat[:, :, 0:3][ade_ttp_mask], y_target[:, :, 0:3][ade_ttp_mask]
         )
 
         ######################
         # Logging            #
         ######################
+
         self.log("val_ade_loss", ade_loss)
         self.log("val_fde_loss", fde_loss)
         self.log("val_vel_loss", vel_loss)
         self.log("val_yaw_loss", yaw_loss)
-        self.log("val_total_loss", (ade_loss + yaw_loss + vel_loss) / 3)
+        self.log("val_total_loss", (ade_loss + vel_loss + yaw_loss) / 3)
         self.log("val_fde_ttp_loss", fde_ttp_loss)
         self.log("val_ade_ttp_loss", ade_ttp_loss)
 
-        return (ade_loss + yaw_loss + vel_loss) / 3
+        return (ade_loss + vel_loss + yaw_loss) / 3
 
     def predict_step(self, batch, batch_idx=None):
+
         ######################
         # Initialisation     #
         ######################
@@ -1725,33 +1724,38 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
         # Discard non-valid nodes as no initial trajectories will be known
         batch.x = batch.x[valid_mask]
         batch.batch = batch.batch[valid_mask]
+        batch.tracks_to_predict = batch.tracks_to_predict[valid_mask]
+        batch.type = one_hot(batch.type[valid_mask], num_classes=5)
         # Update mask
         mask = batch.x[:, :, -1].bool()
 
         # Allocate target/prediction tensors
         n_nodes = batch.num_nodes
-        y_hat = torch.zeros((90, n_nodes, 9))
-        y_target = torch.zeros((90, n_nodes, 9))
+        y_hat = torch.zeros((90, n_nodes, 15))
+        y_target = torch.zeros((90, n_nodes, 15))
         # Remove valid flag from features
         batch.x = batch.x[:, :, :-1]
         # Extract static features
-        static_features = batch.x[:, 0, self.out_features:]
+        static_features = torch.cat(
+            [batch.x[:, 10, self.out_features:], batch.type], dim=1
+        )
 
         # Fill in targets
         for t in range(0, 90):
-            y_target[t, :, :] = batch.x[:, t + 1, :]
+            y_target[t, :, :] = torch.cat([batch.x[:, t + 1, :], batch.type], dim=1)
 
         for t in range(11):
             mask_t = mask[:, t]
 
             last_pos = batch.x[mask_t, t, 0:2]
-            last_vel = batch.x[mask_t, t, 2:4]
-            last_yaw = batch.x[mask_t, t, 4:6]
+            last_z = batch.x[mask_t, t, 2]
+            last_vel = batch.x[mask_t, t, 3:5]
+            last_yaw = batch.x[mask_t, t, 5:7]
 
             delta_pos = last_vel * 0.1
             predicted_pos = last_pos + delta_pos
             predicted_graph = torch.cat(
-                (predicted_pos, last_vel, last_yaw, static_features[mask_t]), dim=1
+                (predicted_pos, last_z.unsqueeze(1), last_vel, last_yaw, static_features[mask_t]), dim=1
             )
             y_hat[t, mask_t, :] = predicted_graph
 
@@ -1759,7 +1763,7 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
             last_pos = predicted_pos
             predicted_pos = last_pos + delta_pos
             predicted_graph = torch.cat(
-                (predicted_pos, last_vel, last_yaw, static_features), dim=1
+                (predicted_pos, last_z.unsqueeze(1), last_vel, last_yaw, static_features), dim=1
             )
             y_hat[t, :, :] = predicted_graph
 

@@ -22,18 +22,6 @@ class OneStepWaymoTrainDataset(InMemoryDataset):
 
     @property
     def processed_file_names(self):
-        # # Determine number of files
-        # n_graphs = 0
-        # # Load all files and iterate through to determine length. Thanks TF
-        # for i, raw_path in enumerate(self.raw_file_names):
-        #     # Load file
-        #     dataset = tf.data.TFRecordDataset(
-        #         self.raw_dir + "/" + raw_path, compression_type=""
-        #     )
-        #     for seq_idx, data in enumerate(dataset.as_numpy_iterator()):
-        #         n_graphs += 1
-
-        # return [f"waymo_train_data_{i:04}.pt" for i in range(n_graphs)]
         return ["waymo_train_data.pt"]
 
     @property
@@ -343,12 +331,12 @@ class OneStepWaymoDataModule(pl.LightningDataModule):
 
     def train_dataloader(self):
         return DataLoader(
-            self.train_dataset, batch_size=self.batch_size, shuffle=self.shuffle, num_workers=16
+            self.train_dataset, batch_size=self.batch_size, shuffle=self.shuffle, num_workers=4
         )
 
     def val_dataloader(self):
         return DataLoader(
-            self.val_dataset, batch_size=self.val_batch_size, shuffle=False, num_workers=8
+            self.val_dataset, batch_size=self.val_batch_size, shuffle=False, num_workers=2
         )
 
     def test_dataloader(self):
