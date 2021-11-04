@@ -6,18 +6,18 @@ datamodule:
 model:
   hidden_size: 128
   dropout: 0.5
-  latent_edge_features: 32
+  latent_edge_features: 128
   node_features: 15
   edge_features: 1
-  skip: True
-  aggregate: False
+  rounds: 1
+  shared_params: False
   out_features: 7
 
 regressor:
   out_features: 7
-  noise: 1.0e-3
+  noise: 0.1
   lr: 1.0e-5
-  weight_decay: 0.001
+  weight_decay: 0.01
   edge_type: distance
   min_dist: 10
   n_neighbours: 15
@@ -41,12 +41,12 @@ trainer:
 
 logger:
   offline: False
-  version: distance_based_04
-  project: waymo_forwardmodel
+  version: mpnn_06
+  project: waymo_mpnn
 
 misc:
   seed: 1
-  model_type: mlp_full_forward_model
+  model_type: mpnn_forward_model
   dm_type: OneStepWaymoDataModule
   regressor_type: OneStepModule
   checkpoint: False

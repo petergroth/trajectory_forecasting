@@ -189,9 +189,9 @@ class mpnn_forward_model(nn.Module):
         dropout: float = 0.0,
         edge_features: int = 0,
         latent_edge_features: int = 0,
-        normalise: bool = True,
         rounds: int = 1,
         shared_params: bool = True,
+        out_features: int = 7,
         **kwargs
     ):
         super(mpnn_forward_model, self).__init__()
@@ -272,6 +272,7 @@ class mpnn_forward_model(nn.Module):
                 node_features=hidden_size,
                 dropout=dropout,
                 edge_features=latent_edge_features,
+                out_features=out_features
             ),
         )
 
