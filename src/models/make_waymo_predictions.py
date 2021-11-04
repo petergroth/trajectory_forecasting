@@ -1,12 +1,14 @@
 import argparse
 import pytorch_lightning as pl
-from src.data.dataset_nbody import OneStepWaymoDataModule
+from src.data.dataset_waymo import OneStepWaymoDataModule
 from src.models.train_waymo_model import *
 import yaml
 from pytorch_lightning.utilities.seed import seed_everything
 import torch
 import os
 import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
+import numpy as np
 
 # from models import ConstantModel
 from matplotlib.patches import Circle
@@ -29,7 +31,7 @@ def make_predictions(path, config_file, sequence_idx=0):
     # Setup
     regressor.eval()
     datamodule.setup()
-    loader = datamodule.val_dataloader()
+    loader = datamodule.train_dataloader()
     # Define output path
     dirpath = "src/predictions/raw_preds/waymo/" + config["logger"]["version"]
     os.makedirs(dirpath, exist_ok=True)
@@ -68,13 +70,6 @@ if __name__ == "__main__":
     n_steps, n_agents, n_features = y_hat.shape
     mask = mask.permute(1, 0)
 
-    #%%
-    from matplotlib.patches import Rectangle
-    import numpy as np
-
-    # colors = ['k'] * 11 + ['r'] * 79
-    # colors = lambda n: list(map(lambda i: "#" + "%06x" % np.random.randint(0, 0xFFFFFF), range(n_agents)))
-    # fig2, ax2 = plt.subplots(1, 2, figsize=(20, 10))
     small_mask = y_target[:, :, 0] > 0
     # Extract boundaries
     x_min, x_max, y_min, y_max = (
@@ -85,19 +80,15 @@ if __name__ == "__main__":
     )
 
     figglob, axglob = plt.subplots(1, 2, figsize=(20, 10))
-    # Visualise each trajectory individually
+
     for agent in range(n_agents):
         color = (np.random.random(), np.random.random(), np.random.random())
-        # fig, ax = plt.subplots(1, 2, figsize=(20, 10))
-
         for t in range(n_steps):
-            # if mask[t, agent]:
             x = y_target[t, agent, 0].item()
             y = y_target[t, agent, 1].item()
-            width = y_target[t, agent, 6].item()
-            length = y_target[t, agent, 7].item()
-            # angle = ((y_target[t, agent, 4] + y_target[t, agent, 5])/2).item()
-            angle = y_target[t, agent, 4].item()
+            width = y_target[t, agent, 7].item()
+            length = y_target[t, agent, 8].item()
+            angle = y_target[t, agent, 5].item()
             c, s = np.cos(angle), np.sin(angle)
             R = np.array(((c, -s), (s, c)))
             anchor = np.dot(R, np.array([-length / 2, -width / 2])) + np.array([x, y])
@@ -110,26 +101,13 @@ if __name__ == "__main__":
                 facecolor="none",
                 alpha=0.2,
             )
-            # ax[0].add_patch(rect)
             axglob[0].add_patch(rect)
-            # ax[0].quiver(
-            #     y_target[t, agent, 0],
-            #     y_target[t, agent, 1],
-            #     y_target[t, agent, 2],
-            #     y_target[t, agent, 3],
-            #     width=0.003,
-            #     headwidth=5,
-            #     angles="xy",
-            #     scale_units="xy",
-            #     scale=1.0,
-            #     alpha=0.1,
-            # )
             if t == (n_steps - 1):
                 axglob[0].quiver(
                     y_target[t, agent, 0].detach().numpy(),
                     y_target[t, agent, 1].detach().numpy(),
-                    y_target[t, agent, 2].detach().numpy(),
                     y_target[t, agent, 3].detach().numpy(),
+                    y_target[t, agent, 4].detach().numpy(),
                     width=0.003,
                     headwidth=5,
                     angles="xy",
@@ -138,17 +116,12 @@ if __name__ == "__main__":
                     alpha=1,
                 )
 
-        # lim = (ax[0].get_xlim(), ax[0].get_ylim())
-        # ax[0].axis('equal')
-        # ax[0].set_title(f'Target (agent id: {agent})', fontsize=15)
-
         for t in range(n_steps):
             x = y_hat[t, agent, 0].item()
             y = y_hat[t, agent, 1].item()
-            width = y_hat[t, agent, 6].item()
-            length = y_hat[t, agent, 7].item()
-            angle = y_hat[t, agent, 4].item()
-            # angle = ((y_target[t, agent, 4] + y_target[t, agent, 5]) / 2).item()
+            width = y_hat[t, agent, 7].item()
+            length = y_hat[t, agent, 8].item()
+            angle = y_hat[t, agent, 5].item()
             c, s = np.cos(angle), np.sin(angle)
             R = np.array(((c, -s), (s, c)))
             anchor = np.dot(R, np.array([-length / 2, -width / 2])) + np.array([x, y])
@@ -161,26 +134,13 @@ if __name__ == "__main__":
                 facecolor="none",
                 alpha=0.2,
             )
-            # ax[1].add_patch(rect)
             axglob[1].add_patch(rect)
-            # ax[1].quiver(
-            #     y_hat[t, agent, 0],
-            #     y_hat[t, agent, 1],
-            #     y_hat[t, agent, 2],
-            #     y_hat[t, agent, 3],
-            #     width=0.003,
-            #     headwidth=5,
-            #     angles="xy",
-            #     scale_units="xy",
-            #     scale=1.0,
-            #     alpha=0.1,
-            # )
             if t == (n_steps - 1):
                 axglob[1].quiver(
                     y_hat[t, agent, 0].detach().numpy(),
                     y_hat[t, agent, 1].detach().numpy(),
-                    y_hat[t, agent, 2].detach().numpy(),
                     y_hat[t, agent, 3].detach().numpy(),
+                    y_hat[t, agent, 4].detach().numpy(),
                     width=0.003,
                     headwidth=5,
                     angles="xy",
@@ -188,12 +148,6 @@ if __name__ == "__main__":
                     scale=1.0,
                     alpha=1,
                 )
-
-        # ax[1].set_title(f'Prediction (agent id: {agent})', fontsize=15)
-        # ax[1].set_xlim(lim[0])
-        # ax[1].set_ylim(lim[1])
-        # ax[1].axis('equal')
-        # plt.show()
 
     axglob[0].axis("equal")
     axglob[0].set_xlim((x_min, x_max))
