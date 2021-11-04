@@ -589,7 +589,7 @@ class GraphNetworkBlock(MetaLayer):
             if hidden is None:
                 x = self.node_model(x, edge_index, edge_attr, u, batch)
             else:
-                x, node_hidden = self.node_model(
+                x, hidden = self.node_model(
                     x, edge_index, edge_attr, u, batch, hidden=hidden
                 )
 
