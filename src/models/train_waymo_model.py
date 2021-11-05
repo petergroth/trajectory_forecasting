@@ -68,25 +68,25 @@ class OneStepModule(pl.LightningModule):
         self.node_features = node_features
 
         self.save_hyperparameters()
-        # node_features -= 5
-        # # Normalisation parameters
-        # self.register_buffer("node_counter", torch.zeros(1))
-        # self.register_buffer("node_in_sum", torch.zeros(node_features))
-        # self.register_buffer("node_in_squaresum", torch.zeros(node_features))
-        # self.register_buffer("node_in_std", torch.ones(node_features))
-        # self.register_buffer("node_in_mean", torch.zeros(node_features))
-        # # Output normalisation parameters
-        # self.register_buffer("node_out_sum", torch.zeros(out_features))
-        # self.register_buffer("node_out_squaresum", torch.zeros(out_features))
-        # self.register_buffer("node_out_std", torch.ones(out_features))
-        # self.register_buffer("node_out_mean", torch.zeros(out_features))
-        # # Edge normalisation parameters
-        # self.register_buffer("edge_counter", torch.zeros(1))
-        # self.register_buffer("edge_in_sum", torch.zeros(edge_features))
-        # self.register_buffer("edge_in_squaresum", torch.zeros(edge_features))
-        # self.register_buffer("edge_in_std", torch.ones(edge_features))
-        # self.register_buffer("edge_in_mean", torch.zeros(edge_features))
-        # self.register_buffer("edge_in_mean", torch.zeros(edge_features))
+        node_features -= 5
+        # Normalisation parameters
+        self.register_buffer("node_counter", torch.zeros(1))
+        self.register_buffer("node_in_sum", torch.zeros(node_features))
+        self.register_buffer("node_in_squaresum", torch.zeros(node_features))
+        self.register_buffer("node_in_std", torch.ones(node_features))
+        self.register_buffer("node_in_mean", torch.zeros(node_features))
+        # Output normalisation parameters
+        self.register_buffer("node_out_sum", torch.zeros(out_features))
+        self.register_buffer("node_out_squaresum", torch.zeros(out_features))
+        self.register_buffer("node_out_std", torch.ones(out_features))
+        self.register_buffer("node_out_mean", torch.zeros(out_features))
+        # Edge normalisation parameters
+        self.register_buffer("edge_counter", torch.zeros(1))
+        self.register_buffer("edge_in_sum", torch.zeros(edge_features))
+        self.register_buffer("edge_in_squaresum", torch.zeros(edge_features))
+        self.register_buffer("edge_in_std", torch.ones(edge_features))
+        self.register_buffer("edge_in_mean", torch.zeros(edge_features))
+        self.register_buffer("edge_in_mean", torch.zeros(edge_features))
 
     def training_step(self, batch: Batch, batch_idx: int):
         # Extract node features
