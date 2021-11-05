@@ -9,6 +9,7 @@ from torch_geometric.nn import (
     GatedGraphConv,
     MessagePassing,
 )
+from torch_geometric.nn.norm import BatchNorm
 from torch_geometric.nn.meta import MetaLayer
 import torch.nn.functional as F
 from torch_scatter import scatter_mean, scatter_add
@@ -33,6 +34,7 @@ class node_mlp_1(nn.Module):
             nn.Linear(
                 in_features=node_features + edge_features, out_features=hidden_size
             ),
+            BatchNorm(in_channels=hidden_size),
             nn.Dropout(p=dropout),
             nn.ReLU(),
             nn.Linear(in_features=hidden_size, out_features=hidden_size),
@@ -72,7 +74,8 @@ class node_mlp_out(nn.Module):
             nn.Linear(
                 in_features=node_features + edge_features, out_features=hidden_size
             ),
-            nn.Dropout(p=dropout, inplace=True),
+            BatchNorm(in_channels=hidden_size),
+            nn.Dropout(p=dropout),
             nn.ReLU(),
             nn.Linear(in_features=hidden_size, out_features=self.out_features),
         )
@@ -117,6 +120,7 @@ class edge_mlp_1(nn.Module):
             nn.Linear(
                 in_features=node_features * 2 + edge_features, out_features=hidden_size
             ),
+            BatchNorm(in_channels=hidden_size),
             nn.Dropout(p=dropout),
             nn.ReLU(),
             nn.Linear(in_features=hidden_size, out_features=latent_edge_features),
@@ -165,7 +169,6 @@ class edge_rnn_1(nn.Module):
         dest,
         edge_attr,
         hidden,
-        x_size=None,
         edge_index=None,
         u=None,
         batch=None,
@@ -178,14 +181,6 @@ class edge_rnn_1(nn.Module):
         input = torch.cat([src, dest, edge_attr], dim=1)
         # Add empty seq_len dimension
         input = input.unsqueeze(1)
-        # Ensure size of hidden by repeating if necessary.
-        if hidden.shape[1] == 1:
-            hidden = torch.repeat_interleave(
-                input=hidden, repeats=input.shape[0], dim=1
-            )
-        else:
-            hidden = hidden[:, edge_index[1], :]
-
         # Compute messages
         messages, hidden = self.message_rnn(input, hidden)
         return messages.squeeze(), hidden
@@ -211,6 +206,7 @@ class edge_mlp_latent(nn.Module):
                 in_features=node_features * 2 + latent_edge_features,
                 out_features=hidden_size,
             ),
+            BatchNorm(in_channels=hidden_size),
             nn.Dropout(p=dropout),
             nn.ReLU(),
             nn.Linear(in_features=hidden_size, out_features=latent_edge_features),
@@ -237,13 +233,13 @@ class node_mlp_latent(nn.Module):
         node_features: int = 5,
         dropout: float = 0.0,
         edge_features: int = 0,
-        latent_edge_features: int = 0,
     ):
         super(node_mlp_latent, self).__init__()
         self.node_mlp_1 = nn.Sequential(
             nn.Linear(
                 in_features=node_features + edge_features, out_features=hidden_size
             ),
+            BatchNorm(in_channels=hidden_size),
             nn.Dropout(p=dropout, inplace=True),
             nn.ReLU(),
             nn.Linear(in_features=hidden_size, out_features=node_features),
@@ -282,6 +278,7 @@ class node_mlp_encoder(nn.Module):
             nn.Linear(
                 in_features=node_features + edge_features, out_features=hidden_size
             ),
+            BatchNorm(in_channels=hidden_size),
             nn.Dropout(p=dropout, inplace=True),
             nn.ReLU(),
             nn.Linear(in_features=hidden_size, out_features=hidden_size),
@@ -322,6 +319,7 @@ class node_rnn_1(nn.Module):
         self.num_layers = num_layers
         self.dropout = dropout if num_layers > 1 else 0.0
 
+        self.bn = BatchNorm(in_channels=node_features + edge_features)
         self.node_rnn = nn.GRU(
             input_size=node_features + edge_features,
             hidden_size=rnn_size,
@@ -338,10 +336,9 @@ class node_rnn_1(nn.Module):
         edge_attr = scatter_add(edge_attr, row, dim=0, dim_size=x.size(0))
         # Concatenate
         out = torch.cat([x, edge_attr], dim=1)
+        # Apply batchnorm to input
+        out = self.bn(out)
+        # Add extra dimension
         out = out.unsqueeze(1)
-        # Ensure size of hidden by repeating if necessary. Required for 1st step.
-        # if hidden.shape[1] != out.shape[0]:
-        #     hidden = torch.repeat_interleave(input=hidden, repeats=out.shape[0], dim=1)
-
         out, hidden = self.node_rnn(out, hidden)
         return out.squeeze(), hidden
