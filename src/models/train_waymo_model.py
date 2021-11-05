@@ -68,25 +68,25 @@ class OneStepModule(pl.LightningModule):
         self.node_features = node_features
 
         self.save_hyperparameters()
-        node_features -= 5
-        # Normalisation parameters
-        self.register_buffer("node_counter", torch.zeros(1))
-        self.register_buffer("node_in_sum", torch.zeros(node_features))
-        self.register_buffer("node_in_squaresum", torch.zeros(node_features))
-        self.register_buffer("node_in_std", torch.ones(node_features))
-        self.register_buffer("node_in_mean", torch.zeros(node_features))
-        # Output normalisation parameters
-        self.register_buffer("node_out_sum", torch.zeros(out_features))
-        self.register_buffer("node_out_squaresum", torch.zeros(out_features))
-        self.register_buffer("node_out_std", torch.ones(out_features))
-        self.register_buffer("node_out_mean", torch.zeros(out_features))
-        # Edge normalisation parameters
-        self.register_buffer("edge_counter", torch.zeros(1))
-        self.register_buffer("edge_in_sum", torch.zeros(edge_features))
-        self.register_buffer("edge_in_squaresum", torch.zeros(edge_features))
-        self.register_buffer("edge_in_std", torch.ones(edge_features))
-        self.register_buffer("edge_in_mean", torch.zeros(edge_features))
-        self.register_buffer("edge_in_mean", torch.zeros(edge_features))
+        # node_features -= 5
+        # # Normalisation parameters
+        # self.register_buffer("node_counter", torch.zeros(1))
+        # self.register_buffer("node_in_sum", torch.zeros(node_features))
+        # self.register_buffer("node_in_squaresum", torch.zeros(node_features))
+        # self.register_buffer("node_in_std", torch.ones(node_features))
+        # self.register_buffer("node_in_mean", torch.zeros(node_features))
+        # # Output normalisation parameters
+        # self.register_buffer("node_out_sum", torch.zeros(out_features))
+        # self.register_buffer("node_out_squaresum", torch.zeros(out_features))
+        # self.register_buffer("node_out_std", torch.ones(out_features))
+        # self.register_buffer("node_out_mean", torch.zeros(out_features))
+        # # Edge normalisation parameters
+        # self.register_buffer("edge_counter", torch.zeros(1))
+        # self.register_buffer("edge_in_sum", torch.zeros(edge_features))
+        # self.register_buffer("edge_in_squaresum", torch.zeros(edge_features))
+        # self.register_buffer("edge_in_std", torch.ones(edge_features))
+        # self.register_buffer("edge_in_mean", torch.zeros(edge_features))
+        # self.register_buffer("edge_in_mean", torch.zeros(edge_features))
 
     def training_step(self, batch: Batch, batch_idx: int):
         # Extract node features
@@ -145,16 +145,19 @@ class OneStepModule(pl.LightningModule):
         y_target = batch.y[:, : self.out_features] - x[:, : self.out_features]
         y_target = y_target.type_as(batch.x)
 
+        x_nrm = x
+        edge_attr_nrm = edge_attr
+        y_target_nrm = y_target
         # Update normalisation state and normalise
-        if edge_attr is None:
-            self.update_in_normalisation(x.detach().clone())
-        else:
-            self.update_in_normalisation(x.detach().clone(), edge_attr.detach().clone())
-        self.update_out_normalisation(y_target.detach().clone())
+        # if edge_attr is None:
+        #     self.update_in_normalisation(x.detach().clone())
+        # else:
+        #     self.update_in_normalisation(x.detach().clone(), edge_attr.detach().clone())
+        # self.update_out_normalisation(y_target.detach().clone())
 
         # Obtain normalised input graph and normalised target nodes
-        x_nrm, edge_attr_nrm = self.in_normalise(x.detach(), edge_attr.detach())
-        y_target_nrm = self.out_normalise(y_target.detach())
+        # x_nrm, edge_attr_nrm = self.in_normalise(x.detach(), edge_attr.detach())
+        # y_target_nrm = self.out_normalise(y_target.detach())
 
         # Obtain normalised predicted delta dynamics
         y_hat = self.model(
@@ -264,13 +267,13 @@ class OneStepModule(pl.LightningModule):
             ######################
 
             # Normalise input graph
-            x, edge_attr = self.in_normalise(x, edge_attr)
+            # x, edge_attr = self.in_normalise(x, edge_attr)
             # Obtain normalised predicted delta dynamics
             x = self.model(
                 x=x, edge_index=edge_index, edge_attr=edge_attr, batch=batch_t
             )
             # Renormalise output dynamics
-            x = self.out_renormalise(x)
+            # x = self.out_renormalise(x)
             # Add deltas to input graph
             predicted_graph = torch.cat(
                 (batch.x[mask_t, t, : self.out_features] + x, static_features[mask_t]),
@@ -333,13 +336,13 @@ class OneStepModule(pl.LightningModule):
             ######################
 
             # Normalise input graph
-            x, edge_attr = self.in_normalise(x, edge_attr)
+            # x, edge_attr = self.in_normalise(x, edge_attr)
             # Obtain normalised predicted delta dynamics
             x = self.model(
                 x=x, edge_index=edge_index, edge_attr=edge_attr, batch=batch.batch
             )
             # Renormalise deltas
-            x = self.out_renormalise(x)
+            # x = self.out_renormalise(x)
             # Add deltas to input graph
             predicted_graph = torch.cat(
                 (predicted_graph[:, : self.out_features] + x, static_features), dim=-1
@@ -394,6 +397,7 @@ class OneStepModule(pl.LightningModule):
         return (ade_loss + vel_loss + yaw_loss) / 3
 
     def predict_step(self, batch, batch_idx=None):
+        raise NotImplementedError
         ######################
         # Initialisation     #
         ######################
