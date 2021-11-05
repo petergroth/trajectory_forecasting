@@ -145,8 +145,6 @@ class mlp_full_forward_model(nn.Module):
         )
 
     def forward(self, x, edge_index, edge_attr, batch=None, u=None):
-        # Normalisation is applied in regressor module
-
         # First block
         x_1, edge_attr_1, _ = self.GN1(
             x=x, edge_index=edge_index, edge_attr=edge_attr, u=u, batch=batch

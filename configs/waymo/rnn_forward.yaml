@@ -46,7 +46,7 @@ trainer:
 
 logger:
   offline: False
-  version: rnn_07
+  version: rnn_08
   project: waymo_rec_forwardmodel
 
 misc:
