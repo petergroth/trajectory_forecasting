@@ -1,11 +1,11 @@
 datamodule:
-  batch_size: 1
+  batch_size: 32
   shuffle: False
   val_batch_size: 32
 
 model:
   hidden_size: 128
-  dropout: 0.5
+  dropout: 0.0
   edge_features: 1
   node_features: 15
   skip: True
@@ -17,10 +17,10 @@ model:
 regressor:
   out_features: 7
   noise: null
-  lr: 1.0e-2
+  lr: 1.0e-3
   weight_decay: 0.0001
   edge_type: distance
-  min_dist: 10
+  min_dist: 15
   n_neighbours: 15
   edge_weight: True
   fully_connected: False
@@ -39,14 +39,14 @@ trainer:
   deterministic: True
   num_sanity_val_steps: 2
 #  limit_train_batches: 1 # Default 1.0
-  overfit_batches: 1
+#  overfit_batches: 1
   precision: 32 # Default. Only available on GPU.
-  val_check_interval: 1.0 # Default 1.0
-  gpus: 0
+  val_check_interval: 0.50 # Default 1.0
+  gpus: 1
 
 logger:
-  offline: True
-  version: rnn_04
+  offline: False
+  version: rnn_08
   project: waymo_rec_forwardmodel
 
 misc:

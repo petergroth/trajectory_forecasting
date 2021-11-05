@@ -24,9 +24,6 @@ from torch_geometric.utils import dropout_adj
 class ConstantModel(nn.Module):
     def __init__(self):
         super(ConstantModel, self).__init__()
-        self.NormBlock = NormalisationBlock(
-            normalise=False, node_features=5, edge_features=0
-        )
 
     def forward(self, x, edge_index):
         # Identity
@@ -41,7 +38,6 @@ class mlp_forward_model(nn.Module):
         node_features: int = 5,
         dropout: float = 0.0,
         skip: bool = True,
-        normalise: bool = True,
         aggregate: bool = False,
         **kwargs
     ):
@@ -69,16 +65,12 @@ class mlp_forward_model(nn.Module):
             )
         )
 
-        # self.NormBlock = NormalisationBlock(
-        #     normalise=normalise, node_features=node_features, edge_features=0
-        # )
-
     def forward(self, x, edge_index, edge_attr, batch=None, u=None):
         # Normalisation is applied in regressor module
 
         # First block
-        x_1, edge_attr_1, _ = self.GN1(
-            x=x, edge_index=edge_index, edge_attr=edge_attr, u=u, batch=batch
+        x_1, _, _ = self.GN1(
+            x=x, edge_index=edge_index, edge_attr=None, u=u, batch=batch
         )
         # concatenation of node and edge attributes
         if self.aggregate:
@@ -89,7 +81,7 @@ class mlp_forward_model(nn.Module):
         # edge_attr_1 = torch.cat([edge_attr, edge_attr_1], dim=1)
         # Second block
         out, _, _ = self.GN2(
-            x=x_1, edge_index=edge_index, edge_attr=edge_attr_1, u=u, batch=batch
+            x=x_1, edge_index=edge_index, edge_attr=None, u=u, batch=batch
         )
         return out
 
@@ -108,12 +100,6 @@ class mlp_full_forward_model(nn.Module):
         out_features: int = 4,
     ):
         super(mlp_full_forward_model, self).__init__()
-        # self.NormBlock = NormalisationBlock(
-        #     normalise=normalise,
-        #     node_features=node_features,
-        #     edge_features=edge_features,
-        #     out_features=out_features
-        # )
         self.hidden_size = hidden_size
         self.node_features = node_features
         self.dropout = dropout
@@ -159,8 +145,6 @@ class mlp_full_forward_model(nn.Module):
         )
 
     def forward(self, x, edge_index, edge_attr, batch=None, u=None):
-        # Normalisation is applied in regressor module
-
         # First block
         x_1, edge_attr_1, _ = self.GN1(
             x=x, edge_index=edge_index, edge_attr=edge_attr, u=u, batch=batch
@@ -479,7 +463,7 @@ class rnn_node_forward_model(nn.Module):
             hidden=hidden,
         )
         # Concatenation of node and edge attributes
-        x_1 = torch.cat([x, x_1], dim=1)  # [rnn_dim + node_features]
+        x_1 = torch.cat([x, x_1], dim=1)
         edge_attr_1 = torch.cat([edge_attr, edge_attr_1], dim=1)
         # Second block
         out, _, _ = self.GN2(

@@ -145,19 +145,19 @@ class OneStepModule(pl.LightningModule):
         y_target = batch.y[:, : self.out_features] - x[:, : self.out_features]
         y_target = y_target.type_as(batch.x)
 
-        x_nrm = x
-        edge_attr_nrm = edge_attr
-        y_target_nrm = y_target
+        # x_nrm = x
+        # edge_attr_nrm = edge_attr
+        # y_target_nrm = y_target
         # Update normalisation state and normalise
-        # if edge_attr is None:
-        #     self.update_in_normalisation(x.detach().clone())
-        # else:
-        #     self.update_in_normalisation(x.detach().clone(), edge_attr.detach().clone())
-        # self.update_out_normalisation(y_target.detach().clone())
+        if edge_attr is None:
+            self.update_in_normalisation(x.detach().clone())
+        else:
+            self.update_in_normalisation(x.detach().clone(), edge_attr.detach().clone())
+        self.update_out_normalisation(y_target.detach().clone())
 
         # Obtain normalised input graph and normalised target nodes
-        # x_nrm, edge_attr_nrm = self.in_normalise(x.detach(), edge_attr.detach())
-        # y_target_nrm = self.out_normalise(y_target.detach())
+        x_nrm, edge_attr_nrm = self.in_normalise(x.detach(), edge_attr.detach())
+        y_target_nrm = self.out_normalise(y_target.detach())
 
         # Obtain normalised predicted delta dynamics
         y_hat = self.model(
@@ -267,13 +267,13 @@ class OneStepModule(pl.LightningModule):
             ######################
 
             # Normalise input graph
-            # x, edge_attr = self.in_normalise(x, edge_attr)
+            x, edge_attr = self.in_normalise(x, edge_attr)
             # Obtain normalised predicted delta dynamics
             x = self.model(
                 x=x, edge_index=edge_index, edge_attr=edge_attr, batch=batch_t
             )
             # Renormalise output dynamics
-            # x = self.out_renormalise(x)
+            x = self.out_renormalise(x)
             # Add deltas to input graph
             predicted_graph = torch.cat(
                 (batch.x[mask_t, t, : self.out_features] + x, static_features[mask_t]),
@@ -336,13 +336,13 @@ class OneStepModule(pl.LightningModule):
             ######################
 
             # Normalise input graph
-            # x, edge_attr = self.in_normalise(x, edge_attr)
+            x, edge_attr = self.in_normalise(x, edge_attr)
             # Obtain normalised predicted delta dynamics
             x = self.model(
                 x=x, edge_index=edge_index, edge_attr=edge_attr, batch=batch.batch
             )
             # Renormalise deltas
-            # x = self.out_renormalise(x)
+            x = self.out_renormalise(x)
             # Add deltas to input graph
             predicted_graph = torch.cat(
                 (predicted_graph[:, : self.out_features] + x, static_features), dim=-1
@@ -721,24 +721,24 @@ class SequentialModule(pl.LightningModule):
         self.node_features = node_features
 
         self.save_hyperparameters()
-        node_features -= 5
-        # Normalisation parameters
-        self.register_buffer("node_counter", torch.zeros(1))
-        self.register_buffer("node_in_sum", torch.zeros(node_features))
-        self.register_buffer("node_in_squaresum", torch.zeros(node_features))
-        self.register_buffer("node_in_std", torch.ones(node_features))
-        self.register_buffer("node_in_mean", torch.zeros(node_features))
-        # Output normalisation parameters
-        self.register_buffer("node_out_sum", torch.zeros(out_features))
-        self.register_buffer("node_out_squaresum", torch.zeros(out_features))
-        self.register_buffer("node_out_std", torch.ones(out_features))
-        self.register_buffer("node_out_mean", torch.zeros(out_features))
-        # Edge normalisation parameters
-        self.register_buffer("edge_counter", torch.zeros(1))
-        self.register_buffer("edge_in_sum", torch.zeros(edge_features))
-        self.register_buffer("edge_in_squaresum", torch.zeros(edge_features))
-        self.register_buffer("edge_in_std", torch.ones(edge_features))
-        self.register_buffer("edge_in_mean", torch.zeros(edge_features))
+        # node_features -= 5
+        # # Normalisation parameters
+        # self.register_buffer("node_counter", torch.zeros(1))
+        # self.register_buffer("node_in_sum", torch.zeros(node_features))
+        # self.register_buffer("node_in_squaresum", torch.zeros(node_features))
+        # self.register_buffer("node_in_std", torch.ones(node_features))
+        # self.register_buffer("node_in_mean", torch.zeros(node_features))
+        # # Output normalisation parameters
+        # self.register_buffer("node_out_sum", torch.zeros(out_features))
+        # self.register_buffer("node_out_squaresum", torch.zeros(out_features))
+        # self.register_buffer("node_out_std", torch.ones(out_features))
+        # self.register_buffer("node_out_mean", torch.zeros(out_features))
+        # # Edge normalisation parameters
+        # self.register_buffer("edge_counter", torch.zeros(1))
+        # self.register_buffer("edge_in_sum", torch.zeros(edge_features))
+        # self.register_buffer("edge_in_squaresum", torch.zeros(edge_features))
+        # self.register_buffer("edge_in_std", torch.ones(edge_features))
+        # self.register_buffer("edge_in_mean", torch.zeros(edge_features))
 
     def training_step(self, batch: Batch, batch_idx: int):
 
@@ -794,18 +794,18 @@ class SequentialModule(pl.LightningModule):
         ######################
 
         # Update normalisation states
-        for t in range(11):
-            mask_t = mask[:, t]
-            x_t = torch.cat([batch.x[mask_t, t, :], batch.type[mask_t]], dim=1)
-            y_t = y_target_abs[:, t, :]
-            x_t = x_t.type_as(batch.x)
-            y_t = y_t.type_as(batch.x)
-
-            # if edge_attr is None:
-            self.update_in_normalisation(x_t.detach().clone())
-            # else:
-            #     self.update_in_normalisation(x_t.detach().clone(), edge_attr.detach().clone())
-            self.update_out_normalisation(y_t.detach().clone())
+        # for t in range(11):
+        #     mask_t = mask[:, t]
+        #     x_t = torch.cat([batch.x[mask_t, t, :], batch.type[mask_t]], dim=1)
+        #     y_t = y_target_abs[:, t, :]
+        #     x_t = x_t.type_as(batch.x)
+        #     y_t = y_t.type_as(batch.x)
+        #
+        #     # if edge_attr is None:
+        #     # self.update_in_normalisation(x_t.detach().clone())
+        #     # else:
+        #     #     self.update_in_normalisation(x_t.detach().clone(), edge_attr.detach().clone())
+        #     # self.update_out_normalisation(y_t.detach().clone())
 
 
         for t in range(11):
@@ -866,9 +866,9 @@ class SequentialModule(pl.LightningModule):
             # self.update_out_normalisation(y_t.detach().clone())
 
             # Obtain normalised input graph and normalised target nodes
-            x_t_nrm, edge_attr_nrm = self.in_normalise(x_t, edge_attr)
-            y_t_nrm = self.out_normalise(y_t)
-
+            # x_t_nrm, edge_attr_nrm = self.in_normalise(x_t, edge_attr)
+            # y_t_nrm = self.out_normalise(y_t)
+            x_t_nrm, edge_attr_nrm, y_t_nrm = x_t, edge_attr, y_t
             y_target_nrm[:, t, :] = y_t_nrm
             # Obtain normalised predicted delta dynamics
             if h is None:
@@ -893,7 +893,8 @@ class SequentialModule(pl.LightningModule):
             # Save deltas for loss computation
             y_predictions[mask_t, t, :] = y_pred_t
             # Renormalise output dynamics
-            y_pred_abs = self.out_renormalise(y_pred_t)
+            # y_pred_abs = self.out_renormalise(y_pred_t)
+            y_pred_abs = y_pred_t
             # Add deltas to input graph
             x_t = torch.cat(
                 (batch.x[mask_t, t, : self.out_features] + y_pred_abs, static_features[mask_t]), dim=-1
@@ -965,8 +966,9 @@ class SequentialModule(pl.LightningModule):
             # self.update_out_normalisation(y_t.detach().clone())
 
             # Obtain normalised input graph and normalised target nodes
-            x_t_nrm, edge_attr_nrm = self.in_normalise(x_t, edge_attr)
-            y_t_nrm = self.out_normalise(y_t)
+            # x_t_nrm, edge_attr_nrm = self.in_normalise(x_t, edge_attr)
+            # y_t_nrm = self.out_normalise(y_t)
+            x_t_nrm, edge_attr_nrm, y_t_nrm = x_t, edge_attr, y_t
             y_target_nrm[:, t, :] = y_t_nrm
             # Obtain normalised predicted delta dynamics
             if h is None:
@@ -988,7 +990,8 @@ class SequentialModule(pl.LightningModule):
             # Save deltas for loss computation
             y_predictions[:, t, :] = y_pred_t
             # Renormalise output dynamics
-            y_pred_abs = self.out_renormalise(y_pred_t)
+            # y_pred_abs = self.out_renormalise(y_pred_t)
+            y_pred_abs = y_pred_t
             # Add deltas to input graph. Input for next timestep
             x_t = torch.cat(
                 (x_prev[:, : self.out_features] + y_pred_abs, static_features), dim=-1
@@ -1113,7 +1116,7 @@ class SequentialModule(pl.LightningModule):
             ######################
 
             # Normalise input graph
-            x, edge_attr = self.in_normalise(x, edge_attr)
+            # x, edge_attr = self.in_normalise(x, edge_attr)
             # Obtain normalised predicted delta dynamics
             if h is None:
                 x = self.model(
@@ -1133,7 +1136,7 @@ class SequentialModule(pl.LightningModule):
                 h[:, mask_t] = h_t
 
             # Renormalise output dynamics
-            x = self.out_renormalise(x)
+            # x = self.out_renormalise(x)
             # Add deltas to input graph
             predicted_graph = torch.cat(
                 (batch.x[mask_t, t, : self.out_features] + x, static_features[mask_t]),
@@ -1196,7 +1199,7 @@ class SequentialModule(pl.LightningModule):
             ######################
 
             # Normalise input graph
-            x, edge_attr = self.in_normalise(x, edge_attr)
+            # x, edge_attr = self.in_normalise(x, edge_attr)
             # Obtain normalised predicted delta dynamics
             if h is None:
                 x = self.model(
@@ -1214,7 +1217,7 @@ class SequentialModule(pl.LightningModule):
                     hidden=h,
                 )
             # Renormalise deltas
-            x = self.out_renormalise(x)
+            # x = self.out_renormalise(x)
             # Add deltas to input graph
             predicted_graph = torch.cat(
                 (predicted_graph[:, : self.out_features] + x, static_features), dim=-1
@@ -1269,6 +1272,7 @@ class SequentialModule(pl.LightningModule):
         return (ade_loss + vel_loss + yaw_loss) / 3
 
     def predict_step(self, batch, batch_idx=None):
+        raise NotImplementedError
         ######################
         # Initialisation     #
         ######################
@@ -1473,98 +1477,98 @@ class SequentialModule(pl.LightningModule):
             self.parameters(), lr=self.lr, weight_decay=self.weight_decay
         )
 
-    def update_in_normalisation(self, x, edge_attr=None):
-        if self.normalise:
-            x = x[:, : (self.node_features - 5)]
-            # # Node normalisation
-            # tmp = torch.sum(x, dim=0)
-            # tmp = tmp.type_as(x)
-            # self.node_in_sum += tmp
-            # self.node_in_squaresum += tmp * tmp
-            # self.node_counter += x.size(0)
-            # self.register_buffer("node_in_mean", self.node_in_sum / self.node_counter)
-            # self.register_buffer(
-            #     "node_in_std",
-            #     torch.sqrt(
-            #         (
-            #                 (self.node_in_squaresum / self.node_counter)
-            #                 - (self.node_in_sum / self.node_counter) ** 2
-            #         )
-            #     ),
-            # )
-            #
-            # # Edge normalisation
-            # if edge_attr is not None:
-            #     tmp = torch.sum(edge_attr, dim=0)
-            #     tmp = tmp.type_as(x)
-            #     self.edge_in_sum += tmp
-            #     self.edge_in_squaresum += tmp * tmp
-            #     self.edge_counter += edge_attr.size(0)
-            #     self.register_buffer(
-            #         "edge_in_mean", self.edge_in_sum / self.edge_counter
-            #     )
-            #     self.register_buffer(
-            #         "edge_in_std",
-            #         torch.sqrt(
-            #             (
-            #                     (self.edge_in_squaresum / self.edge_counter)
-            #                     - (self.edge_in_sum / self.edge_counter) ** 2
-            #             )
-            #         ),
-            #     )
-            self.register_buffer("node_in_mean", torch.mean(x, dim=0))
-            self.register_buffer("node_in_std", torch.std(x, dim=0))
-            self.register_buffer("edge_in_mean", torch.Tensor([0]))
-            self.register_buffer("edge_in_std", torch.Tensor([1]))
-
-    def in_normalise(self, x, edge_attr=None):
-        if self.normalise:
-            type = x[:, (self.node_features - 5):]
-            x = x[:, : (self.node_features - 5)]
-
-            x = torch.sub(x, self.node_in_mean)
-            x = torch.div(x, self.node_in_std)
-
-            # Edge normalisation
-            if edge_attr is not None:
-                if self.centered_edges:
-                    edge_attr = torch.sub(edge_attr, self.edge_in_mean)
-                edge_attr = torch.div(edge_attr, self.edge_in_std)
-            x = torch.cat([x, type], dim=1)
-        return x, edge_attr
-
-    def update_out_normalisation(self, x):
-        if self.normalise:
-            # tmp = torch.sum(x, dim=0)
-            # self.node_out_sum += tmp
-            # self.node_out_squaresum += tmp * tmp
-            # self.register_buffer("node_out_mean", self.node_out_sum / self.node_counter)
-            # self.register_buffer(
-            #     "node_out_std",
-            #     torch.sqrt(
-            #         (
-            #                 (self.node_out_squaresum / self.node_counter)
-            #                 - (self.node_out_sum / self.node_counter) ** 2
-            #         )
-            #     ),
-            # )
-            self.register_buffer("node_out_mean", torch.mean(x, dim=0))
-            self.register_buffer("node_out_std", torch.std(x, dim=0))
-
-    def out_normalise(self, x):
-        if self.normalise:
-            x = torch.sub(x, self.node_out_mean)
-            x = torch.div(x, self.node_out_std)
-        return x
-
-    def out_renormalise(self, x):
-        if self.normalise:
-            type = x[:, (self.node_features - 5):]
-            x = x[:, : (self.node_features - 5)]
-            x = torch.mul(self.node_out_std, x)
-            x = torch.add(x, self.node_out_mean)
-            x = torch.cat([x, type], dim=1)
-        return x
+    # def update_in_normalisation(self, x, edge_attr=None):
+    #     if self.normalise:
+    #         x = x[:, : (self.node_features - 5)]
+    #         # # Node normalisation
+    #         # tmp = torch.sum(x, dim=0)
+    #         # tmp = tmp.type_as(x)
+    #         # self.node_in_sum += tmp
+    #         # self.node_in_squaresum += tmp * tmp
+    #         # self.node_counter += x.size(0)
+    #         # self.register_buffer("node_in_mean", self.node_in_sum / self.node_counter)
+    #         # self.register_buffer(
+    #         #     "node_in_std",
+    #         #     torch.sqrt(
+    #         #         (
+    #         #                 (self.node_in_squaresum / self.node_counter)
+    #         #                 - (self.node_in_sum / self.node_counter) ** 2
+    #         #         )
+    #         #     ),
+    #         # )
+    #         #
+    #         # # Edge normalisation
+    #         # if edge_attr is not None:
+    #         #     tmp = torch.sum(edge_attr, dim=0)
+    #         #     tmp = tmp.type_as(x)
+    #         #     self.edge_in_sum += tmp
+    #         #     self.edge_in_squaresum += tmp * tmp
+    #         #     self.edge_counter += edge_attr.size(0)
+    #         #     self.register_buffer(
+    #         #         "edge_in_mean", self.edge_in_sum / self.edge_counter
+    #         #     )
+    #         #     self.register_buffer(
+    #         #         "edge_in_std",
+    #         #         torch.sqrt(
+    #         #             (
+    #         #                     (self.edge_in_squaresum / self.edge_counter)
+    #         #                     - (self.edge_in_sum / self.edge_counter) ** 2
+    #         #             )
+    #         #         ),
+    #         #     )
+    #         self.register_buffer("node_in_mean", torch.mean(x, dim=0))
+    #         self.register_buffer("node_in_std", torch.std(x, dim=0))
+    #         self.register_buffer("edge_in_mean", torch.Tensor([0]))
+    #         self.register_buffer("edge_in_std", torch.Tensor([1]))
+    #
+    # def in_normalise(self, x, edge_attr=None):
+    #     if self.normalise:
+    #         type = x[:, (self.node_features - 5):]
+    #         x = x[:, : (self.node_features - 5)]
+    #
+    #         x = torch.sub(x, self.node_in_mean)
+    #         x = torch.div(x, self.node_in_std)
+    #
+    #         # Edge normalisation
+    #         if edge_attr is not None:
+    #             if self.centered_edges:
+    #                 edge_attr = torch.sub(edge_attr, self.edge_in_mean)
+    #             edge_attr = torch.div(edge_attr, self.edge_in_std)
+    #         x = torch.cat([x, type], dim=1)
+    #     return x, edge_attr
+    #
+    # def update_out_normalisation(self, x):
+    #     if self.normalise:
+    #         # tmp = torch.sum(x, dim=0)
+    #         # self.node_out_sum += tmp
+    #         # self.node_out_squaresum += tmp * tmp
+    #         # self.register_buffer("node_out_mean", self.node_out_sum / self.node_counter)
+    #         # self.register_buffer(
+    #         #     "node_out_std",
+    #         #     torch.sqrt(
+    #         #         (
+    #         #                 (self.node_out_squaresum / self.node_counter)
+    #         #                 - (self.node_out_sum / self.node_counter) ** 2
+    #         #         )
+    #         #     ),
+    #         # )
+    #         self.register_buffer("node_out_mean", torch.mean(x, dim=0))
+    #         self.register_buffer("node_out_std", torch.std(x, dim=0))
+    #
+    # def out_normalise(self, x):
+    #     if self.normalise:
+    #         x = torch.sub(x, self.node_out_mean)
+    #         x = torch.div(x, self.node_out_std)
+    #     return x
+    #
+    # def out_renormalise(self, x):
+    #     if self.normalise:
+    #         type = x[:, (self.node_features - 5):]
+    #         x = x[:, : (self.node_features - 5)]
+    #         x = torch.mul(self.node_out_std, x)
+    #         x = torch.add(x, self.node_out_mean)
+    #         x = torch.cat([x, type], dim=1)
+    #     return x
 
 
 
