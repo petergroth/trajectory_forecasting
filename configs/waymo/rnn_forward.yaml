@@ -41,11 +41,11 @@ trainer:
 #  limit_train_batches: 0.01 # Default 1.0
   precision: 32 # Default. Only available on GPU.
   val_check_interval: 0.50 # Default 1.0
-  gpus: 0
+  gpus: 1
 
 logger:
-  offline: True
-  version: rnn_04
+  offline: False
+  version: rnn_05
   project: waymo_rec_forwardmodel
 
 misc:

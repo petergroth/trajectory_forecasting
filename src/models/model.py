@@ -479,7 +479,7 @@ class rnn_node_forward_model(nn.Module):
             hidden=hidden,
         )
         # Concatenation of node and edge attributes
-        x_1 = torch.cat([x, x_1], dim=1)  # [rnn_dim + node_features]
+        x_1 = torch.cat([x, x_1], dim=1)
         edge_attr_1 = torch.cat([edge_attr, edge_attr_1], dim=1)
         # Second block
         out, _, _ = self.GN2(

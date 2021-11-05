@@ -22,6 +22,7 @@ def make_predictions(path, config_file, sequence_idx=0):
     seed_everything(config["misc"]["seed"], workers=True)
     # Load datamodule
     config["datamodule"]["val_batch_size"] = 1
+    config["datamodule"]["batch_size"] = 1
     datamodule = eval(config["misc"]["dm_type"])(**config["datamodule"])
     # Load correct model
     if config["misc"]["model_type"] != "ConstantModel":
@@ -31,7 +32,7 @@ def make_predictions(path, config_file, sequence_idx=0):
     # Setup
     regressor.eval()
     datamodule.setup()
-    loader = datamodule.val_dataloader()
+    loader = datamodule.train_dataloader()
     # Define output path
     dirpath = "src/predictions/raw_preds/waymo/" + config["logger"]["version"]
     os.makedirs(dirpath, exist_ok=True)
