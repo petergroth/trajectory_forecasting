@@ -661,6 +661,7 @@ class mlp_node_baseline(nn.Module):
         node_features: int = 5,
         n_nodes: int = 10,
         dropout: float = 0.0,
+        out_features: int = 7,
         **kwargs
     ):
         super(mlp_node_baseline, self).__init__()
@@ -668,7 +669,7 @@ class mlp_node_baseline(nn.Module):
         self.node_features = node_features
         self.n_nodes = n_nodes
         self.dropout = dropout
-        self.out_features = 4
+        self.out_features = out_features
 
         self.mlp_1 = nn.Sequential(
             nn.Linear(in_features=node_features, out_features=hidden_size),
