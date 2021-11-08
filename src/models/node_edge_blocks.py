@@ -34,9 +34,13 @@ class node_mlp_1(nn.Module):
             nn.Linear(
                 in_features=node_features + edge_features, out_features=hidden_size
             ),
-            BatchNorm(in_channels=hidden_size),
             nn.Dropout(p=dropout),
             nn.ReLU(),
+            BatchNorm(in_channels=hidden_size),
+            nn.Linear(in_features=hidden_size, out_features=hidden_size),
+            nn.Dropout(p=dropout),
+            nn.ReLU(),
+            BatchNorm(in_channels=hidden_size),
             nn.Linear(in_features=hidden_size, out_features=hidden_size),
         )
 
@@ -74,9 +78,13 @@ class node_mlp_out(nn.Module):
             nn.Linear(
                 in_features=node_features + edge_features, out_features=hidden_size
             ),
-            BatchNorm(in_channels=hidden_size),
             nn.Dropout(p=dropout),
             nn.ReLU(),
+            BatchNorm(in_channels=hidden_size),
+            nn.Linear(in_features=hidden_size, out_features=hidden_size),
+            nn.Dropout(p=dropout),
+            nn.ReLU(),
+            BatchNorm(in_channels=hidden_size),
             nn.Linear(in_features=hidden_size, out_features=self.out_features),
         )
 
@@ -120,9 +128,13 @@ class edge_mlp_1(nn.Module):
             nn.Linear(
                 in_features=node_features * 2 + edge_features, out_features=hidden_size
             ),
-            BatchNorm(in_channels=hidden_size),
             nn.Dropout(p=dropout),
             nn.ReLU(),
+            BatchNorm(in_channels=hidden_size),
+            nn.Linear(in_features=hidden_size, out_features=hidden_size),
+            nn.Dropout(p=dropout),
+            nn.ReLU(),
+            BatchNorm(in_channels=hidden_size),
             nn.Linear(in_features=hidden_size, out_features=latent_edge_features),
         )
 
@@ -206,7 +218,7 @@ class edge_mlp_latent(nn.Module):
                 in_features=node_features * 2 + latent_edge_features,
                 out_features=hidden_size,
             ),
-            BatchNorm(in_channels=hidden_size),
+            # BatchNorm(in_channels=hidden_size),
             nn.Dropout(p=dropout),
             nn.ReLU(),
             nn.Linear(in_features=hidden_size, out_features=latent_edge_features),
@@ -239,7 +251,7 @@ class node_mlp_latent(nn.Module):
             nn.Linear(
                 in_features=node_features + edge_features, out_features=hidden_size
             ),
-            BatchNorm(in_channels=hidden_size),
+            # BatchNorm(in_channels=hidden_size),
             nn.Dropout(p=dropout, inplace=True),
             nn.ReLU(),
             nn.Linear(in_features=hidden_size, out_features=node_features),
@@ -278,7 +290,7 @@ class node_mlp_encoder(nn.Module):
             nn.Linear(
                 in_features=node_features + edge_features, out_features=hidden_size
             ),
-            BatchNorm(in_channels=hidden_size),
+            # BatchNorm(in_channels=hidden_size),
             nn.Dropout(p=dropout, inplace=True),
             nn.ReLU(),
             nn.Linear(in_features=hidden_size, out_features=hidden_size),
@@ -319,7 +331,7 @@ class node_rnn_1(nn.Module):
         self.num_layers = num_layers
         self.dropout = dropout if num_layers > 1 else 0.0
 
-        self.bn = BatchNorm(in_channels=node_features + edge_features)
+        # self.bn = BatchNorm(in_channels=node_features + edge_features)
         self.node_rnn = nn.GRU(
             input_size=node_features + edge_features,
             hidden_size=rnn_size,

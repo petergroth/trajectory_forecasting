@@ -32,7 +32,7 @@ def make_predictions(path, config_file, sequence_idx=0):
     # Setup
     regressor.eval()
     datamodule.setup()
-    loader = datamodule.train_dataloader()
+    loader = datamodule.val_dataloader()
     # Define output path
     dirpath = "src/predictions/raw_preds/waymo/" + config["logger"]["version"]
     os.makedirs(dirpath, exist_ok=True)
@@ -116,7 +116,8 @@ if __name__ == "__main__":
                 else:
                     axglob[0].plot(x, y, marker='x', color=color,  alpha=0.05)
 
-            if t == (n_steps - 1) or t == 0 or t == 10:
+            # Start
+            if t == 0:
                 axglob[0].quiver(
                     y_target[t, agent, 0].detach().numpy(),
                     y_target[t, agent, 1].detach().numpy(),
@@ -127,7 +128,33 @@ if __name__ == "__main__":
                     angles="xy",
                     scale_units="xy",
                     scale=1.0,
-                    alpha=1,
+                    color='lightgrey'
+                )
+            elif t == 10:
+                axglob[0].quiver(
+                    y_target[t, agent, 0].detach().numpy(),
+                    y_target[t, agent, 1].detach().numpy(),
+                    y_target[t, agent, 3].detach().numpy(),
+                    y_target[t, agent, 4].detach().numpy(),
+                    width=0.003,
+                    headwidth=5,
+                    angles="xy",
+                    scale_units="xy",
+                    scale=1.0,
+                    color='gray'
+                )
+            elif t == (n_steps-1):
+                axglob[0].quiver(
+                    y_target[t, agent, 0].detach().numpy(),
+                    y_target[t, agent, 1].detach().numpy(),
+                    y_target[t, agent, 3].detach().numpy(),
+                    y_target[t, agent, 4].detach().numpy(),
+                    width=0.003,
+                    headwidth=5,
+                    angles="xy",
+                    scale_units="xy",
+                    scale=1.0,
+                    color='k'
                 )
 
         for t in range(n_steps):
