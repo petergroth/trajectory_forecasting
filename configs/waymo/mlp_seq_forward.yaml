@@ -1,35 +1,36 @@
 datamodule:
-  batch_size: 32
+  batch_size: 132
   shuffle: True
   val_batch_size: 32
 
 model:
   hidden_size: 128
-  dropout: 0.2
-  latent_edge_features: 128
+  dropout: 0.0
+  latent_edge_features: 64
   node_features: 15
-  edge_features: 1
+  edge_features: 11
   skip: True
   aggregate: False
   out_features: 7
 
 regressor:
   out_features: 7
-  noise: 1.0e-3
-  lr: 1.0e-3
-  weight_decay: 0.0001
-  edge_type: knn
-  min_dist: 0
+  noise: null
+  lr: 1.0e-4
+  weight_decay: 0.001
+  edge_type: distance
+  min_dist: 10
   n_neighbours: 15
   edge_weight: True
-  fully_connected: True
-  self_loop: True
+  fully_connected: False
+  self_loop: False
   undirected: False
-  normalise: True
+  normalise: False
   node_features: 15
   edge_features: 1
   rnn_type: null
   teacher_forcing: True
+  teacher_forcing_ratio: 0.3
 
 trainer:
   check_val_every_n_epoch: 1
@@ -43,7 +44,7 @@ trainer:
 
 logger:
   offline: False
-  version: seq_02
+  version: seq_03
   project: waymo_forwardmodel
 
 misc:

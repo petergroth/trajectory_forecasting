@@ -1,14 +1,12 @@
 datamodule:
-  batch_size: 128
-  shuffle: True
+  batch_size: 64
+  shuffle: False
   val_batch_size: 32
 
 model:
   hidden_size: 128
   dropout: 0.0
-  latent_edge_features: 64
   node_features: 15
-  edge_features: 1
   skip: True
   aggregate: False
   out_features: 7
@@ -16,22 +14,22 @@ model:
 regressor:
   out_features: 7
   noise: 1.0e-2
-  lr: 1.0e-5
+  lr: 1.0e-4
   weight_decay: 0.01
-  edge_type: distance
-  min_dist: 10
-  n_neighbours: 10
+  edge_type: knn
+  min_dist: 7
+  n_neighbours: 15
   edge_weight: True
   fully_connected: False
   self_loop: False
-  undirected: True
+  undirected: False
   normalise: False
   node_features: 15
   edge_features: 1
 
 trainer:
   check_val_every_n_epoch: 1
-  max_epochs: 10
+  max_epochs: 3
   deterministic: True
   num_sanity_val_steps: 2
 #  limit_train_batches: 0.001 # Default 1.0
@@ -41,12 +39,12 @@ trainer:
 
 logger:
   offline: False
-  version: distance_based_33
-  project: waymo_forwardmodel
+  version: baseline_01
+  project: waymo_baseline
 
 misc:
   seed: 1
-  model_type: mlp_full_forward_model
+  model_type: mlp_node_baseline
   dm_type: OneStepWaymoDataModule
   regressor_type: OneStepModule
   checkpoint: False

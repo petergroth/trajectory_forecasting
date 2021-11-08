@@ -331,12 +331,12 @@ class OneStepWaymoDataModule(pl.LightningDataModule):
 
     def train_dataloader(self):
         return DataLoader(
-            self.train_dataset, batch_size=self.batch_size, shuffle=self.shuffle, num_workers=4
+            self.train_dataset, batch_size=self.batch_size, shuffle=self.shuffle, num_workers=8
         )
 
     def val_dataloader(self):
         return DataLoader(
-            self.val_dataset, batch_size=self.val_batch_size, shuffle=False, num_workers=2
+            self.val_dataset, batch_size=self.val_batch_size, shuffle=False, num_workers=4
         )
 
     def test_dataloader(self):
@@ -380,12 +380,12 @@ class SequentialWaymoDataModule(pl.LightningDataModule):
             self.train_dataset,
             batch_size=self.batch_size,
             shuffle=self.shuffle,
-            num_workers=4,
+            num_workers=8,
         )
 
     def val_dataloader(self):
         return DataLoader(
-            self.val_dataset, batch_size=self.val_batch_size, shuffle=False
+            self.val_dataset, batch_size=self.val_batch_size, shuffle=False, num_workers=6
         )
 
     def test_dataloader(self):
