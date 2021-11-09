@@ -1,0 +1,8 @@
+hidden_size: 128
+dropout: 0.0
+latent_edge_features: 64
+node_features: 15
+edge_features: 1
+skip: True
+aggregate: False
+out_features: 7

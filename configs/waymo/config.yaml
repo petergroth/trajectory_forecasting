@@ -1,0 +1,25 @@
+defaults:
+  - datamodule: onestep
+  - model: ???
+  - regressor: onestep
+  - trainer: onestep
+  - _self_
+
+logger:
+  offline: ???
+  version: ???
+  project: ???
+
+misc:
+  seed: 1
+  model_type: ???
+  dm_type: OneStepWaymoDataModule
+  regressor_type: OneStepModule
+  checkpoint: False
+  train: True
+  continue_training: null
+
+hydra:
+  output_subdir: null
+  run:
+    dir: .

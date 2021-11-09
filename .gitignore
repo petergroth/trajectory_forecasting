@@ -100,3 +100,4 @@ todo.txt
 /jobfiles/
 *.err
 *.out
+/configs/waymo/old_configs

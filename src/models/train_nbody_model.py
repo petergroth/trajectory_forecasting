@@ -99,9 +99,9 @@ class OneStepModule(pl.LightningModule):
 
         # Determine whether to add random noise to features
         if self.noise is not None:
-            x += self.noise * torch.rand_like(x)
+            x += self.noise * torch.randn_like(x)
             # # Add noise to dynamic states
-            # x_d = x[:, :4] + self.noise*torch.rand_like(x[:, :4])
+            # x_d = x[:, :4] + self.noise*torch.randn_like(x[:, :4])
             # # Concatenate dynamic and static states
             # x = torch.cat((x_d, x[:, 4:]), dim=1)
 
@@ -705,7 +705,7 @@ class SequentialModule(pl.LightningModule):
             # Add noise if specified
             if self.noise is not None:
                 # Add noise to dynamic states
-                x_t += self.noise * torch.rand_like(x_t)
+                x_t += self.noise * torch.randn_like(x_t)
 
             ######################
             # Graph construction #
@@ -805,7 +805,7 @@ class SequentialModule(pl.LightningModule):
             # Add noise if specified
             if self.noise is not None:
                 # Add noise to dynamic states
-                x_t += self.noise * torch.rand_like(x_t)
+                x_t += self.noise * torch.randn_like(x_t)
 
             ######################
             # Graph construction #
