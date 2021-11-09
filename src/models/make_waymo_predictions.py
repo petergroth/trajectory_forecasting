@@ -9,15 +9,14 @@ import os
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 import numpy as np
+import hydra
+from omegaconf import DictConfig, OmegaConf
 
 # from models import ConstantModel
 from matplotlib.patches import Circle
 
 
-def make_predictions(path, config_file, sequence_idx=0):
-    # Parse config file
-    with open("configs/waymo/" + config_file, "r") as file:
-        config = yaml.safe_load(file)
+def make_predictions(path, config, sequence_idx=0):
     # Set seed
     seed_everything(config["misc"]["seed"], workers=True)
     # Load datamodule
@@ -42,22 +41,12 @@ def make_predictions(path, config_file, sequence_idx=0):
             torch.save((y_hat, y_target, mask), dirpath + f"/sequence_{i:03}.pt")
             return
 
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("path")
-    parser.add_argument("config")
-    parser.add_argument("--sequence_idx", default=0, type=int)
-    args = parser.parse_args()
-
+@hydra.main(config_path="../../configs/waymo/", config_name="config")
+def main(config):
     # Computes predictions for specified sequence
     make_predictions(
-        path=args.path, config_file=args.config, sequence_idx=args.sequence_idx
+        path=config.misc.ckpt_path, config=dict(config), sequence_idx=config.misc.sequence_idx
     )
-
-    # Loads config file
-    with open("configs/waymo/" + args.config, "r") as file:
-        config = yaml.safe_load(file)
 
     # Create directory for current model
     vis_dir = "visualisations/predictions/waymo/" + config["logger"]["version"] + "/"
@@ -65,11 +54,10 @@ if __name__ == "__main__":
     # Location of prediction files
     dir = "src/predictions/raw_preds/waymo/" + config["logger"]["version"] + "/"
     # Load first file in directory
-    path = "sequence_" + f"{args.sequence_idx:03}.pt"
+    path = "sequence_" + f"{config.misc.sequence_idx:03}.pt"
     y_hat, y_target, mask = torch.load(dir + path)
 
     n_steps, n_agents, n_features = y_hat.shape
-    mask = mask.permute(1, 0)
 
     small_mask = y_target[:, :, 0] > 0
     # Extract boundaries
@@ -114,7 +102,7 @@ if __name__ == "__main__":
                 elif int(y_target[t, agent, 13].item()) == 1:
                     axglob[0].plot(x, y, marker='+', color=color, alpha=0.05, markerfacecolor=None)
                 else:
-                    axglob[0].plot(x, y, marker='x', color=color,  alpha=0.05)
+                    axglob[0].plot(x, y, marker='x', color=color, alpha=0.05)
 
             # Start
             if t == 0:
@@ -143,7 +131,7 @@ if __name__ == "__main__":
                     scale=1.0,
                     color='gray'
                 )
-            elif t == (n_steps-1):
+            elif t == (n_steps - 1):
                 axglob[0].quiver(
                     y_target[t, agent, 0].detach().numpy(),
                     y_target[t, agent, 1].detach().numpy(),
@@ -212,11 +200,15 @@ if __name__ == "__main__":
     axglob[0].set_title("Groundtruth trajectories")
     axglob[1].set_title("Predicted trajectories")
 
-
     plt.show()
     figglob.savefig(
         vis_dir
         + config["misc"]["model_type"]
         + "_sequence_"
-        + f"{args.sequence_idx:03}.png"
+        + f"{config.misc.sequence_idx:03}.png"
     )
+
+
+if __name__ == "__main__":
+    main()
+
