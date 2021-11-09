@@ -1,23 +1,25 @@
 defaults:
   - datamodule: onestep
-  - model: ???
+  - model: mlp_forward
   - regressor: onestep
   - trainer: onestep
   - _self_
 
 logger:
-  offline: ???
+  offline: False
   version: ???
-  project: ???
+  project: meeting_nov_09
 
 misc:
   seed: 1
-  model_type: ???
+  model_type: mlp_full_forward_model
   dm_type: OneStepWaymoDataModule
   regressor_type: OneStepModule
   checkpoint: False
   train: True
   continue_training: null
+  ckpt_path: null
+  sequence_idx: null
 
 hydra:
   output_subdir: null
