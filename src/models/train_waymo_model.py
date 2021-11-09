@@ -10,6 +10,8 @@ from torch.nn.functional import one_hot
 from torch_geometric.data import Batch
 from src.models.model import *
 import yaml
+import hydra
+from omegaconf import DictConfig, OmegaConf
 
 
 class OneStepModule(pl.LightningModule):
@@ -126,7 +128,7 @@ class OneStepModule(pl.LightningModule):
 
         # Determine whether to add random noise to dynamic states
         if self.noise is not None:
-            x[:, : self.out_features] += self.noise * torch.rand_like(
+            x[:, : self.out_features] += self.noise * torch.randn_like(
                 x[:, : self.out_features].detach()
             )
 
@@ -801,7 +803,7 @@ class SequentialModule(pl.LightningModule):
             y_t = y_t.type_as(batch.x)
             # Add noise if specified
             if self.noise is not None:
-                x_t[:, : self.out_features] += self.noise * torch.rand_like(
+                x_t[:, : self.out_features] += self.noise * torch.randn_like(
                     x_t[:, : self.out_features].detach()
                 )
 
@@ -1811,20 +1813,15 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=1e-4)
 
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("config_file")
-    args = parser.parse_args()
-    # torch.autograd.set_detect_anomaly(True)
-    with open(args.config_file, "r") as file:
-        config = yaml.safe_load(file)
+@hydra.main(config_path="../../configs/waymo/", config_name="config")
+def main(config):
+    # Print configuration file
+    print(OmegaConf.to_yaml(config))
 
     # Seed for reproducibility
     seed_everything(config["misc"]["seed"], workers=True)
     # Load data, model, and regressor
     datamodule = eval(config["misc"]["dm_type"])(**config["datamodule"])
-
     # Define model
     if config["misc"]["model_type"] != "ConstantModel":
         model = eval(config["misc"]["model_type"])(**config["model"])
@@ -1838,7 +1835,6 @@ if __name__ == "__main__":
     wandb_logger = WandbLogger(entity="petergroth", config=config, **config["logger"])
     wandb_logger.watch(regressor, log_freq=100)
     # Add default dir for logs
-    config["trainer"]["default_root_dir"] = "logs"
 
     # Setup trainer
     if config["misc"]["checkpoint"]:
@@ -1877,11 +1873,6 @@ if __name__ == "__main__":
 
     trainer.validate(regressor, datamodule=datamodule)
 
-    # loader = datamodule.train_dataloader()
-    # batch = next(iter(loader))
-    # y_hat, y_target, mask = regressor.predict_step(batch)
-    #
-    # with torch.no_grad():
-    #     for t in range(90):
-    #         print(y_target[t, 2, :2])
-    #         print(y_hat[t, 2, :2])
+
+if __name__ == "__main__":
+    main()
