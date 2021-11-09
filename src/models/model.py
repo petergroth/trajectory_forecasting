@@ -427,6 +427,8 @@ class rnn_node_forward_model(nn.Module):
                 rnn_size=rnn_size,
                 dropout=dropout,
                 num_layers=num_layers,
+                out_features=out_features,
+                hidden_size=hidden_size
             ),
         )
         GN2_node_input = rnn_size + node_features if skip else rnn_size

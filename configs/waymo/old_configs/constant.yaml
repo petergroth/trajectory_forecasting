@@ -1,0 +1,28 @@
+datamodule:
+  batch_size: 64
+  shuffle: True
+  val_batch_size: 50
+
+regressor:
+  noise: null
+  out_features: 7
+
+trainer:
+  check_val_every_n_epoch: 2
+  max_epochs: 20
+  deterministic: True
+
+logger:
+  offline: True
+  version: baseline
+
+misc:
+  seed: 1
+  model_type: ConstantModel
+  dm_type: OneStepWaymoDataModule
+  regressor_type: ConstantPhysicalBaselineModule
+  train: False
+  checkpoint: False
+  continue_training: null
+
+
