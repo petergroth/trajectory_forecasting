@@ -6,7 +6,7 @@ datamodule:
 model:
   hidden_size: 128
   dropout: 0.0
-  latent_edge_features: 64
+  latent_edge_features: 128
   node_features: 15
   edge_features: 1
   skip: True
@@ -15,23 +15,23 @@ model:
 
 regressor:
   out_features: 7
-  noise: 1.0e-2
+  noise: 1.0e-1
   lr: 1.0e-5
   weight_decay: 0.01
   edge_type: distance
-  min_dist: 10
-  n_neighbours: 10
+  min_dist: 7.5
+  n_neighbours: 20
   edge_weight: True
   fully_connected: False
   self_loop: False
-  undirected: True
+  undirected: False
   normalise: False
   node_features: 15
   edge_features: 1
 
 trainer:
   check_val_every_n_epoch: 1
-  max_epochs: 10
+  max_epochs: 5
   deterministic: True
   num_sanity_val_steps: 2
 #  limit_train_batches: 0.001 # Default 1.0
@@ -41,8 +41,8 @@ trainer:
 
 logger:
   offline: False
-  version: distance_based_33
-  project: waymo_forwardmodel
+  version: dist_75_v2
+  project: meeting_nov09
 
 misc:
   seed: 1

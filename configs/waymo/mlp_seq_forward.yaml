@@ -1,5 +1,5 @@
 datamodule:
-  batch_size: 132
+  batch_size: 32
   shuffle: True
   val_batch_size: 32
 
@@ -8,7 +8,7 @@ model:
   dropout: 0.0
   latent_edge_features: 64
   node_features: 15
-  edge_features: 11
+  edge_features: 1
   skip: True
   aggregate: False
   out_features: 7
@@ -16,7 +16,7 @@ model:
 regressor:
   out_features: 7
   noise: null
-  lr: 1.0e-4
+  lr: 1.0e-2
   weight_decay: 0.001
   edge_type: distance
   min_dist: 10
@@ -44,7 +44,7 @@ trainer:
 
 logger:
   offline: False
-  version: seq_03
+  version: seq_04
   project: waymo_forwardmodel
 
 misc:

@@ -218,9 +218,9 @@ class edge_mlp_latent(nn.Module):
                 in_features=node_features * 2 + latent_edge_features,
                 out_features=hidden_size,
             ),
-            # BatchNorm(in_channels=hidden_size),
             nn.Dropout(p=dropout),
             nn.ReLU(),
+            BatchNorm(in_channels=hidden_size),
             nn.Linear(in_features=hidden_size, out_features=latent_edge_features),
         )
 
@@ -251,9 +251,9 @@ class node_mlp_latent(nn.Module):
             nn.Linear(
                 in_features=node_features + edge_features, out_features=hidden_size
             ),
-            # BatchNorm(in_channels=hidden_size),
             nn.Dropout(p=dropout, inplace=True),
             nn.ReLU(),
+            BatchNorm(in_channels=hidden_size),
             nn.Linear(in_features=hidden_size, out_features=node_features),
         )
 
@@ -290,9 +290,9 @@ class node_mlp_encoder(nn.Module):
             nn.Linear(
                 in_features=node_features + edge_features, out_features=hidden_size
             ),
-            # BatchNorm(in_channels=hidden_size),
             nn.Dropout(p=dropout, inplace=True),
             nn.ReLU(),
+            BatchNorm(in_channels=hidden_size),
             nn.Linear(in_features=hidden_size, out_features=hidden_size),
         )
 
@@ -323,17 +323,29 @@ class node_rnn_1(nn.Module):
         edge_features: int = 0,
         rnn_size: int = 20,
         num_layers: int = 1,
+        out_features: int = 7,
+        hidden_size: int = 64,
     ):
         super(node_rnn_1, self).__init__()
-        self.out_features = 4
+        self.out_features = out_features
         self.rnn_size = rnn_size
         self.edge_features = edge_features
         self.num_layers = num_layers
         self.dropout = dropout if num_layers > 1 else 0.0
 
-        # self.bn = BatchNorm(in_channels=node_features + edge_features)
+        self.node_mlp = nn.Sequential(
+            nn.Linear(
+                in_features=node_features + edge_features, out_features=hidden_size
+            ),
+            nn.ReLU(),
+            BatchNorm(in_channels=hidden_size),
+            nn.Linear(in_features=hidden_size, out_features=hidden_size),
+            nn.ReLU(),
+            BatchNorm(in_channels=hidden_size),
+        )
+
         self.node_rnn = nn.GRU(
-            input_size=node_features + edge_features,
+            input_size=hidden_size,
             hidden_size=rnn_size,
             num_layers=num_layers,
             dropout=self.dropout,
@@ -348,8 +360,7 @@ class node_rnn_1(nn.Module):
         edge_attr = scatter_add(edge_attr, row, dim=0, dim_size=x.size(0))
         # Concatenate
         out = torch.cat([x, edge_attr], dim=1)
-        # Apply batchnorm to input
-        out = self.bn(out)
+        out = self.node_mlp(out)
         # Add extra dimension
         out = out.unsqueeze(1)
         out, hidden = self.node_rnn(out, hidden)

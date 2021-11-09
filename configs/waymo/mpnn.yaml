@@ -6,10 +6,10 @@ datamodule:
 model:
   hidden_size: 128
   dropout: 0.0
-  latent_edge_features: 128
+  latent_edge_features: 64
   node_features: 15
   edge_features: 1
-  rounds: 5
+  rounds: 2
   shared_params: False
   out_features: 7
 
@@ -19,10 +19,10 @@ regressor:
   lr: 1.0e-4
   weight_decay: 0.01
   edge_type: knn
-  min_dist: 7
+  min_dist: 10
   n_neighbours: 15
   edge_weight: True
-  fully_connected: True
+  fully_connected: False
   self_loop: False
   undirected: False
   normalise: False
@@ -30,7 +30,6 @@ regressor:
   edge_features: 1
 
 trainer:
-  check_val_every_n_epoch: 1
   max_epochs: 5
   deterministic: True
   num_sanity_val_steps: 2
@@ -41,7 +40,7 @@ trainer:
 
 logger:
   offline: False
-  version: mpnn_08
+  version: mpnn_09
   project: waymo_mpnn
 
 misc:

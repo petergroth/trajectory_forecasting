@@ -17,16 +17,16 @@ model:
 regressor:
   out_features: 7
   noise: null
-  lr: 1.0e-3
-  weight_decay: 0.0001
+  lr: 1.0e-4
+  weight_decay: 0.001
   edge_type: distance
-  min_dist: 15
+  min_dist: 10
   n_neighbours: 15
   edge_weight: True
   fully_connected: False
   self_loop: False
   undirected: False
-  normalise: True
+  normalise: False
   teacher_forcing: True
   teacher_forcing_ratio: 0.3
   rnn_type: GRU
@@ -34,19 +34,16 @@ regressor:
   edge_features: 1
 
 trainer:
-  check_val_every_n_epoch: 10
-  max_epochs: 50
+  max_epochs: 5
   deterministic: True
   num_sanity_val_steps: 2
-#  limit_train_batches: 1 # Default 1.0
-#  overfit_batches: 1
   precision: 32 # Default. Only available on GPU.
   val_check_interval: 0.50 # Default 1.0
   gpus: 1
 
 logger:
   offline: False
-  version: rnn_08
+  version: rnn_11
   project: waymo_rec_forwardmodel
 
 misc:

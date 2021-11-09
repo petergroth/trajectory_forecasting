@@ -126,7 +126,7 @@ class OneStepModule(pl.LightningModule):
 
         # Determine whether to add random noise to dynamic states
         if self.noise is not None:
-            x[:, : self.out_features] += self.noise * torch.rand_like(
+            x[:, : self.out_features] += self.noise * torch.randn_like(
                 x[:, : self.out_features].detach()
             )
 
@@ -951,7 +951,6 @@ class SequentialModule(pl.LightningModule):
             # Obtain normalised input graph and normalised target nodes
             x_t_nrm, edge_attr_nrm = self.in_normalise(x_t, edge_attr)
             y_t_nrm = self.out_normalise(y_t)
-            # x_t_nrm, edge_attr_nrm, y_t_nrm = x_t, edge_attr, y_t
             y_target_nrm[:, t, :] = y_t_nrm
             # Obtain normalised predicted delta dynamics
             if h is None:
@@ -974,7 +973,6 @@ class SequentialModule(pl.LightningModule):
             y_predictions[:, t, :] = y_pred_t
             # Renormalise output dynamics
             y_pred_abs = self.out_renormalise(y_pred_t)
-            # y_pred_abs = y_pred_t
             # Add deltas to input graph. Input for next timestep
             x_t = torch.cat(
                 (x_prev[:, : self.out_features] + y_pred_abs, static_features), dim=-1
