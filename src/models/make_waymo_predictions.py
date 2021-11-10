@@ -56,10 +56,10 @@ def main(config):
     # Load first file in directory
     path = "sequence_" + f"{config.misc.sequence_idx:03}.pt"
     y_hat, y_target, mask = torch.load(dir + path)
-
+    y_hat = y_hat.detach()
     n_steps, n_agents, n_features = y_hat.shape
 
-    small_mask = y_target[:, :, 0] > 0
+    small_mask = torch.logical_and(y_target[:, :, 0] != -1, y_target[:, :, 0] != 0)
     # Extract boundaries
     x_min, x_max, y_min, y_max = (
         torch.min(y_target[:, :, 0][small_mask]).item(),
@@ -205,7 +205,7 @@ def main(config):
         vis_dir
         + config["misc"]["model_type"]
         + "_sequence_"
-        + f"{config.misc.sequence_idx:03}.png"
+        + f"{config.misc.sequence_idx:03}_good_perf.png"
     )
 
 

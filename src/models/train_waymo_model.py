@@ -408,7 +408,7 @@ class OneStepModule(pl.LightningModule):
         self.log("val_fde_loss", fde_loss)
         self.log("val_vel_loss", vel_loss)
         self.log("val_yaw_loss", yaw_loss)
-        self.log("val_total_loss", (ade_loss + vel_loss + yaw_loss) / 3)
+        self.log("val_total_loss", (ade_loss + vel_loss + yaw_loss) / 3, on_step=True)
         self.log("val_fde_ttp_loss", fde_ttp_loss)
         self.log("val_ade_ttp_loss", ade_ttp_loss)
 
