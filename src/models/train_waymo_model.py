@@ -12,6 +12,7 @@ from src.models.model import *
 import yaml
 import hydra
 from omegaconf import DictConfig, OmegaConf
+import math
 
 
 class OneStepModule(pl.LightningModule):
@@ -97,6 +98,8 @@ class OneStepModule(pl.LightningModule):
         type = one_hot(batch.type, num_classes=5)
         type = type.type_as(batch.x)
         x = torch.cat([x, type], dim=1)
+        yaws = torch.fmod(x[:, 5:7], torch.tensor(2*math.pi))
+        x[:, 5:7] = yaws
         edge_attr = None
 
         ######################
@@ -162,6 +165,9 @@ class OneStepModule(pl.LightningModule):
         y_hat = self.model(
             x=x_nrm, edge_index=edge_index, edge_attr=edge_attr_nrm, batch=batch.batch
         )
+        # Transform yaw
+        yaws = torch.tensor(2*math.pi)*torch.tanh(y_hat[:, 5:7])
+        y_hat[:, 5:7] = yaws
 
         # Compute and log loss
         pos_loss = self.train_pos_loss(y_hat[:, :3], y_target_nrm[:, :3])
@@ -203,6 +209,10 @@ class OneStepModule(pl.LightningModule):
         batch.type = one_hot(batch.type[valid_mask], num_classes=5)
         # Update mask
         mask = batch.x[:, :, -1].bool()
+
+        # Process yaw values
+        yaws = torch.fmod(batch.x[:, :, 5:7], torch.tensor(2*math.pi))
+        batch.x[:, :, 5:7] = yaws
 
         # Allocate target/prediction tensors
         n_nodes = batch.num_nodes
@@ -275,6 +285,10 @@ class OneStepModule(pl.LightningModule):
             )
             # Renormalise output dynamics
             x = self.out_renormalise(x)
+            # Transform yaw values to [-2pi, 2pi] interval
+            yaws = torch.tensor(2 * math.pi) * torch.tanh(x[:, 5:7])
+            x[:, 5:7] = yaws
+
             # Add deltas to input graph
             predicted_graph = torch.cat(
                 (batch.x[mask_t, t, : self.out_features] + x, static_features[mask_t]),
@@ -344,6 +358,9 @@ class OneStepModule(pl.LightningModule):
             )
             # Renormalise deltas
             x = self.out_renormalise(x)
+            # Transform yaw values to [-2pi, 2pi] interval
+            yaws = torch.tensor(2 * math.pi) * torch.tanh(x[:, 5:7])
+            x[:, 5:7] = yaws
             # Add deltas to input graph
             predicted_graph = torch.cat(
                 (predicted_graph[:, : self.out_features] + x, static_features), dim=-1
@@ -416,6 +433,10 @@ class OneStepModule(pl.LightningModule):
         # Update mask
         mask = batch.x[:, :, -1].bool()
 
+        # Process yaw values
+        yaws = torch.fmod(batch.x[:, :, 5:7], torch.tensor(2*math.pi))
+        batch.x[:, :, 5:7] = yaws
+
         # Allocate target/prediction tensors
         n_nodes = batch.num_nodes
         y_hat = torch.zeros((90, n_nodes, self.node_features))
@@ -485,6 +506,9 @@ class OneStepModule(pl.LightningModule):
             )
             # Renormalise output dynamics
             x = self.out_renormalise(x)
+            # Transform yaw values to [-2pi, 2pi] interval
+            yaws = torch.tensor(2 * math.pi) * torch.tanh(x[:, 5:7])
+            x[:, 5:7] = yaws
             # Add deltas to input graph
             predicted_graph = torch.cat(
                 (batch.x[mask_t, t, : self.out_features] + x, static_features[mask_t]),
@@ -554,6 +578,9 @@ class OneStepModule(pl.LightningModule):
             )
             # Renormalise deltas
             x = self.out_renormalise(x)
+            # Transform yaw values to [-2pi, 2pi] interval
+            yaws = torch.tensor(2 * math.pi) * torch.tanh(x[:, 5:7])
+            x[:, 5:7] = yaws
             # Add deltas to input graph
             predicted_graph = torch.cat(
                 (predicted_graph[:, : self.out_features] + x, static_features), dim=-1
