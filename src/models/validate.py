@@ -18,19 +18,11 @@ import math
 
 @hydra.main(config_path="../../configs/waymo/", config_name="config")
 def main(config):
-    # Print configuration file
-    print(OmegaConf.to_yaml(config))
-
-    # Define model and trainer
-    model = eval(config["misc"]["model_type"])(**config["model"])
-    regressor = eval(config["misc"]["regressor_type"])(model, **config["regressor"])
+        # Define model and trainer
+    regressor = eval(config["misc"]["regressor_type"]).load_from_checkpoint(config["misc"]["ckpt_path"])
     trainer = pl.Trainer(**config["trainer"])
     datamodule = eval(config["misc"]["dm_type"])(**config["datamodule"])
-    # datamodule.setup()
-    # val_dataloader = datamodule.val_dataloader()
-    trainer.validate(model=regressor, datamodule=datamodule, ckpt_path=config["misc"]["ckpt_path"])
-
-
+    trainer.validate(model=regressor, datamodule=datamodule)
 
 if __name__ == "__main__":
     main()
