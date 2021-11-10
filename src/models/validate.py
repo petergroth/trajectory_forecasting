@@ -29,7 +29,7 @@ def main(config):
     config["datamodule"]["val_batch_size"] = 1
     datamodule = eval(config["misc"]["dm_type"])(**config["datamodule"])
     trainer.validate(model=regressor, datamodule=datamodule)
-
+    
 
 if __name__ == "__main__":
     main()
