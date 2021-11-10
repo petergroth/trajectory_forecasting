@@ -1830,7 +1830,7 @@ def main(config):
     regressor = eval(config["misc"]["regressor_type"])(model, **config["regressor"])
 
     # Setup logging
-    wandb_logger = WandbLogger(entity="petergroth", config=config, **config["logger"])
+    wandb_logger = WandbLogger(entity="petergroth", config=dict(config), **config["logger"])
     wandb_logger.watch(regressor, log_freq=100)
     # Add default dir for logs
 
