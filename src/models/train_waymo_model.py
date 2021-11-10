@@ -98,8 +98,11 @@ class OneStepModule(pl.LightningModule):
         type = one_hot(batch.type, num_classes=5)
         type = type.type_as(batch.x)
         x = torch.cat([x, type], dim=1)
-        yaws = torch.fmod(x[:, 5:7], torch.tensor(2*math.pi))
-        x[:, 5:7] = yaws
+        # Process yaw-values
+        xyaws = torch.fmod(x[:, 5:7], torch.tensor(2*math.pi))
+        x[:, 5:7] = xyaws
+        yyaws = torch.fmod(batch.y[:, 5:7], torch.tensor(2*math.pi))
+        batch.y[:, 5:7] = yyaws
         edge_attr = None
 
         ######################
@@ -408,7 +411,7 @@ class OneStepModule(pl.LightningModule):
         self.log("val_fde_loss", fde_loss)
         self.log("val_vel_loss", vel_loss)
         self.log("val_yaw_loss", yaw_loss)
-        self.log("val_total_loss", (ade_loss + vel_loss + yaw_loss) / 3, on_step=True)
+        self.log("val_total_loss", (ade_loss + vel_loss + yaw_loss) / 3) #, on_step=True)
         self.log("val_fde_ttp_loss", fde_ttp_loss)
         self.log("val_ade_ttp_loss", ade_ttp_loss)
 
