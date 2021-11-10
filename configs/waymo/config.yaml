@@ -3,6 +3,8 @@ defaults:
   - model: mlp_forward
   - regressor: onestep
   - trainer: onestep
+  - ckpt_path: null
+  - sequence_idx: null
   - _self_
 
 logger:
