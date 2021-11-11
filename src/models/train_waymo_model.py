@@ -111,10 +111,11 @@ class OneStepModule(pl.LightningModule):
         # One-hot encode type and concatenate with feature matrix
         type = one_hot(batch.type, num_classes=5)
         type = type.type_as(batch.x)
-        type_mask = (type[:, 1] == 1)
         x = torch.cat([x, type], dim=1)
         edge_attr = None
 
+        # CARS
+        type_mask = (type[:, 1] == 1)
         x = x[type_mask]
         batch.y = batch.y[type_mask]
         batch.batch = batch.batch[type_mask]
@@ -179,12 +180,12 @@ class OneStepModule(pl.LightningModule):
         # y_target_nrm = self.out_normalise(y_target.detach())
 
         # Obtain predicted delta dynamics
-        x = self.model(
+        y_t = self.model(
             x=x_nrm, edge_index=edge_index, edge_attr=edge_attr_nrm, batch=batch.batch
         )
 
         # Process predicted yaw values
-        yaw_pred = torch.tanh(x[:, 5:9])
+        yaw_pred = torch.tanh(y_t[:, 5:9])
         yaw_targ = torch.vstack([torch.sin(y_target[:, 5]),
                               torch.cos(y_target[:, 5]),
                               torch.sin(y_target[:, 6]),
@@ -196,11 +197,11 @@ class OneStepModule(pl.LightningModule):
         # bbox_yaw = torch.atan2(x[:, 5], x[:, 6]).unsqueeze(1)
         # vel_yaw = torch.atan2(x[:, 7], x[:, 8]).unsqueeze(1)
         # y_hat = torch.cat([x[:, 0:5], bbox_yaw, vel_yaw], dim=1)
-        y_hat = x[:, 0:5]
+        y_hat = y_t[:, 0:5]
 
         # Compute new positions using old velocities
         pos_expected = x[:, :2] + 0.1 * x[:, 3:5]
-        pos_new = y_hat[:, :2] + x_nrm[:, :2]
+        pos_new = y_hat[:, :2] + x[:, :2]
 
         # Compute and log loss
         pos_loss = self.train_pos_loss(y_hat[:, :3], y_target[:, :3])
@@ -252,7 +253,7 @@ class OneStepModule(pl.LightningModule):
         x_yaws[x_yaws > 0] = torch.fmod(x_yaws[x_yaws > 0] + math.pi, torch.tensor(2 * math.pi)) - math.pi
         x_yaws[x_yaws < 0] = torch.fmod(x_yaws[x_yaws < 0] - math.pi, torch.tensor(2 * math.pi)) + math.pi
         batch.x[:, 5:7] = x_yaws
-        del x_yaws
+        del x_yaws, type_mask
 
         # Allocate target/prediction tensors
         n_nodes = batch.num_nodes
