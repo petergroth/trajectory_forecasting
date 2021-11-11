@@ -174,10 +174,21 @@ class OneStepModule(pl.LightningModule):
         x = self.model(
             x=x_nrm, edge_index=edge_index, edge_attr=edge_attr_nrm, batch=batch.batch
         )
+
+        # Process predicted yaw values
+        yaw_pred = torch.tanh(x[:, 5:9])
+        yaw_targ = torch.vstack([torch.sin(y_target_nrm[:, 5]),
+                              torch.cos(y_target_nrm[:, 5]),
+                              torch.sin(y_target_nrm[:, 6]),
+                              torch.cos(y_target_nrm[:, 6]),
+                              ]).T
+
+
         # Transform yaw
-        bbox_yaw = torch.atan2(x[:, 5], x[:, 6]).unsqueeze(1)
-        vel_yaw = torch.atan2(x[:, 7], x[:, 8]).unsqueeze(1)
-        y_hat = torch.cat([x[:, 0:5], bbox_yaw, vel_yaw], dim=1)
+        # bbox_yaw = torch.atan2(x[:, 5], x[:, 6]).unsqueeze(1)
+        # vel_yaw = torch.atan2(x[:, 7], x[:, 8]).unsqueeze(1)
+        # y_hat = torch.cat([x[:, 0:5], bbox_yaw, vel_yaw], dim=1)
+        y_hat = x[:, 0:5]
 
         # Compute new positions using old velocities
         pos_expected = x_nrm[:, :2] + 0.1 * x_nrm[:, 3:5]
@@ -186,15 +197,16 @@ class OneStepModule(pl.LightningModule):
         # Compute and log loss
         pos_loss = self.train_pos_loss(y_hat[:, :3], y_target_nrm[:, :3])
         vel_loss = self.train_pos_loss(y_hat[:, 3:5], y_target_nrm[:, 3:5])
-        yaw_loss = self.train_pos_loss(y_hat[:, 5:7], y_target_nrm[:, 5:7])
+        # yaw_loss = self.train_pos_loss(y_hat[:, 5:7], y_target_nrm[:, 5:7])
+        yaw_loss = self.train_pos_loss(yaw_pred, yaw_targ)
         pos_diff = self.train_difference_loss(pos_new, pos_expected)
 
         self.log("train_pos_loss", pos_loss, on_step=True, on_epoch=True)
         self.log("train_vel_loss", vel_loss, on_step=True, on_epoch=True)
-        self.log("train_yaw_loss", yaw_loss, on_step=True, on_epoch=True)
+        self.log("train_yaw_loss", 0.5*yaw_loss, on_step=True, on_epoch=True)
         self.log("position_difference", pos_diff, on_step=True, on_epoch=True)
 
-        loss = pos_loss + vel_loss + yaw_loss + pos_diff
+        loss = pos_loss + vel_loss + 0.5*yaw_loss + pos_diff
         self.log("train_total_loss", loss, on_step=True, on_epoch=True)
 
         return loss
@@ -299,8 +311,8 @@ class OneStepModule(pl.LightningModule):
             x = self.out_renormalise(x)
 
             # Transform yaw
-            bbox_yaw = torch.atan2(x[:, 5], x[:, 6]).unsqueeze(1)
-            vel_yaw = torch.atan2(x[:, 7], x[:, 8]).unsqueeze(1)
+            bbox_yaw = torch.atan2(torch.tanh(x[:, 5]), torch.tanh(x[:, 6])).unsqueeze(1)
+            vel_yaw = torch.atan2(torch.tanh(x[:, 7]), torch.tanh(x[:, 8])).unsqueeze(1)
             tmp = torch.cat([x[:, 0:5], bbox_yaw, vel_yaw], dim=1)
             x = tmp
 
@@ -375,8 +387,8 @@ class OneStepModule(pl.LightningModule):
             x = self.out_renormalise(x)
 
             # Transform yaw
-            bbox_yaw = torch.atan2(x[:, 5], x[:, 6]).unsqueeze(1)
-            vel_yaw = torch.atan2(x[:, 7], x[:, 8]).unsqueeze(1)
+            bbox_yaw = torch.atan2(torch.tanh(x[:, 5]), torch.tanh(x[:, 6])).unsqueeze(1)
+            vel_yaw = torch.atan2(torch.tanh(x[:, 7]), torch.tanh(x[:, 8])).unsqueeze(1)
             tmp = torch.cat([x[:, 0:5], bbox_yaw, vel_yaw], dim=1)
             x = tmp
 
@@ -526,8 +538,8 @@ class OneStepModule(pl.LightningModule):
             # Renormalise output dynamics
             x = self.out_renormalise(x)
             # Transform yaw
-            bbox_yaw = torch.atan2(x[:, 5], x[:, 6]).unsqueeze(1)
-            vel_yaw = torch.atan2(x[:, 7], x[:, 8]).unsqueeze(1)
+            bbox_yaw = torch.atan2(torch.tanh(x[:, 5]), torch.tanh(x[:, 6])).unsqueeze(1)
+            vel_yaw = torch.atan2(torch.tanh(x[:, 7]), torch.tanh(x[:, 8])).unsqueeze(1)
             tmp = torch.cat([x[:, 0:5], bbox_yaw, vel_yaw], dim=1)
             x = tmp
 
@@ -601,8 +613,8 @@ class OneStepModule(pl.LightningModule):
             # Renormalise deltas
             x = self.out_renormalise(x)
             # Transform yaw
-            bbox_yaw = torch.atan2(x[:, 5], x[:, 6]).unsqueeze(1)
-            vel_yaw = torch.atan2(x[:, 7], x[:, 8]).unsqueeze(1)
+            bbox_yaw = torch.atan2(torch.tanh(x[:, 5]), torch.tanh(x[:, 6])).unsqueeze(1)
+            vel_yaw = torch.atan2(torch.tanh(x[:, 7]), torch.tanh(x[:, 8])).unsqueeze(1)
             tmp = torch.cat([x[:, 0:5], bbox_yaw, vel_yaw], dim=1)
             x = tmp
             # Add deltas to input graph
