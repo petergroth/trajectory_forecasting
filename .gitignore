@@ -100,3 +100,5 @@ todo.txt
 /jobfiles/
 *.err
 *.out
+*.log
+/visualisations/predictions/
