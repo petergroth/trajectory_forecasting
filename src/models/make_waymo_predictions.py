@@ -205,7 +205,7 @@ def main(config):
         vis_dir
         + config["misc"]["model_type"]
         + "_sequence_"
-        + f"{config.misc.sequence_idx:03}_good_perf.png"
+        + f"{config.misc.sequence_idx:03}.png"
     )
 
 

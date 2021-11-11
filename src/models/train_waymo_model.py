@@ -102,14 +102,19 @@ class OneStepModule(pl.LightningModule):
         y_yaws[y_yaws < 0] = torch.fmod(y_yaws[y_yaws < 0] - math.pi, torch.tensor(2*math.pi)) + math.pi
         batch.x[:, 5:7] = x_yaws
         batch.y[:, 5:7] = y_yaws
-
+        del x_yaws, y_yaws
         # Extract node features
         x = batch.x
         # One-hot encode type and concatenate with feature matrix
         type = one_hot(batch.type, num_classes=5)
         type = type.type_as(batch.x)
+        type_mask = (type[:, 1] == 1)
         x = torch.cat([x, type], dim=1)
         edge_attr = None
+
+        x = x[type_mask]
+        batch.y = batch.y[type_mask]
+        batch.batch = batch.batch[type_mask]
 
         ######################
         # Graph construction #
@@ -174,10 +179,21 @@ class OneStepModule(pl.LightningModule):
         x = self.model(
             x=x_nrm, edge_index=edge_index, edge_attr=edge_attr_nrm, batch=batch.batch
         )
+
+        # Process predicted yaw values
+        yaw_pred = torch.tanh(x[:, 5:9])
+        yaw_targ = torch.vstack([torch.sin(y_target_nrm[:, 5]),
+                              torch.cos(y_target_nrm[:, 5]),
+                              torch.sin(y_target_nrm[:, 6]),
+                              torch.cos(y_target_nrm[:, 6]),
+                              ]).T
+
+
         # Transform yaw
-        bbox_yaw = torch.atan2(x[:, 5], x[:, 6]).unsqueeze(1)
-        vel_yaw = torch.atan2(x[:, 7], x[:, 8]).unsqueeze(1)
-        y_hat = torch.cat([x[:, 0:5], bbox_yaw, vel_yaw], dim=1)
+        # bbox_yaw = torch.atan2(x[:, 5], x[:, 6]).unsqueeze(1)
+        # vel_yaw = torch.atan2(x[:, 7], x[:, 8]).unsqueeze(1)
+        # y_hat = torch.cat([x[:, 0:5], bbox_yaw, vel_yaw], dim=1)
+        y_hat = x[:, 0:5]
 
         # Compute new positions using old velocities
         pos_expected = x_nrm[:, :2] + 0.1 * x_nrm[:, 3:5]
@@ -186,15 +202,16 @@ class OneStepModule(pl.LightningModule):
         # Compute and log loss
         pos_loss = self.train_pos_loss(y_hat[:, :3], y_target_nrm[:, :3])
         vel_loss = self.train_pos_loss(y_hat[:, 3:5], y_target_nrm[:, 3:5])
-        yaw_loss = self.train_pos_loss(y_hat[:, 5:7], y_target_nrm[:, 5:7])
+        # yaw_loss = self.train_pos_loss(y_hat[:, 5:7], y_target_nrm[:, 5:7])
+        yaw_loss = self.train_pos_loss(yaw_pred, yaw_targ)
         pos_diff = self.train_difference_loss(pos_new, pos_expected)
 
         self.log("train_pos_loss", pos_loss, on_step=True, on_epoch=True)
         self.log("train_vel_loss", vel_loss, on_step=True, on_epoch=True)
-        self.log("train_yaw_loss", yaw_loss, on_step=True, on_epoch=True)
+        self.log("train_yaw_loss", 0.5*yaw_loss, on_step=True, on_epoch=True)
         self.log("position_difference", pos_diff, on_step=True, on_epoch=True)
 
-        loss = pos_loss + vel_loss + yaw_loss + pos_diff
+        loss = pos_loss + vel_loss + 0.5*yaw_loss + pos_diff
         self.log("train_total_loss", loss, on_step=True, on_epoch=True)
 
         return loss
@@ -217,6 +234,13 @@ class OneStepModule(pl.LightningModule):
         batch.batch = batch.batch[valid_mask]
         batch.tracks_to_predict = batch.tracks_to_predict[valid_mask]
         batch.type = one_hot(batch.type[valid_mask], num_classes=5)
+
+        # CARS
+        type_mask = (batch.type[:, 1] == 1)
+        batch.x = batch.x[type_mask]
+        batch.batch = batch.batch[type_mask]
+        batch.tracks_to_predict = batch.tracks_to_predict[type_mask]
+        batch.type = batch.type[type_mask]
         # Update mask
         mask = batch.x[:, :, -1].bool()
 
@@ -299,8 +323,8 @@ class OneStepModule(pl.LightningModule):
             x = self.out_renormalise(x)
 
             # Transform yaw
-            bbox_yaw = torch.atan2(x[:, 5], x[:, 6]).unsqueeze(1)
-            vel_yaw = torch.atan2(x[:, 7], x[:, 8]).unsqueeze(1)
+            bbox_yaw = torch.atan2(torch.tanh(x[:, 5]), torch.tanh(x[:, 6])).unsqueeze(1)
+            vel_yaw = torch.atan2(torch.tanh(x[:, 7]), torch.tanh(x[:, 8])).unsqueeze(1)
             tmp = torch.cat([x[:, 0:5], bbox_yaw, vel_yaw], dim=1)
             x = tmp
 
@@ -375,8 +399,8 @@ class OneStepModule(pl.LightningModule):
             x = self.out_renormalise(x)
 
             # Transform yaw
-            bbox_yaw = torch.atan2(x[:, 5], x[:, 6]).unsqueeze(1)
-            vel_yaw = torch.atan2(x[:, 7], x[:, 8]).unsqueeze(1)
+            bbox_yaw = torch.atan2(torch.tanh(x[:, 5]), torch.tanh(x[:, 6])).unsqueeze(1)
+            vel_yaw = torch.atan2(torch.tanh(x[:, 7]), torch.tanh(x[:, 8])).unsqueeze(1)
             tmp = torch.cat([x[:, 0:5], bbox_yaw, vel_yaw], dim=1)
             x = tmp
 
@@ -447,8 +471,15 @@ class OneStepModule(pl.LightningModule):
         batch.x = batch.x[valid_mask]
         batch.batch = batch.batch[valid_mask]
         batch.tracks_to_predict = batch.tracks_to_predict[valid_mask]
-        # types = batch.type[valid_mask]
         batch.type = one_hot(batch.type[valid_mask], num_classes=5)
+
+        # CARS
+        type_mask = (batch.type[:, 1] == 1)
+        batch.x = batch.x[type_mask]
+        batch.batch = batch.batch[type_mask]
+        batch.tracks_to_predict = batch.tracks_to_predict[type_mask]
+        batch.type = batch.type[type_mask]
+
         # Update mask
         mask = batch.x[:, :, -1].bool()
 
@@ -526,8 +557,8 @@ class OneStepModule(pl.LightningModule):
             # Renormalise output dynamics
             x = self.out_renormalise(x)
             # Transform yaw
-            bbox_yaw = torch.atan2(x[:, 5], x[:, 6]).unsqueeze(1)
-            vel_yaw = torch.atan2(x[:, 7], x[:, 8]).unsqueeze(1)
+            bbox_yaw = torch.atan2(torch.tanh(x[:, 5]), torch.tanh(x[:, 6])).unsqueeze(1)
+            vel_yaw = torch.atan2(torch.tanh(x[:, 7]), torch.tanh(x[:, 8])).unsqueeze(1)
             tmp = torch.cat([x[:, 0:5], bbox_yaw, vel_yaw], dim=1)
             x = tmp
 
@@ -601,8 +632,8 @@ class OneStepModule(pl.LightningModule):
             # Renormalise deltas
             x = self.out_renormalise(x)
             # Transform yaw
-            bbox_yaw = torch.atan2(x[:, 5], x[:, 6]).unsqueeze(1)
-            vel_yaw = torch.atan2(x[:, 7], x[:, 8]).unsqueeze(1)
+            bbox_yaw = torch.atan2(torch.tanh(x[:, 5]), torch.tanh(x[:, 6])).unsqueeze(1)
+            vel_yaw = torch.atan2(torch.tanh(x[:, 7]), torch.tanh(x[:, 8])).unsqueeze(1)
             tmp = torch.cat([x[:, 0:5], bbox_yaw, vel_yaw], dim=1)
             x = tmp
             # Add deltas to input graph
