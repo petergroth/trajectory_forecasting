@@ -102,14 +102,19 @@ class OneStepModule(pl.LightningModule):
         y_yaws[y_yaws < 0] = torch.fmod(y_yaws[y_yaws < 0] - math.pi, torch.tensor(2*math.pi)) + math.pi
         batch.x[:, 5:7] = x_yaws
         batch.y[:, 5:7] = y_yaws
-
+        del x_yaws, y_yaws
         # Extract node features
         x = batch.x
         # One-hot encode type and concatenate with feature matrix
         type = one_hot(batch.type, num_classes=5)
         type = type.type_as(batch.x)
+        type_mask = (type[:, 1] == 1)
         x = torch.cat([x, type], dim=1)
         edge_attr = None
+
+        x = x[type_mask]
+        batch.y = batch.y[type_mask]
+        batch.batch = batch.batch[type_mask]
 
         ######################
         # Graph construction #
@@ -229,6 +234,13 @@ class OneStepModule(pl.LightningModule):
         batch.batch = batch.batch[valid_mask]
         batch.tracks_to_predict = batch.tracks_to_predict[valid_mask]
         batch.type = one_hot(batch.type[valid_mask], num_classes=5)
+
+        # CARS
+        type_mask = (batch.type[:, 1] == 1)
+        batch.x = batch.x[type_mask]
+        batch.batch = batch.batch[type_mask]
+        batch.tracks_to_predict = batch.tracks_to_predict[type_mask]
+        batch.type = batch.type[type_mask]
         # Update mask
         mask = batch.x[:, :, -1].bool()
 
@@ -459,8 +471,15 @@ class OneStepModule(pl.LightningModule):
         batch.x = batch.x[valid_mask]
         batch.batch = batch.batch[valid_mask]
         batch.tracks_to_predict = batch.tracks_to_predict[valid_mask]
-        # types = batch.type[valid_mask]
         batch.type = one_hot(batch.type[valid_mask], num_classes=5)
+
+        # CARS
+        type_mask = (batch.type[:, 1] == 1)
+        batch.x = batch.x[type_mask]
+        batch.batch = batch.batch[type_mask]
+        batch.tracks_to_predict = batch.tracks_to_predict[type_mask]
+        batch.type = batch.type[type_mask]
+
         # Update mask
         mask = batch.x[:, :, -1].bool()
 
