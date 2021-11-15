@@ -256,7 +256,7 @@ class mpnn_forward_model(nn.Module):
                 node_features=hidden_size,
                 dropout=dropout,
                 edge_features=latent_edge_features,
-                out_features=out_features
+                out_features=out_features,
             ),
         )
 
@@ -402,7 +402,7 @@ class rnn_node_forward_model(nn.Module):
         skip: bool = True,
         num_layers: int = 1,
         rnn_size: int = 20,
-        out_features: int = 7
+        out_features: int = 7,
     ):
         super(rnn_node_forward_model, self).__init__()
         self.hidden_size = hidden_size
@@ -428,7 +428,7 @@ class rnn_node_forward_model(nn.Module):
                 dropout=dropout,
                 num_layers=num_layers,
                 out_features=out_features,
-                hidden_size=hidden_size
+                hidden_size=hidden_size,
             ),
         )
         GN2_node_input = rnn_size + node_features if skip else rnn_size

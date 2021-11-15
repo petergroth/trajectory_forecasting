@@ -1,11 +1,13 @@
+import math
 import os
 import os.path as osp
 import torch
-# from src.utils import parse_sequence
+from torch.nn.functional import one_hot
+from src.utils import parse_sequence
 from torch_geometric.data import Data, Dataset, InMemoryDataset
 from torch_geometric.loader import DataLoader
 import pytorch_lightning as pl
-# import tensorflow as tf
+import tensorflow as tf
 from typing import Optional
 
 
@@ -68,7 +70,6 @@ class OneStepWaymoTrainDataset(InMemoryDataset):
                 parsed = parse_sequence(data)
                 # Allocate tensor for full value array
                 feature_matrix = torch.zeros((n_nodes, n_steps, n_features))
-
                 # Fill in all values
                 for j, key in enumerate(key_values):
                     # Encode history
@@ -81,6 +82,24 @@ class OneStepWaymoTrainDataset(InMemoryDataset):
                     feature_matrix[:, 11:, j] = torch.Tensor(
                         parsed["state/future/" + key].numpy()
                     )
+
+                # Process yaw-values into [-pi, pi]
+                x_yaws = feature_matrix[:, :, 5:7]
+                x_yaws[x_yaws > 0] = (
+                    torch.fmod(x_yaws[x_yaws > 0] + math.pi, torch.tensor(2 * math.pi))
+                    - math.pi
+                )
+                x_yaws[x_yaws < 0] = (
+                    torch.fmod(x_yaws[x_yaws < 0] - math.pi, torch.tensor(2 * math.pi))
+                    + math.pi
+                )
+                feature_matrix[:, :, 5:7] = x_yaws
+
+                # Values and mask to use for normalisation
+                vals = feature_matrix[:, :11, :-1]
+                mask = feature_matrix[:, :11, -1].bool()
+                loc = torch.mean(vals[mask], dim=0)
+                std = torch.std(vals[mask], dim=0)
 
                 # Determine input/target pairs
                 for t in range(n_steps - 1):
@@ -98,17 +117,16 @@ class OneStepWaymoTrainDataset(InMemoryDataset):
                     data = Data(
                         x=x[valid_mask, :-1], y=y[valid_mask, :7], edge_index=None
                     )
-                    data["tracks_to_predict"] = torch.where(
-                        torch.Tensor(parsed["state/tracks_to_predict"].numpy())[
-                            valid_mask
-                        ]
-                        > 0,
-                        True,
-                        False,
+                    # Add agent type as one-hot encoded
+                    data["type"] = one_hot(
+                        torch.Tensor(parsed["state/type"].numpy())[valid_mask].type(
+                            torch.LongTensor
+                        ),
+                        num_classes=5,
                     )
-                    data["type"] = torch.Tensor(parsed["state/type"].numpy())[
-                        valid_mask
-                    ].type(torch.LongTensor)
+
+                    data["loc"] = loc.unsqueeze(0)
+                    data["std"] = std.unsqueeze(0)
 
                     data_list.append(data)
 
@@ -167,6 +185,9 @@ class SequentialWaymoTrainDataset(InMemoryDataset):
         n_features = len(key_values)
         n_steps = 91
 
+        # Allocate tensor for full value array
+        feature_matrix = torch.zeros((n_nodes, n_steps, n_features))
+
         # Move through raw files
         for i, raw_path in enumerate(self.raw_file_names):
             # Load file
@@ -176,8 +197,6 @@ class SequentialWaymoTrainDataset(InMemoryDataset):
             for seq_idx, data in enumerate(dataset.as_numpy_iterator()):
                 # Parse sequence
                 parsed = parse_sequence(data)
-                # Allocate tensor for full value array
-                feature_matrix = torch.zeros((n_nodes, n_steps, n_features))
 
                 # Fill in all values
                 for j, key in enumerate(key_values):
@@ -192,7 +211,27 @@ class SequentialWaymoTrainDataset(InMemoryDataset):
                         parsed["state/future/" + key].numpy()
                     )
 
+                # Process yaw-values into [-pi, pi]
+                x_yaws = feature_matrix[:, :, 5:7]
+                x_yaws[x_yaws > 0] = (
+                    torch.fmod(x_yaws[x_yaws > 0] + math.pi, torch.tensor(2 * math.pi))
+                    - math.pi
+                )
+                x_yaws[x_yaws < 0] = (
+                    torch.fmod(x_yaws[x_yaws < 0] - math.pi, torch.tensor(2 * math.pi))
+                    + math.pi
+                )
+                feature_matrix[:, :, 5:7] = x_yaws
+
+                # Values and mask to use for normalisation
+                vals = feature_matrix[:, :11, :-1]
+                mask = feature_matrix[:, :11, -1].bool()
+                loc = torch.mean(vals[mask], dim=0)
+                std = torch.std(vals[mask], dim=0)
+
+                # Extract agent type
                 type = torch.Tensor(parsed["state/type"].numpy()).type(torch.LongTensor)
+                # Mask of valid agents for full sequence
                 mask = torch.where(type > -0.5, True, False)
 
                 data = Data(x=feature_matrix[mask], edge_index=None)
@@ -201,7 +240,10 @@ class SequentialWaymoTrainDataset(InMemoryDataset):
                     True,
                     False,
                 )
-                data["type"] = type[mask]
+                # Add agent type as one-hot encoded
+                data["type"] = one_hot(type[mask], num_classes=5)
+                data["loc"] = loc.unsqueeze(0)
+                data["std"] = std.unsqueeze(0)
 
                 data_list.append(data)
 
@@ -257,6 +299,8 @@ class SequentialWaymoValDataset(InMemoryDataset):
         n_nodes = 128
         n_features = len(key_values)
         n_steps = 91
+        # Allocate tensor for full value array
+        feature_matrix = torch.zeros((n_nodes, n_steps, n_features))
 
         # Move through raw files
         for i, raw_path in enumerate(self.raw_file_names):
@@ -267,8 +311,6 @@ class SequentialWaymoValDataset(InMemoryDataset):
             for seq_idx, data in enumerate(dataset.as_numpy_iterator()):
                 # Parse sequence
                 parsed = parse_sequence(data)
-                # Allocate tensor for full value array
-                feature_matrix = torch.zeros((n_nodes, n_steps, n_features))
 
                 # Fill in all values
                 for j, key in enumerate(key_values):
@@ -283,6 +325,24 @@ class SequentialWaymoValDataset(InMemoryDataset):
                         parsed["state/future/" + key].numpy()
                     )
 
+                # Process yaw-values into [-pi, pi]
+                x_yaws = feature_matrix[:, :, 5:7]
+                x_yaws[x_yaws > 0] = (
+                    torch.fmod(x_yaws[x_yaws > 0] + math.pi, torch.tensor(2 * math.pi))
+                    - math.pi
+                )
+                x_yaws[x_yaws < 0] = (
+                    torch.fmod(x_yaws[x_yaws < 0] - math.pi, torch.tensor(2 * math.pi))
+                    + math.pi
+                )
+                feature_matrix[:, :, 5:7] = x_yaws
+
+                # Values and mask to use for normalisation
+                vals = feature_matrix[:, :11, :-1]
+                mask = feature_matrix[:, :11, -1].bool()
+                loc = torch.mean(vals[mask], dim=0)
+                std = torch.std(vals[mask], dim=0)
+
                 # Extract agent type
                 type = torch.Tensor(parsed["state/type"].numpy()).type(torch.LongTensor)
                 # Mask of valid agents for full sequence
@@ -294,7 +354,9 @@ class SequentialWaymoValDataset(InMemoryDataset):
                     True,
                     False,
                 )
-                data["type"] = type[mask]
+                data["type"] = one_hot(type[mask], num_classes=5)
+                data["loc"] = loc.unsqueeze(0)
+                data["std"] = std.unsqueeze(0)
                 data_list.append(data)
 
         # Collate and save
@@ -331,12 +393,18 @@ class OneStepWaymoDataModule(pl.LightningDataModule):
 
     def train_dataloader(self):
         return DataLoader(
-            self.train_dataset, batch_size=self.batch_size, shuffle=self.shuffle, num_workers=8
+            self.train_dataset,
+            batch_size=self.batch_size,
+            shuffle=self.shuffle,
+            num_workers=8,
         )
 
     def val_dataloader(self):
         return DataLoader(
-            self.val_dataset, batch_size=self.val_batch_size, shuffle=False, num_workers=4
+            self.val_dataset,
+            batch_size=self.val_batch_size,
+            shuffle=False,
+            num_workers=4,
         )
 
     def test_dataloader(self):
@@ -385,7 +453,10 @@ class SequentialWaymoDataModule(pl.LightningDataModule):
 
     def val_dataloader(self):
         return DataLoader(
-            self.val_dataset, batch_size=self.val_batch_size, shuffle=False, num_workers=6
+            self.val_dataset,
+            batch_size=self.val_batch_size,
+            shuffle=False,
+            num_workers=6,
         )
 
     def test_dataloader(self):

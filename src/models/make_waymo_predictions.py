@@ -41,11 +41,14 @@ def make_predictions(path, config, sequence_idx=0):
             torch.save((y_hat, y_target, mask), dirpath + f"/sequence_{i:03}.pt")
             return
 
+
 @hydra.main(config_path="../../configs/waymo/", config_name="config")
 def main(config):
     # Computes predictions for specified sequence
     make_predictions(
-        path=config.misc.ckpt_path, config=dict(config), sequence_idx=config.misc.sequence_idx
+        path=config.misc.ckpt_path,
+        config=dict(config),
+        sequence_idx=config.misc.sequence_idx,
     )
 
     # Create directory for current model
@@ -84,25 +87,31 @@ def main(config):
                 if int(y_target[t, agent, 11].item()) == 1:
                     c, s = np.cos(angle), np.sin(angle)
                     R = np.array(((c, -s), (s, c)))
-                    anchor = np.dot(R, np.array([-length / 2, -width / 2])) + np.array([x, y])
+                    anchor = np.dot(R, np.array([-length / 2, -width / 2])) + np.array(
+                        [x, y]
+                    )
                     rect = Rectangle(
                         xy=anchor,
                         width=length,
                         height=width,
                         angle=angle * 180 / np.pi,
-                        edgecolor='k',
+                        edgecolor="k",
                         facecolor=color,
                         alpha=0.05,
                     )
                     axglob[0].add_patch(rect)
                 # Pedestrian
                 elif int(y_target[t, agent, 12].item()) == 1:
-                    axglob[0].plot(x, y, marker='o', color=color, alpha=0.05, markerfacecolor=None)
+                    axglob[0].plot(
+                        x, y, marker="o", color=color, alpha=0.05, markerfacecolor=None
+                    )
                 # Bike
                 elif int(y_target[t, agent, 13].item()) == 1:
-                    axglob[0].plot(x, y, marker='+', color=color, alpha=0.05, markerfacecolor=None)
+                    axglob[0].plot(
+                        x, y, marker="+", color=color, alpha=0.05, markerfacecolor=None
+                    )
                 else:
-                    axglob[0].plot(x, y, marker='x', color=color, alpha=0.05)
+                    axglob[0].plot(x, y, marker="x", color=color, alpha=0.05)
 
             # Start
             if t == 0:
@@ -116,7 +125,7 @@ def main(config):
                     angles="xy",
                     scale_units="xy",
                     scale=1.0,
-                    color='lightgrey'
+                    color="lightgrey",
                 )
             elif t == 10:
                 axglob[0].quiver(
@@ -129,7 +138,7 @@ def main(config):
                     angles="xy",
                     scale_units="xy",
                     scale=1.0,
-                    color='gray'
+                    color="gray",
                 )
             elif t == (n_steps - 1):
                 axglob[0].quiver(
@@ -142,7 +151,7 @@ def main(config):
                     angles="xy",
                     scale_units="xy",
                     scale=1.0,
-                    color='k'
+                    color="k",
                 )
 
         for t in range(n_steps):
@@ -157,25 +166,31 @@ def main(config):
                 if int(y_hat[t, agent, 11].item()) == 1:
                     c, s = np.cos(angle), np.sin(angle)
                     R = np.array(((c, -s), (s, c)))
-                    anchor = np.dot(R, np.array([-length / 2, -width / 2])) + np.array([x, y])
+                    anchor = np.dot(R, np.array([-length / 2, -width / 2])) + np.array(
+                        [x, y]
+                    )
                     rect = Rectangle(
                         xy=anchor,
                         width=length,
                         height=width,
                         angle=angle * 180 / np.pi,
-                        edgecolor='k',
+                        edgecolor="k",
                         facecolor=color,
                         alpha=0.05,
                     )
                     axglob[1].add_patch(rect)
                 # Pedestrian
                 elif int(y_hat[t, agent, 12].item()) == 1:
-                    axglob[1].plot(x, y, marker='o', color=color, alpha=0.05, markerfacecolor=None)
+                    axglob[1].plot(
+                        x, y, marker="o", color=color, alpha=0.05, markerfacecolor=None
+                    )
                 # Bike
                 elif int(y_hat[t, agent, 13].item()) == 1:
-                    axglob[1].plot(x, y, marker='+', color=color, alpha=0.05, markerfacecolor=None)
+                    axglob[1].plot(
+                        x, y, marker="+", color=color, alpha=0.05, markerfacecolor=None
+                    )
                 else:
-                    axglob[1].plot(x, y, marker='x', color=color, alpha=0.05)
+                    axglob[1].plot(x, y, marker="x", color=color, alpha=0.05)
 
             if t == (n_steps - 1) or t == 0 or t == 10:
                 axglob[1].quiver(
@@ -211,4 +226,3 @@ def main(config):
 
 if __name__ == "__main__":
     main()
-
