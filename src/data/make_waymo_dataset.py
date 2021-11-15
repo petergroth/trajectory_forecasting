@@ -9,7 +9,7 @@ if __name__ == "__main__":
     # dm = SequentialWaymoDataModule(batch_size=2)
     # dm.setup()
 
-    loader = dm.val_dataloader()
+    loader = dm.train_dataloader()
     batch = next(iter(loader))
     # for i in enumerate(loader):
     #     print(batch.loc[:2])

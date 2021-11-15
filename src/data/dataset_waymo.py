@@ -113,18 +113,20 @@ class OneStepWaymoTrainDataset(InMemoryDataset):
                     valid_y = y[:, -1] == 1
                     valid_mask = torch.logical_and(valid_x, valid_y)
 
+                    # Combine features with types
+                    node_features = torch.cat([
+                        x[valid_mask, :-1], one_hot(
+                                                    torch.Tensor(parsed["state/type"].numpy())[valid_mask].type(
+                                                        torch.LongTensor
+                                                    ),
+                                                    num_classes=5,
+                                                )
+                    ], dim=1)
+
                     # Save data object to list
                     data = Data(
-                        x=x[valid_mask, :-1], y=y[valid_mask, :7], edge_index=None
+                        x=node_features, y=y[valid_mask, :7], edge_index=None
                     )
-                    # Add agent type as one-hot encoded
-                    data["type"] = one_hot(
-                        torch.Tensor(parsed["state/type"].numpy())[valid_mask].type(
-                            torch.LongTensor
-                        ),
-                        num_classes=5,
-                    )
-
                     data["loc"] = loc.unsqueeze(0)
                     data["std"] = std.unsqueeze(0)
 
@@ -242,8 +244,8 @@ class SequentialWaymoTrainDataset(InMemoryDataset):
                 )
                 # Add agent type as one-hot encoded
                 data["type"] = one_hot(type[mask], num_classes=5)
-                data["loc"] = loc.unsqueeze(0)
-                data["std"] = std.unsqueeze(0)
+                data["loc"] = loc
+                data["std"] = std
 
                 data_list.append(data)
 
