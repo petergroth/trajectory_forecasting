@@ -72,8 +72,7 @@ class OneStepModule(pl.LightningModule):
         self.centered_edges = centered_edges
         self.node_features = node_features
 
-        self.node_norm_index = [3, 4]
-
+        self.node_norm_index = [3, 4, 7, 8, 9]
         # Normalisation parameters
         self.register_buffer("node_counter", torch.zeros(1))
         self.register_buffer("node_in_sum", torch.zeros(len(self.node_norm_index)))
@@ -82,11 +81,6 @@ class OneStepModule(pl.LightningModule):
         )
         self.register_buffer("node_in_std", torch.ones(len(self.node_norm_index)))
         self.register_buffer("node_in_mean", torch.zeros(len(self.node_norm_index)))
-        # Output normalisation parameters
-        # self.register_buffer("node_out_sum", torch.zeros(out_features))
-        # self.register_buffer("node_out_squaresum", torch.zeros(out_features))
-        # self.register_buffer("node_out_std", torch.ones(out_features))
-        # self.register_buffer("node_out_mean", torch.zeros(out_features))
         # Edge normalisation parameters
         self.register_buffer("edge_counter", torch.zeros(1))
         self.register_buffer("edge_in_sum", torch.zeros(edge_features))
@@ -134,7 +128,7 @@ class OneStepModule(pl.LightningModule):
 
         # Remove duplicates and sort
         edge_index = torch_geometric.utils.coalesce(edge_index)
-        self.log("num_edges", edge_index.shape[1] / batch.num_graphs, on_step=True, on_epoch=True)
+        self.log("train_edges_per_node", edge_index.shape[1] / x.shape[0])
 
         # Determine whether to add random noise to dynamic states
         if self.noise is not None:
@@ -166,11 +160,11 @@ class OneStepModule(pl.LightningModule):
                 x[:, [0, 1, 2]] -= batch.loc[batch.batch][:, [0, 1, 2]]
                 x[:, [0, 1, 2]] /= batch.std[batch.batch][:, [0, 1, 2]]
             else:
-                self.update_in_normalisation(x.detach().clone(), edge_attr.detach().clone())
+                # self.update_in_normalisation(x.detach().clone(), edge_attr.detach().clone())
                 # Normalise node/edge features except x, y, z which will be handled separately
-                x, edge_attr = self.in_normalise(x.detach(), edge_attr.detach())
+                # x, edge_attr = self.in_normalise(x.detach().clone(), edge_attr.detach().clone())
                 x[:, [0, 1, 2]] -= batch.loc[batch.batch][:, [0, 1, 2]]
-                x[:, [0, 1, 2]] /= batch.std[batch.batch][:, [0, 1, 2]]
+                # x[:, [0, 1, 2]] /= batch.std[batch.batch][:, [0, 1, 2]]
 
 
         # Obtain predicted delta dynamics
@@ -290,7 +284,7 @@ class OneStepModule(pl.LightningModule):
 
             # Remove duplicates and sort
             edge_index = torch_geometric.utils.coalesce(edge_index)
-            self.log("num_edges", edge_index.shape[1] / batch.num_graphs, on_step=True, on_epoch=True)
+            self.log("val_history_edges_per_node", edge_index.shape[1] / x.shape[0], on_step=True, on_epoch=True)
 
             # Create edge_attr if specified
             if self.edge_weight:
@@ -305,9 +299,9 @@ class OneStepModule(pl.LightningModule):
 
             # Normalise input graph
             if self.normalise:
-                x, edge_attr = self.in_normalise(x, edge_attr)
+                # x, edge_attr = self.in_normalise(x, edge_attr)
                 x[:, [0, 1, 2]] -= batch.loc[batch.batch][mask_t][:, [0, 1, 2]]
-                x[:, [0, 1, 2]] /= batch.std[batch.batch][mask_t][:, [0, 1, 2]]
+                # x[:, [0, 1, 2]] /= batch.std[batch.batch][mask_t][:, [0, 1, 2]]
 
             # Obtain normalised predicted delta dynamics
             delta_x = self.model(
@@ -342,7 +336,7 @@ class OneStepModule(pl.LightningModule):
             ######################
 
             # Latest prediction as input
-            x = predicted_graph
+            x = predicted_graph.clone()
 
             # Construct edges
             if self.edge_type == "knn":
@@ -369,7 +363,7 @@ class OneStepModule(pl.LightningModule):
 
             # Remove duplicates and sort
             edge_index = torch_geometric.utils.coalesce(edge_index)
-            self.log("num_edges", edge_index.shape[1] / batch.num_graphs, on_step=True, on_epoch=True)
+            self.log("val_future_edges_per_node", edge_index.shape[1] / x.shape[0], on_step=True, on_epoch=True)
 
             # Create edge_attr if specified
             if self.edge_weight:
@@ -384,9 +378,10 @@ class OneStepModule(pl.LightningModule):
 
             # Normalise input graph
             if self.normalise:
-                x, edge_attr = self.in_normalise(x, edge_attr)
+                # x, edge_attr = self.in_normalise(x, edge_attr)
                 x[:, [0, 1, 2]] -= batch.loc[batch.batch][:, [0, 1, 2]]
-                x[:, [0, 1, 2]] /= batch.std[batch.batch][:, [0, 1, 2]]
+                # x[:, [0, 1, 2]] /= batch.std[batch.batch][:, [0, 1, 2]]
+
 
             # Obtain normalised predicted delta dynamics
             delta_x = self.model(
@@ -400,7 +395,8 @@ class OneStepModule(pl.LightningModule):
             delta_x = tmp
 
             # Add deltas to input graph
-            predicted_graph[:, : self.out_features] += delta_x
+            predicted_graph = torch.cat([predicted_graph[:, : self.out_features] + delta_x,
+                                         predicted_graph[:, self.out_features:]], dim=1)
             predicted_graph = predicted_graph.type_as(batch.x)
 
             # Save prediction alongside true value (next time step state)
@@ -544,7 +540,7 @@ class OneStepModule(pl.LightningModule):
             if self.normalise:
                 x, edge_attr = self.in_normalise(x, edge_attr)
                 x[:, [0, 1, 2]] -= batch.loc[batch.batch][mask_t][:, [0, 1, 2]]
-                x[:, [0, 1, 2]] /= batch.std[batch.batch][mask_t][:, [0, 1, 2]]
+                # x[:, [0, 1, 2]] /= batch.std[batch.batch][mask_t][:, [0, 1, 2]]
 
             # Obtain normalised predicted delta dynamics
             delta_x = self.model(
@@ -583,7 +579,7 @@ class OneStepModule(pl.LightningModule):
             ######################
 
             # Latest prediction as input
-            x = predicted_graph
+            x = predicted_graph.clone()
 
             # Construct edges
             if self.edge_type == "knn":
@@ -626,7 +622,7 @@ class OneStepModule(pl.LightningModule):
             if self.normalise:
                 x, edge_attr = self.in_normalise(x, edge_attr)
                 x[:, [0, 1, 2]] -= batch.loc[batch.batch][:, [0, 1, 2]]
-                x[:, [0, 1, 2]] /= batch.std[batch.batch][:, [0, 1, 2]]
+                # x[:, [0, 1, 2]] /= batch.std[batch.batch][:, [0, 1, 2]]
 
             # Obtain normalised predicted delta dynamics
             delta_x = self.model(
@@ -640,7 +636,9 @@ class OneStepModule(pl.LightningModule):
             delta_x = tmp
 
             # Add deltas to input graph
-            predicted_graph[:, : self.out_features] += delta_x
+            predicted_graph = torch.cat([predicted_graph[:, : self.out_features] + delta_x,
+                                         predicted_graph[:, self.out_features:]], dim=1)
+            predicted_graph = predicted_graph.type_as(batch.x)
 
             # Save prediction alongside true value (next time step state)
             y_hat[t, :, :] = predicted_graph
@@ -700,6 +698,8 @@ class OneStepModule(pl.LightningModule):
         x_nrm = x[:, self.node_norm_index]
         x_nrm = torch.sub(x_nrm, self.node_in_mean)
         x_nrm = torch.div(x_nrm, self.node_in_std)
+        # x_nrm -= self.node_in_mean
+        # x_nrm /= self.node_in_std
 
         # Edge normalisation
         if edge_attr is not None:
@@ -1935,7 +1935,7 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
 def main(config):
     # Print configuration file
     print(OmegaConf.to_yaml(config))
-
+    torch.autograd.set_detect_anomaly(True)
     # Seed for reproducibility
     seed_everything(config["misc"]["seed"], workers=True)
     # Load data, model, and regressor

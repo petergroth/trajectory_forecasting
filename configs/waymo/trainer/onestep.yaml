@@ -1,5 +1,5 @@
 check_val_every_n_epoch: 1
-max_epochs: 5
+max_epochs: 1
 deterministic: True
 num_sanity_val_steps: 2
 precision: 32 # Default. Only available on GPU.
