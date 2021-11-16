@@ -244,8 +244,8 @@ class SequentialWaymoTrainDataset(InMemoryDataset):
                 )
                 # Add agent type as one-hot encoded
                 data["type"] = one_hot(type[mask], num_classes=5)
-                data["loc"] = loc
-                data["std"] = std
+                data["loc"] = loc.unsqueeze(0)
+                data["std"] = std.unsqueeze(0)
 
                 data_list.append(data)
 
