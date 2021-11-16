@@ -158,13 +158,13 @@ class OneStepModule(pl.LightningModule):
                 # Normalise node features except x, y, z which will be handled separately
                 # x, _ = self.in_normalise(x.detach())
                 x[:, [0, 1, 2]] -= batch.loc[batch.batch][:, [0, 1, 2]]
-                x[:, [0, 1, 2]] /= batch.std[batch.batch][:, [0, 1, 2]]
+                # x[:, [0, 1, 2]] /= batch.std[batch.batch][:, [0, 1, 2]]
             else:
                 # self.update_in_normalisation(x.detach().clone(), edge_attr.detach().clone())
                 # Normalise node/edge features except x, y, z which will be handled separately
                 # x, edge_attr = self.in_normalise(x.detach().clone(), edge_attr.detach().clone())
                 x[:, [0, 1, 2]] -= batch.loc[batch.batch][:, [0, 1, 2]]
-                x[:, [0, 1, 2]] /= batch.std[batch.batch][:, [0, 1, 2]]
+                # x[:, [0, 1, 2]] /= batch.std[batch.batch][:, [0, 1, 2]]
 
 
         # Obtain predicted delta dynamics
@@ -301,7 +301,7 @@ class OneStepModule(pl.LightningModule):
             if self.normalise:
                 # x, edge_attr = self.in_normalise(x, edge_attr)
                 x[:, [0, 1, 2]] -= batch.loc[batch.batch][mask_t][:, [0, 1, 2]]
-                x[:, [0, 1, 2]] /= batch.std[batch.batch][mask_t][:, [0, 1, 2]]
+                # x[:, [0, 1, 2]] /= batch.std[batch.batch][mask_t][:, [0, 1, 2]]
 
             # Obtain normalised predicted delta dynamics
             delta_x = self.model(
@@ -380,7 +380,8 @@ class OneStepModule(pl.LightningModule):
             if self.normalise:
                 x, edge_attr = self.in_normalise(x, edge_attr)
                 x[:, [0, 1, 2]] -= batch.loc[batch.batch][:, [0, 1, 2]]
-                x[:, [0, 1, 2]] /= batch.std[batch.batch][:, [0, 1, 2]]
+                # x[:, [0, 1, 2]] /= batch.std[batch.batch][:, [0, 1, 2]]
+
 
 
             # Obtain normalised predicted delta dynamics
@@ -538,9 +539,9 @@ class OneStepModule(pl.LightningModule):
 
             # Normalise input graph
             if self.normalise:
-                x, edge_attr = self.in_normalise(x, edge_attr)
+                # x, edge_attr = self.in_normalise(x, edge_attr)
                 x[:, [0, 1, 2]] -= batch.loc[batch.batch][mask_t][:, [0, 1, 2]]
-                x[:, [0, 1, 2]] /= batch.std[batch.batch][mask_t][:, [0, 1, 2]]
+                # x[:, [0, 1, 2]] /= batch.std[batch.batch][mask_t][:, [0, 1, 2]]
 
             # Obtain normalised predicted delta dynamics
             delta_x = self.model(
@@ -579,7 +580,7 @@ class OneStepModule(pl.LightningModule):
             ######################
 
             # Latest prediction as input
-            x = predicted_graph
+            x = predicted_graph.clone()
 
             # Construct edges
             if self.edge_type == "knn":
@@ -620,9 +621,9 @@ class OneStepModule(pl.LightningModule):
 
             # Normalise input graph
             if self.normalise:
-                x, edge_attr = self.in_normalise(x, edge_attr)
+                # x, edge_attr = self.in_normalise(x, edge_attr)
                 x[:, [0, 1, 2]] -= batch.loc[batch.batch][:, [0, 1, 2]]
-                x[:, [0, 1, 2]] /= batch.std[batch.batch][:, [0, 1, 2]]
+                # x[:, [0, 1, 2]] /= batch.std[batch.batch][:, [0, 1, 2]]
 
             # Obtain normalised predicted delta dynamics
             delta_x = self.model(
@@ -811,10 +812,10 @@ class SequentialModule(pl.LightningModule):
         self.register_buffer("node_in_std", torch.ones(node_features))
         self.register_buffer("node_in_mean", torch.zeros(node_features))
         # Output normalisation parameters
-        self.register_buffer("node_out_sum", torch.zeros(out_features))
-        self.register_buffer("node_out_squaresum", torch.zeros(out_features))
-        self.register_buffer("node_out_std", torch.ones(out_features))
-        self.register_buffer("node_out_mean", torch.zeros(out_features))
+        # self.register_buffer("node_out_sum", torch.zeros(out_features))
+        # self.register_buffer("node_out_squaresum", torch.zeros(out_features))
+        # self.register_buffer("node_out_std", torch.ones(out_features))
+        # self.register_buffer("node_out_mean", torch.zeros(out_features))
         # Edge normalisation parameters
         self.register_buffer("edge_counter", torch.zeros(1))
         self.register_buffer("edge_in_sum", torch.zeros(edge_features))
@@ -831,20 +832,31 @@ class SequentialModule(pl.LightningModule):
         # Determine valid initialisations at t=11
         mask = batch.x[:, :, -1]
         valid_mask = mask[:, 10] > 0
+
         # Discard non-valid nodes as no initial trajectories will be known
         batch.x = batch.x[valid_mask]
         batch.batch = batch.batch[valid_mask]
         batch.tracks_to_predict = batch.tracks_to_predict[valid_mask]
-        batch.type = one_hot(batch.type[valid_mask], num_classes=5)
+        batch.type = batch.type[valid_mask]
+
+        # CARS
+        type_mask = batch.type[:, 1] == 1
+        batch.x = batch.x[type_mask]
+        batch.batch = batch.batch[type_mask]
+        batch.tracks_to_predict = batch.tracks_to_predict[type_mask]
+        batch.type = batch.type[type_mask]
+
         # Update mask
         mask = batch.x[:, :, -1].bool()
+
+        # Discard masks and extract static features
         batch.x = batch.x[:, :, :-1]
         static_features = torch.cat(
             [batch.x[:, 10, self.out_features :], batch.type], dim=1
         )
         edge_attr = None
 
-        # Extract dimensions
+        # Extract dimensions and allocate predictions
         n_nodes = batch.num_nodes
         y_predictions = torch.zeros((n_nodes, 90, self.out_features))
         y_predictions = y_predictions.type_as(batch.x)
@@ -852,13 +864,11 @@ class SequentialModule(pl.LightningModule):
         # Obtain target delta dynamic nodes
         # Use torch.roll to compute differences between x_t and x_{t+1}.
         # Ignore final difference (between t_0 and t_{-1})
-        y_target_abs = (
+        y_target = (
             torch.roll(batch.x[:, :, : self.out_features], (0, -1, 0), (0, 1, 2))
             - batch.x[:, :, : self.out_features]
         )[:, :-1, :]
-        y_target_abs = y_target_abs.type_as(batch.x)
-        y_target_nrm = torch.zeros_like(y_target_abs)
-        y_target_nrm = y_target_nrm.type_as(batch.x)
+        y_target = y_target.type_as(batch.x)
 
         # Initial hidden state
         if self.rnn_type == "GRU":
@@ -879,9 +889,11 @@ class SequentialModule(pl.LightningModule):
             # Extract current input and target
             mask_t = mask[:, t]
             x_t = torch.cat([batch.x[mask_t, t, :], batch.type[mask_t]], dim=1)
-            y_t = y_target_abs[:, t, :]
+            # y_t = y_target[:, t, :]
+            # Ensure device placement for new tensors
             x_t = x_t.type_as(batch.x)
-            y_t = y_t.type_as(batch.x)
+            # y_t = y_t.type_as(batch.x)
+
             # Add noise if specified
             if self.noise is not None:
                 x_t[:, : self.out_features] += self.noise * torch.randn_like(
@@ -929,47 +941,45 @@ class SequentialModule(pl.LightningModule):
             # Training 1/2        #
             #######################
 
-            if edge_attr is None:
-                self.update_in_normalisation(x_t.detach().clone())
-            else:
-                self.update_in_normalisation(
-                    x_t.detach().clone(), edge_attr.detach().clone()
-                )
-            self.update_out_normalisation(y_t.detach().clone())
+            # Normalise input graph
+            if self.normalise:
+                # x, edge_attr = self.in_normalise(x, edge_attr)
+                x_t[:, [0, 1, 2]] -= batch.loc[batch.batch][mask_t][:, [0, 1, 2]]
 
-            # Obtain normalised input graph and normalised target nodes
-            x_t_nrm, edge_attr_nrm = self.in_normalise(x_t, edge_attr)
-            y_t_nrm = self.out_normalise(y_t)
-            # x_t_nrm, edge_attr_nrm, y_t_nrm = x_t, edge_attr, y_t
-            y_target_nrm[:, t, :] = y_t_nrm
             # Obtain normalised predicted delta dynamics
             if h is None:
-                y_pred_t = self.model(
-                    x=x_t_nrm,
+                delta_x = self.model(
+                    x=x_t,
                     edge_index=edge_index,
-                    edge_attr=edge_attr_nrm,
+                    edge_attr=edge_attr,
                     batch=batch.batch[mask_t],
                 )
             else:
                 # Add zero rows for new columns
                 assert self.rnn_type == "GRU"
-                y_pred_t, h_t = self.model(
-                    x=x_t_nrm,
+                delta_x, h_t = self.model(
+                    x=x_t,
                     edge_index=edge_index,
-                    edge_attr=edge_attr_nrm,
+                    edge_attr=edge_attr,
                     batch=batch.batch[mask_t],
                     hidden=h[:, mask_t],
                 )
+                # Update hidden states
                 h[:, mask_t] = h_t
 
+            # Transform yaw
+            bbox_yaw = torch.atan2(torch.tanh(delta_x[:, 5]), torch.tanh(delta_x[:, 6])).unsqueeze(1)
+            vel_yaw = torch.atan2(torch.tanh(delta_x[:, 7]), torch.tanh(delta_x[:, 8])).unsqueeze(1)
+            tmp = torch.cat([delta_x[:, 0:5], bbox_yaw, vel_yaw], dim=1)
+            delta_x = tmp
+
             # Save deltas for loss computation
-            y_predictions[mask_t, t, :] = y_pred_t
-            # Renormalise output dynamics
-            y_pred_abs = self.out_renormalise(y_pred_t)
+            y_predictions[mask_t, t, :] = delta_x
+
             # Add deltas to input graph
             x_t = torch.cat(
                 (
-                    batch.x[mask_t, t, : self.out_features] + y_pred_abs,
+                    batch.x[mask_t, t, : self.out_features] + delta_x,
                     static_features[mask_t],
                 ),
                 dim=-1,
@@ -993,8 +1003,8 @@ class SequentialModule(pl.LightningModule):
             # Use groundtruth 'teacher_forcing_ratio' % of the time
             if use_groundtruth:
                 x_t = torch.cat([batch.x[:, t, :], batch.type], dim=1)
-            x_prev = x_t
-            y_t = y_target_abs[:, t, :]
+            x_prev = x_t.clone()
+            # y_t = y_target[:, t, :]
 
             ######################
             # Graph construction #
@@ -1037,42 +1047,41 @@ class SequentialModule(pl.LightningModule):
             # Training 2/2        #
             #######################
 
-            if edge_attr is None:
-                self.update_in_normalisation(x_t.detach().clone())
-            else:
-                self.update_in_normalisation(
-                    x_t.detach().clone(), edge_attr.detach().clone()
-                )
-            self.update_out_normalisation(y_t.detach().clone())
+            # Normalise input graph
+            if self.normalise:
+                # x, edge_attr = self.in_normalise(x, edge_attr)
+                x_t[:, [0, 1, 2]] -= batch.loc[batch.batch][:, [0, 1, 2]]
+                # x[:, [0, 1, 2]] /= batch.std[batch.batch][:, [0, 1, 2]]
 
-            # Obtain normalised input graph and normalised target nodes
-            x_t_nrm, edge_attr_nrm = self.in_normalise(x_t, edge_attr)
-            y_t_nrm = self.out_normalise(y_t)
-            y_target_nrm[:, t, :] = y_t_nrm
             # Obtain normalised predicted delta dynamics
             if h is None:
-                y_pred_t = self.model(
-                    x=x_t_nrm,
-                    edge_index=edge_index,
-                    edge_attr=edge_attr_nrm,
-                    batch=batch.batch,
+                delta_x = self.model(
+                x=x_t,
+                edge_index=edge_index,
+                edge_attr=edge_attr,
+                batch=batch.batch,
                 )
             else:
-                y_pred_t, h = self.model(
-                    x=x_t_nrm,
+                delta_x, h = self.model(
+                    x=x_t,
                     edge_index=edge_index,
-                    edge_attr=edge_attr_nrm,
+                    edge_attr=edge_attr,
                     batch=batch.batch,
                     hidden=h,
                 )
 
+            # Transform yaw
+            bbox_yaw = torch.atan2(torch.tanh(delta_x[:, 5]), torch.tanh(delta_x[:, 6])).unsqueeze(1)
+            vel_yaw = torch.atan2(torch.tanh(delta_x[:, 7]), torch.tanh(delta_x[:, 8])).unsqueeze(1)
+            tmp = torch.cat([delta_x[:, 0:5], bbox_yaw, vel_yaw], dim=1)
+            delta_x = tmp
+
             # Save deltas for loss computation
-            y_predictions[:, t, :] = y_pred_t
-            # Renormalise output dynamics
-            y_pred_abs = self.out_renormalise(y_pred_t)
+            y_predictions[:, t, :] = delta_x
+
             # Add deltas to input graph. Input for next timestep
             x_t = torch.cat(
-                (x_prev[:, : self.out_features] + y_pred_abs, static_features), dim=-1
+                (x_prev[:, : self.out_features] + delta_x, static_features), dim=-1
             )
 
         loss_mask = mask[:, :-1]
@@ -1080,16 +1089,16 @@ class SequentialModule(pl.LightningModule):
 
         # Compute and log loss
         fde_loss = self.train_fde_loss(
-            y_predictions[fde_mask, -1, :3], y_target_nrm[fde_mask, -1, :3]
+            y_predictions[fde_mask, -1, :3], y_target[fde_mask, -1, :3]
         )
         ade_loss = self.train_ade_loss(
-            y_predictions[:, :, :3][loss_mask], y_target_nrm[:, :, :3][loss_mask]
+            y_predictions[:, :, :3][loss_mask], y_target[:, :, :3][loss_mask]
         )
         vel_loss = self.train_vel_loss(
-            y_predictions[:, :, 3:5][loss_mask], y_target_nrm[:, :, 3:5][loss_mask]
+            y_predictions[:, :, 3:5][loss_mask], y_target[:, :, 3:5][loss_mask]
         )
         yaw_loss = self.train_yaw_loss(
-            y_predictions[:, :, 5:7][loss_mask], y_target_nrm[:, :, 5:7][loss_mask]
+            y_predictions[:, :, 5:7][loss_mask], y_target[:, :, 5:7][loss_mask]
         )
 
         self.log("train_fde_loss", fde_loss, on_step=True, on_epoch=True)
@@ -1123,7 +1132,15 @@ class SequentialModule(pl.LightningModule):
         batch.x = batch.x[valid_mask]
         batch.batch = batch.batch[valid_mask]
         batch.tracks_to_predict = batch.tracks_to_predict[valid_mask]
-        batch.type = one_hot(batch.type[valid_mask], num_classes=5)
+        batch.type = batch.type[valid_mask]
+
+        # CARS
+        type_mask = batch.type[:, 1] == 1
+        batch.x = batch.x[type_mask]
+        batch.batch = batch.batch[type_mask]
+        batch.tracks_to_predict = batch.tracks_to_predict[type_mask]
+        batch.type = batch.type[type_mask]
+
         # Update mask
         mask = batch.x[:, :, -1].bool()
 
@@ -1201,30 +1218,39 @@ class SequentialModule(pl.LightningModule):
             ######################
 
             # Normalise input graph
-            x, edge_attr = self.in_normalise(x, edge_attr)
+            if self.normalise:
+                # x, edge_attr = self.in_normalise(x, edge_attr)
+                x[:, [0, 1, 2]] -= batch.loc[batch.batch][mask_t][:, [0, 1, 2]]
+                # x[:, [0, 1, 2]] /= batch.std[batch.batch][mask_t][:, [0, 1, 2]]
+
             # Obtain normalised predicted delta dynamics
             if h is None:
-                x = self.model(
+                delta_x = self.model(
                     x=x,
                     edge_index=edge_index,
                     edge_attr=edge_attr,
                     batch=batch.batch[mask_t],
                 )
             else:
-                x, h_t = self.model(
+                delta_x, h_t = self.model(
                     x=x,
                     edge_index=edge_index,
                     edge_attr=edge_attr,
                     batch=batch.batch[mask_t],
                     hidden=h[:, mask_t],
                 )
+                # Update hidden state
                 h[:, mask_t] = h_t
 
-            # Renormalise output dynamics
-            x = self.out_renormalise(x)
+            # Transform yaw
+            bbox_yaw = torch.atan2(torch.tanh(delta_x[:, 5]), torch.tanh(delta_x[:, 6])).unsqueeze(1)
+            vel_yaw = torch.atan2(torch.tanh(delta_x[:, 7]), torch.tanh(delta_x[:, 8])).unsqueeze(1)
+            tmp = torch.cat([delta_x[:, 0:5], bbox_yaw, vel_yaw], dim=1)
+            delta_x = tmp
+
             # Add deltas to input graph
             predicted_graph = torch.cat(
-                (batch.x[mask_t, t, : self.out_features] + x, static_features[mask_t]),
+                (batch.x[mask_t, t, : self.out_features] + delta_x, static_features[mask_t]),
                 dim=-1,
             )
             predicted_graph = predicted_graph.type_as(batch.x)
@@ -1244,7 +1270,7 @@ class SequentialModule(pl.LightningModule):
             ######################
 
             # Latest prediction as input
-            x = predicted_graph
+            x = predicted_graph.clone()
 
             # Construct edges
             if self.edge_type == "knn":
@@ -1284,28 +1310,37 @@ class SequentialModule(pl.LightningModule):
             ######################
 
             # Normalise input graph
-            x, edge_attr = self.in_normalise(x, edge_attr)
+            if self.normalise:
+                # x, edge_attr = self.in_normalise(x, edge_attr)
+                x[:, [0, 1, 2]] -= batch.loc[batch.batch][mask_t][:, [0, 1, 2]]
+                # x[:, [0, 1, 2]] /= batch.std[batch.batch][mask_t][:, [0, 1, 2]]
+
             # Obtain normalised predicted delta dynamics
             if h is None:
-                x = self.model(
+                delta_x = self.model(
                     x=x,
                     edge_index=edge_index,
                     edge_attr=edge_attr,
                     batch=batch.batch,
                 )
             else:
-                x, h = self.model(
+                delta_x, h = self.model(
                     x=x,
                     edge_index=edge_index,
                     edge_attr=edge_attr,
                     batch=batch.batch,
                     hidden=h,
                 )
-            # Renormalise deltas
-            x = self.out_renormalise(x)
+
+            # Transform yaw
+            bbox_yaw = torch.atan2(torch.tanh(delta_x[:, 5]), torch.tanh(delta_x[:, 6])).unsqueeze(1)
+            vel_yaw = torch.atan2(torch.tanh(delta_x[:, 7]), torch.tanh(delta_x[:, 8])).unsqueeze(1)
+            tmp = torch.cat([delta_x[:, 0:5], bbox_yaw, vel_yaw], dim=1)
+            delta_x = tmp
+
             # Add deltas to input graph
             predicted_graph = torch.cat(
-                (predicted_graph[:, : self.out_features] + x, static_features), dim=-1
+                (predicted_graph[:, : self.out_features] + delta_x, static_features), dim=-1
             )
             predicted_graph = predicted_graph.type_as(batch.x)
 
