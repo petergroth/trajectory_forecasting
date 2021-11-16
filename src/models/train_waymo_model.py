@@ -378,11 +378,9 @@ class OneStepModule(pl.LightningModule):
 
             # Normalise input graph
             if self.normalise:
-                x, edge_attr = self.in_normalise(x, edge_attr)
+                # x, edge_attr = self.in_normalise(x, edge_attr)
                 x[:, [0, 1, 2]] -= batch.loc[batch.batch][:, [0, 1, 2]]
                 # x[:, [0, 1, 2]] /= batch.std[batch.batch][:, [0, 1, 2]]
-
-
 
             # Obtain normalised predicted delta dynamics
             delta_x = self.model(
@@ -637,7 +635,9 @@ class OneStepModule(pl.LightningModule):
             delta_x = tmp
 
             # Add deltas to input graph
-            predicted_graph[:, : self.out_features] += delta_x
+            predicted_graph = torch.cat([predicted_graph[:, : self.out_features] + delta_x,
+                                         predicted_graph[:, self.out_features:]], dim=1)
+            predicted_graph = predicted_graph.type_as(batch.x)
 
             # Save prediction alongside true value (next time step state)
             y_hat[t, :, :] = predicted_graph
