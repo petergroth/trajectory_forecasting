@@ -1,20 +1,17 @@
 import argparse
 import pytorch_lightning as pl
 import torch
-import torch_scatter as sct
 import torch_geometric.nn
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.utilities.seed import seed_everything
 from src.data.dataset_waymo import OneStepWaymoDataModule, SequentialWaymoDataModule
 import torchmetrics
-from torch.nn.functional import one_hot
 from torch_geometric.data import Batch
 from src.models.model import *
-import yaml
 import hydra
 from omegaconf import DictConfig, OmegaConf
-import math
 from typing import Union
+from pytorch_lightning.callbacks import RichProgressBar
 
 
 class OneStepModule(pl.LightningModule):
@@ -228,10 +225,10 @@ class OneStepModule(pl.LightningModule):
 
         # Discard mask from features and extract static features
         batch.x = batch.x[:, :, :-1]
-        # static_features = torch.cat(
-        #     [batch.x[:, 10, self.out_features :], batch.type], dim=1
-        # )
-        # # static_features = static_features.type_as(batch.x)
+        static_features = torch.cat(
+            [batch.x[:, 10, self.out_features :], batch.type], dim=1
+        )
+        static_features = static_features.type_as(batch.x)
         edge_attr = None
 
         ######################
@@ -325,7 +322,7 @@ class OneStepModule(pl.LightningModule):
             predicted_graph = torch.cat(
                 (
                     batch.x[mask_t, t, : self.out_features] + delta_x,
-                    batch.x[mask_t, t, self.out_features :],
+                    static_features[mask_t],
                 ),
                 dim=-1,
             )
@@ -480,7 +477,7 @@ class OneStepModule(pl.LightningModule):
         return (ade_loss + vel_loss + yaw_loss) / 3
 
     def predict_step(self, batch, batch_idx=None):
-        raise NotImplementedError
+
         ######################
         # Initialisation     #
         ######################
@@ -514,9 +511,9 @@ class OneStepModule(pl.LightningModule):
         y_target = y_target.type_as(batch.x)
 
         batch.x = batch.x[:, :, :-1]
-        # static_features = torch.cat(
-        #     [batch.x[:, 10, self.out_features :], batch.type], dim=1
-        # )
+        static_features = torch.cat(
+            [batch.x[:, 10, self.out_features :], batch.type], dim=1
+        )
         edge_attr = None
 
         ######################
@@ -604,7 +601,7 @@ class OneStepModule(pl.LightningModule):
             predicted_graph = torch.cat(
                 (
                     batch.x[mask_t, t, : self.out_features] + delta_x,
-                    batch.x[mask_t, t, self.out_features :],
+                    static_features[mask_t],
                 ),
                 dim=-1,
             )
@@ -1449,6 +1446,9 @@ class SequentialModule(pl.LightningModule):
         y_target = y_target.type_as(batch.x)
 
         batch.x = batch.x[:, :, :-1]
+        static_features = torch.cat(
+            [batch.x[:, 10, self.out_features :], batch.type], dim=1
+        )
         edge_attr = None
 
         # Initial hidden state
@@ -1560,7 +1560,7 @@ class SequentialModule(pl.LightningModule):
             predicted_graph = torch.cat(
                 (
                     batch.x[mask_t, t, : self.out_features] + delta_x,
-                    batch.x[mask_t, t, self.out_features :],
+                    static_features[mask_t],
                 ),
                 dim=-1,
             )
@@ -1882,7 +1882,6 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
 def main(config):
     # Print configuration file
     print(OmegaConf.to_yaml(config))
-    torch.autograd.set_detect_anomaly(True)
     # Seed for reproducibility
     seed_everything(config["misc"]["seed"], workers=True)
     # Load data, model, and regressor
@@ -1917,7 +1916,9 @@ def main(config):
         )
     else:
         # Create trainer, fit, and validate
-        trainer = pl.Trainer(logger=wandb_logger, **config["trainer"])
+        trainer = pl.Trainer(
+            logger=wandb_logger, **config["trainer"], callbacks=[RichProgressBar()]
+        )
 
     if config["misc"]["continue_training"] is not None:
         raise NotImplementedError
