@@ -12,7 +12,7 @@ import hydra
 from omegaconf import DictConfig, OmegaConf
 from typing import Union
 from pytorch_lightning.callbacks import RichProgressBar
-
+import math
 
 class OneStepModule(pl.LightningModule):
     def __init__(
@@ -332,6 +332,19 @@ class OneStepModule(pl.LightningModule):
             )
             predicted_graph = predicted_graph.type_as(batch.x)
 
+            # Process yaw values to ensure [-pi, pi] interval
+            yaws = predicted_graph[:, [5, 6]]
+            yaws[yaws > 0] = (
+                    torch.fmod(yaws[yaws > 0] + math.pi, torch.tensor(2 * math.pi))
+                    - math.pi
+            )
+            yaws[yaws < 0] = (
+                    torch.fmod(yaws[yaws < 0] - math.pi, torch.tensor(2 * math.pi))
+                    + math.pi
+            )
+            predicted_graph[:, [5, 6]] = yaws
+
+
         # Save first prediction and target
         y_hat[0, mask_t, :] = predicted_graph[:, : self.out_features]
         y_target[0, mask_t, :] = batch.x[mask_t, 11, : self.out_features]
@@ -432,6 +445,18 @@ class OneStepModule(pl.LightningModule):
                 dim=1,
             )
             predicted_graph = predicted_graph.type_as(batch.x)
+
+            # Process yaw values to ensure [-pi, pi] interval
+            yaws = predicted_graph[:, [5, 6]]
+            yaws[yaws > 0] = (
+                    torch.fmod(yaws[yaws > 0] + math.pi, torch.tensor(2 * math.pi))
+                    - math.pi
+            )
+            yaws[yaws < 0] = (
+                    torch.fmod(yaws[yaws < 0] - math.pi, torch.tensor(2 * math.pi))
+                    + math.pi
+            )
+            predicted_graph[:, [5, 6]] = yaws
 
             # Save prediction alongside true value (next time step state)
             y_hat[t - 10, :, :] = predicted_graph[:, : self.out_features]
@@ -611,6 +636,18 @@ class OneStepModule(pl.LightningModule):
             )
             predicted_graph = predicted_graph.type_as(batch.x)
 
+            # Process yaw values to ensure [-pi, pi] interval
+            yaws = predicted_graph[:, [5, 6]]
+            yaws[yaws > 0] = (
+                    torch.fmod(yaws[yaws > 0] + math.pi, torch.tensor(2 * math.pi))
+                    - math.pi
+            )
+            yaws[yaws < 0] = (
+                    torch.fmod(yaws[yaws < 0] - math.pi, torch.tensor(2 * math.pi))
+                    + math.pi
+            )
+            predicted_graph[:, [5, 6]] = yaws
+
             # Save first prediction and target
             y_hat[t, mask_t, :] = predicted_graph
             y_target[t, mask_t, :] = torch.cat(
@@ -706,6 +743,18 @@ class OneStepModule(pl.LightningModule):
                 dim=1,
             )
             predicted_graph = predicted_graph.type_as(batch.x)
+
+            # Process yaw values to ensure [-pi, pi] interval
+            yaws = predicted_graph[:, [5, 6]]
+            yaws[yaws > 0] = (
+                    torch.fmod(yaws[yaws > 0] + math.pi, torch.tensor(2 * math.pi))
+                    - math.pi
+            )
+            yaws[yaws < 0] = (
+                    torch.fmod(yaws[yaws < 0] - math.pi, torch.tensor(2 * math.pi))
+                    + math.pi
+            )
+            predicted_graph[:, [5, 6]] = yaws
 
             # Save prediction alongside true value (next time step state)
             y_hat[t, :, :] = predicted_graph
@@ -961,24 +1010,37 @@ class SequentialModule(pl.LightningModule):
             # Save deltas for loss computation
             y_predictions[mask_t, t, :] = delta_x
 
-            # Transform yaw values for next graph
-            bbox_yaw = torch.atan2(
-                torch.tanh(delta_x[:, 5]), torch.tanh(delta_x[:, 6])
-            ).unsqueeze(1)
-            vel_yaw = torch.atan2(
-                torch.tanh(delta_x[:, 7]), torch.tanh(delta_x[:, 8])
-            ).unsqueeze(1)
-            tmp = torch.cat([delta_x[:, 0:5], bbox_yaw, vel_yaw], dim=1)
-            delta_x = tmp
+            if t == 10:
+                # Transform yaw values for next graph
+                bbox_yaw = torch.atan2(
+                    torch.tanh(delta_x[:, 5]), torch.tanh(delta_x[:, 6])
+                ).unsqueeze(1)
+                vel_yaw = torch.atan2(
+                    torch.tanh(delta_x[:, 7]), torch.tanh(delta_x[:, 8])
+                ).unsqueeze(1)
+                tmp = torch.cat([delta_x[:, 0:5], bbox_yaw, vel_yaw], dim=1)
+                delta_x = tmp
 
-            # Add deltas to input graph
-            x_t = torch.cat(
-                (
-                    batch.x[mask_t, t, : self.out_features] + delta_x,
-                    static_features[mask_t],
-                ),
-                dim=-1,
-            )
+                # Add deltas to input graph
+                x_t = torch.cat(
+                    (
+                        batch.x[mask_t, t, : self.out_features] + delta_x,
+                        static_features[mask_t],
+                    ),
+                    dim=-1,
+                )
+
+                # Process yaw values of latest graph to ensure [-pi, pi] interval
+                yaws = x_t[:, [5, 6]]
+                yaws[yaws > 0] = (
+                        torch.fmod(yaws[yaws > 0] + math.pi, torch.tensor(2 * math.pi))
+                        - math.pi
+                )
+                yaws[yaws < 0] = (
+                        torch.fmod(yaws[yaws < 0] - math.pi, torch.tensor(2 * math.pi))
+                        + math.pi
+                )
+                x_t[:, [5, 6]] = yaws
 
         # If using teacher_forcing, draw sample and accept <teach_forcing_ratio*100> % of the time. Else, deny.
         use_groundtruth = (
@@ -1098,6 +1160,18 @@ class SequentialModule(pl.LightningModule):
                 ),
                 dim=-1,
             )
+
+            # Process yaw values to ensure [-pi, pi] interval
+            yaws = x_t[:, [5, 6]]
+            yaws[yaws > 0] = (
+                    torch.fmod(yaws[yaws > 0] + math.pi, torch.tensor(2 * math.pi))
+                    - math.pi
+            )
+            yaws[yaws < 0] = (
+                    torch.fmod(yaws[yaws < 0] - math.pi, torch.tensor(2 * math.pi))
+                    + math.pi
+            )
+            x_t[:, [5, 6]] = yaws
 
         loss_mask = mask[:, :-1]
         fde_mask = mask[:, -2]
@@ -1267,25 +1341,38 @@ class SequentialModule(pl.LightningModule):
                 # Update hidden state
                 h[:, mask_t] = h_t
 
-            # Transform yaw
-            bbox_yaw = torch.atan2(
-                torch.tanh(delta_x[:, 5]), torch.tanh(delta_x[:, 6])
-            ).unsqueeze(1)
-            vel_yaw = torch.atan2(
-                torch.tanh(delta_x[:, 7]), torch.tanh(delta_x[:, 8])
-            ).unsqueeze(1)
-            tmp = torch.cat([delta_x[:, 0:5], bbox_yaw, vel_yaw], dim=1)
-            delta_x = tmp
+            if t == 10:
+                # Transform yaw
+                bbox_yaw = torch.atan2(
+                    torch.tanh(delta_x[:, 5]), torch.tanh(delta_x[:, 6])
+                ).unsqueeze(1)
+                vel_yaw = torch.atan2(
+                    torch.tanh(delta_x[:, 7]), torch.tanh(delta_x[:, 8])
+                ).unsqueeze(1)
+                tmp = torch.cat([delta_x[:, 0:5], bbox_yaw, vel_yaw], dim=1)
+                delta_x = tmp
 
-            # Add deltas to input graph
-            predicted_graph = torch.cat(
-                (
-                    batch.x[mask_t, t, : self.out_features] + delta_x,
-                    static_features[mask_t],
-                ),
-                dim=-1,
-            )
-            predicted_graph = predicted_graph.type_as(batch.x)
+                # Add deltas to input graph
+                predicted_graph = torch.cat(
+                    (
+                        batch.x[mask_t, t, : self.out_features] + delta_x,
+                        static_features[mask_t],
+                    ),
+                    dim=-1,
+                )
+                predicted_graph = predicted_graph.type_as(batch.x)
+
+                # Process yaw values to ensure [-pi, pi] interval
+                yaws = predicted_graph[:, [5, 6]]
+                yaws[yaws > 0] = (
+                        torch.fmod(yaws[yaws > 0] + math.pi, torch.tensor(2 * math.pi))
+                        - math.pi
+                )
+                yaws[yaws < 0] = (
+                        torch.fmod(yaws[yaws < 0] - math.pi, torch.tensor(2 * math.pi))
+                        + math.pi
+                )
+                predicted_graph[:, [5, 6]] = yaws
 
         # Save first prediction and target
         y_hat[0, mask_t, :] = predicted_graph[:, : self.out_features]
@@ -1392,6 +1479,18 @@ class SequentialModule(pl.LightningModule):
                 dim=-1,
             )
             predicted_graph = predicted_graph.type_as(batch.x)
+
+            # Process yaw values to ensure [-pi, pi] interval
+            yaws = predicted_graph[:, [5, 6]]
+            yaws[yaws > 0] = (
+                    torch.fmod(yaws[yaws > 0] + math.pi, torch.tensor(2 * math.pi))
+                    - math.pi
+            )
+            yaws[yaws < 0] = (
+                    torch.fmod(yaws[yaws < 0] - math.pi, torch.tensor(2 * math.pi))
+                    + math.pi
+            )
+            predicted_graph[:, [5, 6]] = yaws
 
             # Save prediction alongside true value (next time step state)
             y_hat[t - 10, :, :] = predicted_graph[:, : self.out_features]
@@ -1595,6 +1694,18 @@ class SequentialModule(pl.LightningModule):
             )
             predicted_graph = predicted_graph.type_as(batch.x)
 
+            # Process yaw values to ensure [-pi, pi] interval
+            yaws = predicted_graph[:, [5, 6]]
+            yaws[yaws > 0] = (
+                    torch.fmod(yaws[yaws > 0] + math.pi, torch.tensor(2 * math.pi))
+                    - math.pi
+            )
+            yaws[yaws < 0] = (
+                    torch.fmod(yaws[yaws < 0] - math.pi, torch.tensor(2 * math.pi))
+                    + math.pi
+            )
+            predicted_graph[:, [5, 6]] = yaws
+
             # Save predictions and targets
             y_hat[t, mask_t, :] = predicted_graph
             y_target[t, mask_t, :] = torch.cat(
@@ -1700,6 +1811,18 @@ class SequentialModule(pl.LightningModule):
                 dim=-1,
             )
             predicted_graph = predicted_graph.type_as(batch.x)
+
+            # Process yaw values to ensure [-pi, pi] interval
+            yaws = predicted_graph[:, [5, 6]]
+            yaws[yaws > 0] = (
+                    torch.fmod(yaws[yaws > 0] + math.pi, torch.tensor(2 * math.pi))
+                    - math.pi
+            )
+            yaws[yaws < 0] = (
+                    torch.fmod(yaws[yaws < 0] - math.pi, torch.tensor(2 * math.pi))
+                    + math.pi
+            )
+            predicted_graph[:, [5, 6]] = yaws
 
             # Save prediction alongside true value (next time step state)
             y_hat[t, :, :] = predicted_graph
