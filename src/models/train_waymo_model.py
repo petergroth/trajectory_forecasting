@@ -823,7 +823,7 @@ class SequentialModule(pl.LightningModule):
         edge_attr = None
         # Extract dimensions and allocate predictions
         n_nodes = batch.num_nodes
-        y_predictions = torch.zeros((n_nodes, 90, self.out_features))
+        y_predictions = torch.zeros((n_nodes, 90, self.out_features+2))
         y_predictions = y_predictions.type_as(batch.x)
 
         # Obtain target delta dynamic nodes
@@ -833,6 +833,19 @@ class SequentialModule(pl.LightningModule):
             torch.roll(batch.x[:, :, : self.out_features], (0, -1, 0), (0, 1, 2))
             - batch.x[:, :, : self.out_features]
         )[:, :-1, :]
+
+        # Transform yaw values to their sines/cosines
+        sines = torch.sin(y_target[:, :, [5, 6]])
+        cosines = torch.cos(y_target[:, :, [5, 6]])
+
+        # Replace yaws with sines/cosines
+        y_target = torch.cat([
+            y_target[:, :, [0, 1, 2, 3, 4]],
+            sines[:, :, 0].unsqueeze(2),
+            cosines[:, :, 0].unsqueeze(2),
+            sines[:, :, 1].unsqueeze(2),
+            cosines[:, :, 1].unsqueeze(2)
+        ], dim=-1)
         y_target = y_target.type_as(batch.x)
 
         # Initial hidden state
@@ -941,7 +954,14 @@ class SequentialModule(pl.LightningModule):
                 # Update hidden states
                 h[:, mask_t] = h_t
 
-            # Transform yaw
+            # Process predicted yaw values
+            yaw_pred = torch.tanh(delta_x[:, 5:9])
+            delta_x[:, [5, 6, 7, 8]] = yaw_pred
+
+            # Save deltas for loss computation
+            y_predictions[mask_t, t, :] = delta_x
+
+            # Transform yaw values for next graph
             bbox_yaw = torch.atan2(
                 torch.tanh(delta_x[:, 5]), torch.tanh(delta_x[:, 6])
             ).unsqueeze(1)
@@ -950,9 +970,6 @@ class SequentialModule(pl.LightningModule):
             ).unsqueeze(1)
             tmp = torch.cat([delta_x[:, 0:5], bbox_yaw, vel_yaw], dim=1)
             delta_x = tmp
-
-            # Save deltas for loss computation
-            y_predictions[mask_t, t, :] = delta_x
 
             # Add deltas to input graph
             x_t = torch.cat(
@@ -1056,6 +1073,13 @@ class SequentialModule(pl.LightningModule):
                     hidden=h,
                 )
 
+            # Process predicted yaw values
+            yaw_pred = torch.tanh(delta_x[:, 5:9])
+            delta_x[:, [5, 6, 7, 8]] = yaw_pred
+
+            # Save deltas for loss computation
+            y_predictions[mask_t, t, :] = delta_x
+
             # Transform yaw
             bbox_yaw = torch.atan2(
                 torch.tanh(delta_x[:, 5]), torch.tanh(delta_x[:, 6])
@@ -1065,9 +1089,6 @@ class SequentialModule(pl.LightningModule):
             ).unsqueeze(1)
             tmp = torch.cat([delta_x[:, 0:5], bbox_yaw, vel_yaw], dim=1)
             delta_x = tmp
-
-            # Save deltas for loss computation
-            y_predictions[:, t, :] = delta_x
 
             # Add deltas to input graph. Input for next timestep
             x_t = torch.cat(
