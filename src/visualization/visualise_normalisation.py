@@ -22,7 +22,7 @@ def main():
     dm = OneStepWaymoDataModule()
     dm.setup()
     loader = dm.val_dataloader()
-    seq_idx = 165
+    seq_idx = 0
     for i, batch in enumerate(loader):
         if i == seq_idx:
             break
@@ -330,7 +330,7 @@ def main():
     loc_idx = [0, 1, 2]
     std_idx = [0, 1, 2, 3, 4, 7, 8, 9]
 
-    global_scale = batch.std[:, [0, 1, 2, 3, 4, 7, 8, 9]].mean()
+    global_scale = 8.025897979736328
 
     for t in range(n_steps):
         y_target[:, t, loc_idx] -= batch.loc[batch.batch][:, loc_idx]
@@ -420,10 +420,11 @@ def main():
 
     ax[0, 0].axis("equal")
     ax[0, 1].axis("equal")
+    ax[1, 1].axis("equal")
     ax[0, 0].set_title("Unnormalised trajectories")
     ax[0, 1].set_title("Centred locations")
     ax[1, 0].set_title("Normalised locations")
-    ax[1, 1].set_title(f"Centred locations. All attributes are scaled by global scaling constant ({global_scale.item():.3})")
+    ax[1, 1].set_title(f"Centred locations. All attributes are scaled by global scaling constant ({global_scale:.3})")
 
 
     plt.show()
