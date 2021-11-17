@@ -407,6 +407,7 @@ class OneStepModule(pl.LightningModule):
                     edge_attr /= self.global_scale
 
             # Obtain predicted delta dynamics
+
             delta_x = self.model(
                 x=x_t, edge_index=edge_index, edge_attr=edge_attr, batch=batch.batch
             )
@@ -479,7 +480,7 @@ class OneStepModule(pl.LightningModule):
         return (ade_loss + vel_loss + yaw_loss) / 3
 
     def predict_step(self, batch, batch_idx=None):
-
+        raise NotImplementedError
         ######################
         # Initialisation     #
         ######################
