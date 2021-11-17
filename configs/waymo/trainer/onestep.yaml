@@ -7,3 +7,4 @@ val_check_interval: 0.50 # Default 1.0
 gpus: 1
 default_root_dir: logs
 detect_anomaly: False
+gradient_clip_val: 10
