@@ -134,6 +134,9 @@ class OneStepWaymoTrainDataset(InMemoryDataset):
 
         # Collate and save
         data, slices = self.collate(data_list)
+        # GLOBAL SCALER
+        global_scale = data.std[:, [0, 1, 2, 3, 4, 7, 8, 9]].mean()
+        # global_scaler = 8.025897979736328
         torch.save((data, slices), self.processed_paths[0])
 
 
