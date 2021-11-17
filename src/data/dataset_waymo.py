@@ -114,19 +114,21 @@ class OneStepWaymoTrainDataset(InMemoryDataset):
                     valid_mask = torch.logical_and(valid_x, valid_y)
 
                     # Combine features with types
-                    node_features = torch.cat([
-                        x[valid_mask, :-1], one_hot(
-                                                    torch.Tensor(parsed["state/type"].numpy())[valid_mask].type(
-                                                        torch.LongTensor
-                                                    ),
-                                                    num_classes=5,
-                                                )
-                    ], dim=1)
+                    node_features = torch.cat(
+                        [
+                            x[valid_mask, :-1],
+                            one_hot(
+                                torch.Tensor(parsed["state/type"].numpy())[
+                                    valid_mask
+                                ].type(torch.LongTensor),
+                                num_classes=5,
+                            ),
+                        ],
+                        dim=1,
+                    )
 
                     # Save data object to list
-                    data = Data(
-                        x=node_features, y=y[valid_mask, :7], edge_index=None
-                    )
+                    data = Data(x=node_features, y=y[valid_mask, :7], edge_index=None)
                     data["loc"] = loc.unsqueeze(0)
                     data["std"] = std.unsqueeze(0)
 

@@ -13,6 +13,7 @@ import hydra
 from omegaconf import DictConfig, OmegaConf
 from matplotlib.patches import Circle
 
+
 def main():
 
     ##################
@@ -39,8 +40,6 @@ def main():
     type = batch.type
 
     fig, ax = plt.subplots(2, 2, figsize=(20, 20))
-
-
 
     ##################
     # Raw data       #
@@ -175,23 +174,23 @@ def main():
                         facecolor=color,
                         alpha=0.05,
                     )
-                    ax[0,1].add_patch(rect)
+                    ax[0, 1].add_patch(rect)
                     # Pedestrian
                 elif int(type[agent, 2].item()) == 1:
-                    ax[0,1].plot(
+                    ax[0, 1].plot(
                         x, y, marker="o", color=color, alpha=0.05, markerfacecolor=None
                     )
                 # Bike
                 elif int(type[agent, 2].item()) == 1:
-                    ax[0,1].plot(
+                    ax[0, 1].plot(
                         x, y, marker="+", color=color, alpha=0.05, markerfacecolor=None
                     )
                 else:
-                    ax[0,1].plot(x, y, marker="x", color=color, alpha=0.05)
+                    ax[0, 1].plot(x, y, marker="x", color=color, alpha=0.05)
 
                 # Start
                 if t == 0:
-                    ax[0,1].quiver(
+                    ax[0, 1].quiver(
                         y_target[agent, t, 0].detach().numpy(),
                         y_target[agent, t, 1].detach().numpy(),
                         y_target[agent, t, 3].detach().numpy(),
@@ -204,7 +203,7 @@ def main():
                         color="lightgrey",
                     )
                 elif t == 10:
-                    ax[0,1].quiver(
+                    ax[0, 1].quiver(
                         y_target[agent, t, 0].detach().numpy(),
                         y_target[agent, t, 1].detach().numpy(),
                         y_target[agent, t, 3].detach().numpy(),
@@ -217,7 +216,7 @@ def main():
                         color="gray",
                     )
                 elif t == (n_steps - 1):
-                    ax[0,1].quiver(
+                    ax[0, 1].quiver(
                         y_target[agent, t, 0].detach().numpy(),
                         y_target[agent, t, 1].detach().numpy(),
                         y_target[agent, t, 3].detach().numpy(),
@@ -267,23 +266,23 @@ def main():
                         facecolor=color,
                         alpha=0.05,
                     )
-                    ax[1,0].add_patch(rect)
+                    ax[1, 0].add_patch(rect)
                     # Pedestrian
                 elif int(type[agent, 2].item()) == 1:
-                    ax[1,0].plot(
+                    ax[1, 0].plot(
                         x, y, marker="o", color=color, alpha=0.05, markerfacecolor=None
                     )
                 # Bike
                 elif int(type[agent, 2].item()) == 1:
-                    ax[1,0].plot(
+                    ax[1, 0].plot(
                         x, y, marker="+", color=color, alpha=0.05, markerfacecolor=None
                     )
                 else:
-                    ax[1,0].plot(x, y, marker="x", color=color, alpha=0.05)
+                    ax[1, 0].plot(x, y, marker="x", color=color, alpha=0.05)
 
                 # Start
                 if t == 0:
-                    ax[1,0].quiver(
+                    ax[1, 0].quiver(
                         y_target[agent, t, 0].detach().numpy(),
                         y_target[agent, t, 1].detach().numpy(),
                         y_target[agent, t, 3].detach().numpy(),
@@ -296,7 +295,7 @@ def main():
                         color="lightgrey",
                     )
                 elif t == 10:
-                    ax[1,0].quiver(
+                    ax[1, 0].quiver(
                         y_target[agent, t, 0].detach().numpy(),
                         y_target[agent, t, 1].detach().numpy(),
                         y_target[agent, t, 3].detach().numpy(),
@@ -309,7 +308,7 @@ def main():
                         color="gray",
                     )
                 elif t == (n_steps - 1):
-                    ax[1,0].quiver(
+                    ax[1, 0].quiver(
                         y_target[agent, t, 0].detach().numpy(),
                         y_target[agent, t, 1].detach().numpy(),
                         y_target[agent, t, 3].detach().numpy(),
@@ -362,23 +361,23 @@ def main():
                         facecolor=color,
                         alpha=0.05,
                     )
-                    ax[1,1].add_patch(rect)
+                    ax[1, 1].add_patch(rect)
                     # Pedestrian
                 elif int(type[agent, 2].item()) == 1:
-                    ax[1,1].plot(
+                    ax[1, 1].plot(
                         x, y, marker="o", color=color, alpha=0.05, markerfacecolor=None
                     )
                 # Bike
                 elif int(type[agent, 2].item()) == 1:
-                    ax[1,1].plot(
+                    ax[1, 1].plot(
                         x, y, marker="+", color=color, alpha=0.05, markerfacecolor=None
                     )
                 else:
-                    ax[1,0].plot(x, y, marker="x", color=color, alpha=0.05)
+                    ax[1, 0].plot(x, y, marker="x", color=color, alpha=0.05)
 
                 # Start
                 if t == 0:
-                    ax[1,1].quiver(
+                    ax[1, 1].quiver(
                         y_target[agent, t, 0].detach().numpy(),
                         y_target[agent, t, 1].detach().numpy(),
                         y_target[agent, t, 3].detach().numpy(),
@@ -391,7 +390,7 @@ def main():
                         color="lightgrey",
                     )
                 elif t == 10:
-                    ax[1,1].quiver(
+                    ax[1, 1].quiver(
                         y_target[agent, t, 0].detach().numpy(),
                         y_target[agent, t, 1].detach().numpy(),
                         y_target[agent, t, 3].detach().numpy(),
@@ -404,7 +403,7 @@ def main():
                         color="gray",
                     )
                 elif t == (n_steps - 1):
-                    ax[1,1].quiver(
+                    ax[1, 1].quiver(
                         y_target[agent, t, 0].detach().numpy(),
                         y_target[agent, t, 1].detach().numpy(),
                         y_target[agent, t, 3].detach().numpy(),
@@ -417,15 +416,15 @@ def main():
                         color="k",
                     )
 
-
     ax[0, 0].axis("equal")
     ax[0, 1].axis("equal")
     ax[1, 1].axis("equal")
     ax[0, 0].set_title("Unnormalised trajectories")
     ax[0, 1].set_title("Centred locations")
     ax[1, 0].set_title("Normalised locations")
-    ax[1, 1].set_title(f"Centred locations. All attributes are scaled by global scaling constant ({global_scale:.3})")
-
+    ax[1, 1].set_title(
+        f"Centred locations. All attributes are scaled by global scaling constant ({global_scale:.3})"
+    )
 
     plt.show()
     fig.savefig(
