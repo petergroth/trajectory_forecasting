@@ -17,7 +17,8 @@ from pytorch_lightning.callbacks import RichProgressBar
 class OneStepModule(pl.LightningModule):
     def __init__(
         self,
-        model_type,
+        model_type: Union[None, str],
+        model_dict: Union[None, dict],
         noise: Union[None, float] = None,
         lr: float = 1e-4,
         weight_decay: float = 0.0,
@@ -39,6 +40,10 @@ class OneStepModule(pl.LightningModule):
         if edge_type == "distance":
             assert min_dist > 0.0
 
+        # Instantiate model
+        self.model_type = model_type
+        self.model = eval(model_type)(**model_dict)
+
         # Setup metrics
         self.train_pos_loss = torchmetrics.MeanSquaredError()
         self.train_vel_loss = torchmetrics.MeanSquaredError()
@@ -59,7 +64,6 @@ class OneStepModule(pl.LightningModule):
         self.weight_decay = weight_decay
 
         # Model parameters
-        self.model = model_type
         self.out_features = out_features
         self.edge_features = edge_features
         self.node_features = node_features
@@ -132,7 +136,7 @@ class OneStepModule(pl.LightningModule):
         ######################
 
         # Obtain target delta dynamic nodes
-        y_target = batch.y[:, : self.out_features] - x[:, : self.out_features]
+        y_target = (batch.y[:, : self.out_features] - x[:, : self.out_features]).clone()
         y_target = y_target.type_as(batch.x)
 
         if self.normalise:
@@ -166,22 +170,22 @@ class OneStepModule(pl.LightningModule):
         ).T
 
         # Compute new positions using old velocities (in normalised space)
-        pos_expected = batch.x[:, [0, 1]] + 0.1 * batch.x[:, [3, 4]]
-        # Compute new positions by updating old position with new (normalised) delta dynamics
-        pos_new = delta_x[:, [0, 1]] / self.global_scale + batch.x[:, [0, 1]]
+        # pos_expected = batch.x[:, [0, 1]] + 0.1 * batch.x[:, [3, 4]]
+        # # Compute new positions by updating old position with new (normalised) delta dynamics
+        # pos_new = delta_x[:, [0, 1]] / self.global_scale + batch.x[:, [0, 1]]
 
         # Compute and log loss
         pos_loss = self.train_pos_loss(delta_x[:, :3], y_target[:, :3])
         vel_loss = self.train_pos_loss(delta_x[:, 3:5], y_target[:, 3:5])
         yaw_loss = self.train_pos_loss(yaw_pred, yaw_targ)
-        pos_diff = self.train_difference_loss(pos_new, pos_expected)
+        # pos_diff = self.train_difference_loss(pos_new, pos_expected)
 
         self.log("train_pos_loss", pos_loss, on_step=True, on_epoch=True)
         self.log("train_vel_loss", vel_loss, on_step=True, on_epoch=True)
         self.log("train_yaw_loss", 0.5 * yaw_loss, on_step=True, on_epoch=True)
-        self.log("position_difference", pos_diff, on_step=True, on_epoch=True)
+        # self.log("position_difference", pos_diff, on_step=True, on_epoch=True)
 
-        loss = pos_loss + vel_loss + 0.5 * yaw_loss + pos_diff
+        loss = pos_loss + vel_loss + 0.5 * yaw_loss # +  pos_diff
         self.log("train_total_loss", loss, on_step=True, on_epoch=True)
 
         return loss
@@ -718,7 +722,8 @@ class OneStepModule(pl.LightningModule):
 class SequentialModule(pl.LightningModule):
     def __init__(
         self,
-        model_type,
+        model_type: Union[None, str],
+        model_dict: Union[None, dict],
         lr: float = 1e-4,
         weight_decay: float = 0.0,
         noise: Union[None, float] = None,
@@ -755,6 +760,10 @@ class SequentialModule(pl.LightningModule):
         self.val_fde_ttp_loss = torchmetrics.MeanSquaredError()
         self.val_ade_ttp_loss = torchmetrics.MeanSquaredError()
 
+        # Instantiate model
+        self.model_type = model_type
+        self.model = eval(model_type)(**model_dict)
+
         # Learning parameters
         self.normalise = normalise
         self.global_scale = 8.025897979736328
@@ -765,7 +774,6 @@ class SequentialModule(pl.LightningModule):
         self.teacher_forcing_ratio = teacher_forcing_ratio
 
         # Model parameters
-        self.model = model_type
         self.rnn_type = rnn_type
         self.out_features = out_features
         self.edge_features = edge_features
@@ -1888,12 +1896,15 @@ def main(config):
     datamodule = eval(config["misc"]["dm_type"])(**config["datamodule"])
     # Define model
     if config["misc"]["model_type"] != "ConstantModel":
-        model = eval(config["misc"]["model_type"])(**config["model"])
+        model_dict = config["model"]
+        model_type = config["misc"]["model_type"]
     else:
-        model = None
+        model_dict = None
+        model_type = None
 
     # Define LightningModule
-    regressor = eval(config["misc"]["regressor_type"])(model, **config["regressor"])
+    regressor = eval(config["misc"]["regressor_type"])(model_type=model_type, model_dict=dict(model_dict),
+                                                       **config["regressor"])
 
     # Setup logging
     wandb_logger = WandbLogger(
@@ -1917,26 +1928,10 @@ def main(config):
     else:
         # Create trainer, fit, and validate
         trainer = pl.Trainer(
-            logger=wandb_logger, **config["trainer"], callbacks=[RichProgressBar()]
+            logger=wandb_logger, **config["trainer"] #, callbacks=[RichProgressBar()]
         )
 
-    if config["misc"]["continue_training"] is not None:
-        raise NotImplementedError
-        # Setup callbacks
-        checkpoint_callback = pl.callbacks.ModelCheckpoint(
-            monitor="val_ade_loss",
-            dirpath="checkpoints",
-            filename=config["logger"]["version"],
-        )
-        trainer = pl.Trainer(
-            logger=wandb_logger,
-            **config["trainer"],
-            resume_from_checkpoint=config["misc"]["continue_training"],
-            callbacks=[checkpoint_callback],
-        )
-        trainer.fit(model=regressor, datamodule=datamodule)
-
-    elif config["misc"]["train"]:
+    if config["misc"]["train"]:
         trainer.fit(model=regressor, datamodule=datamodule)
 
     trainer.validate(regressor, datamodule=datamodule)
