@@ -139,7 +139,7 @@ class OneStepModule(pl.LightningModule):
         ######################
 
         # Obtain target delta dynamic nodes
-        y_target = batch.y[:, : self.out_features] - x[:, : self.out_features]
+        y_target = (batch.y[:, : self.out_features] - x[:, : self.out_features]).clone()
         y_target = y_target.type_as(batch.x)
 
         if self.normalise:
@@ -179,6 +179,7 @@ class OneStepModule(pl.LightningModule):
 
         # Compute and log loss
         pos_loss = self.train_pos_loss(delta_x[:, :3], y_target[:, :3])
+
         vel_loss = self.train_vel_loss(delta_x[:, 3:5], y_target[:, 3:5])
         yaw_loss = self.train_yaw_loss(yaw_pred, yaw_targ)
         # pos_diff = self.train_difference_loss(pos_new, pos_expected)
@@ -189,6 +190,7 @@ class OneStepModule(pl.LightningModule):
         # self.log("position_difference", pos_diff, on_step=True, on_epoch=True)
 
         loss = pos_loss + vel_loss + yaw_loss  # +  pos_diff
+
         self.log("train_total_loss", loss, on_step=True, on_epoch=True)
 
         return loss
