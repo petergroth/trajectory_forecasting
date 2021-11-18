@@ -59,6 +59,7 @@ class OneStepModule(pl.LightningModule):
         # Learning parameters
         self.normalise = normalise
         self.global_scale = 8.025897979736328
+        # self.global_scale = 1
         self.noise = noise
         self.lr = lr
         self.weight_decay = weight_decay
@@ -85,6 +86,8 @@ class OneStepModule(pl.LightningModule):
         batch.x = batch.x[type_mask]
         batch.y = batch.y[type_mask]
         batch.batch = batch.batch[type_mask]
+        # Remove type from data
+        batch.x = batch.x[:, :10]
 
         # Extract node features
         x = batch.x
@@ -176,16 +179,18 @@ class OneStepModule(pl.LightningModule):
 
         # Compute and log loss
         pos_loss = self.train_pos_loss(delta_x[:, :3], y_target[:, :3])
-        vel_loss = self.train_pos_loss(delta_x[:, 3:5], y_target[:, 3:5])
-        yaw_loss = self.train_pos_loss(yaw_pred, yaw_targ)
+
+        vel_loss = self.train_vel_loss(delta_x[:, 3:5], y_target[:, 3:5])
+        yaw_loss = self.train_yaw_loss(yaw_pred, yaw_targ)
         # pos_diff = self.train_difference_loss(pos_new, pos_expected)
 
         self.log("train_pos_loss", pos_loss, on_step=True, on_epoch=True)
         self.log("train_vel_loss", vel_loss, on_step=True, on_epoch=True)
-        self.log("train_yaw_loss", 0.5 * yaw_loss, on_step=True, on_epoch=True)
+        self.log("train_yaw_loss", yaw_loss, on_step=True, on_epoch=True)
         # self.log("position_difference", pos_diff, on_step=True, on_epoch=True)
 
-        loss = pos_loss + vel_loss + 0.5 * yaw_loss # +  pos_diff
+        loss = pos_loss + vel_loss + yaw_loss  # +  pos_diff
+
         self.log("train_total_loss", loss, on_step=True, on_epoch=True)
 
         return loss
@@ -229,8 +234,11 @@ class OneStepModule(pl.LightningModule):
 
         # Discard mask from features and extract static features
         batch.x = batch.x[:, :, :-1]
+        # static_features = torch.cat(
+        #     [batch.x[:, 10, self.out_features :], batch.type], dim=1
+        # )
         static_features = torch.cat(
-            [batch.x[:, 10, self.out_features :], batch.type], dim=1
+            [batch.x[:, 10, self.out_features:]], dim=1
         )
         static_features = static_features.type_as(batch.x)
         edge_attr = None
@@ -246,7 +254,8 @@ class OneStepModule(pl.LightningModule):
             ######################
 
             mask_t = mask[:, t]
-            x_t = torch.cat([batch.x[mask_t, t, :], batch.type[mask_t]], dim=1)
+            # x_t = torch.cat([batch.x[mask_t, t, :], batch.type[mask_t]], dim=1)
+            x_t = batch.x[mask_t, t, :].clone()
             batch_t = batch.batch[mask_t]
 
             # Construct edges
@@ -540,8 +549,11 @@ class OneStepModule(pl.LightningModule):
         y_target = y_target.type_as(batch.x)
 
         batch.x = batch.x[:, :, :-1]
+        # static_features = torch.cat(
+        #     [batch.x[:, 10, self.out_features :], batch.type], dim=1
+        # )
         static_features = torch.cat(
-            [batch.x[:, 10, self.out_features :], batch.type], dim=1
+            [batch.x[:, 10, self.out_features:]], dim=1
         )
         edge_attr = None
 
@@ -556,7 +568,8 @@ class OneStepModule(pl.LightningModule):
             ######################
 
             mask_t = mask[:, t]
-            x_t = torch.cat([batch.x[mask_t, t, :], batch.type[mask_t]], dim=1)
+            # x_t = torch.cat([batch.x[mask_t, t, :], batch.type[mask_t]], dim=1)
+            x_t = batch.x[mask_t, t, :].clone()
             batch_t = batch.batch[mask_t]
 
             # Construct edges
@@ -650,9 +663,11 @@ class OneStepModule(pl.LightningModule):
 
             # Save first prediction and target
             y_hat[t, mask_t, :] = predicted_graph
-            y_target[t, mask_t, :] = torch.cat(
-                [batch.x[mask_t, t + 1, :], batch.type[mask_t]], dim=-1
-            )
+            # y_target[t, mask_t, :] = torch.cat(
+            #     [batch.x[mask_t, t + 1, :], batch.type[mask_t]], dim=-1
+            # )
+
+            y_target[t, mask_t, :] = batch.x[mask_t, t + 1, :].clone()
 
         ######################
         # Future             #
@@ -758,7 +773,8 @@ class OneStepModule(pl.LightningModule):
 
             # Save prediction alongside true value (next time step state)
             y_hat[t, :, :] = predicted_graph
-            y_target[t, :, :] = torch.cat([batch.x[:, t + 1], batch.type], dim=-1)
+            # y_target[t, :, :] = torch.cat([batch.x[:, t + 1], batch.type], dim=-1)
+            y_target[t, :, :] = batch.x[:, t + 1].clone()
 
         return y_hat, y_target, mask
 
