@@ -1,4 +1,6 @@
 import argparse
+import os
+
 import pytorch_lightning as pl
 import torch
 import torch_geometric.nn
@@ -853,6 +855,8 @@ class SequentialModule(pl.LightningModule):
         self.edge_weight = edge_weight
         self.self_loop = self_loop
         self.undirected = undirected
+
+        self.save_hyperparameters()
 
     def training_step(self, batch: Batch, batch_idx: int):
 
@@ -2075,8 +2079,11 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
 
 @hydra.main(config_path="../../configs/waymo/", config_name="config")
 def main(config):
-    # Print configuration file
+    # Print configuration file and save
     print(OmegaConf.to_yaml(config))
+    log_dir = f"logs/{config.logger.project}/{config.logger.version}"
+    os.makedirs(log_dir, exist_ok=True)
+    OmegaConf.save(config, f=f"{log_dir}/{config.logger.version}.yaml")
     # Seed for reproducibility
     seed_everything(config["misc"]["seed"], workers=True)
     # Load data, model, and regressor
@@ -2086,8 +2093,7 @@ def main(config):
         model_dict = config["model"]
         model_type = config["misc"]["model_type"]
     else:
-        model_dict = None
-        model_type = None
+        model_dict, model_type = None, None
 
     # Define LightningModule
     regressor = eval(config["misc"]["regressor_type"])(model_type=model_type, model_dict=dict(model_dict),
@@ -2100,23 +2106,15 @@ def main(config):
     wandb_logger.watch(regressor, log_freq=config["misc"]["log_freq"], log_graph=False)
     # Add default dir for logs
 
-    # Setup trainer
-    if config["misc"]["checkpoint"]:
-        # Setup callbacks
-        checkpoint_callback = pl.callbacks.ModelCheckpoint(
-            monitor="val_total_loss",
-            dirpath="checkpoints",
-            filename=config["logger"]["version"],
-        )
-        # Create trainer, fit, and validate
-        trainer = pl.Trainer(
-            logger=wandb_logger, **config["trainer"], callbacks=[checkpoint_callback]
-        )
-    else:
-        # Create trainer, fit, and validate
-        trainer = pl.Trainer(
-            logger=wandb_logger, **config["trainer"] #, callbacks=[RichProgressBar()]
-        )
+    # Setup callbacks
+    checkpoint_callback = pl.callbacks.ModelCheckpoint(
+        filename=config["logger"]["version"],
+        monitor="val_total_loss",
+        save_last=True)
+    # Create trainer, fit, and validate
+    trainer = pl.Trainer(
+        logger=wandb_logger, **config["trainer"], callbacks=[checkpoint_callback]
+    )
 
     if config["misc"]["train"]:
         trainer.fit(model=regressor, datamodule=datamodule)

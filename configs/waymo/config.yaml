@@ -3,8 +3,6 @@ defaults:
   - model: mlp_forward
   - regressor: onestep
   - trainer: onestep
-  - ckpt_path: null
-  - sequence_idx: null
   - _self_
 
 logger:
@@ -21,8 +19,6 @@ misc:
   checkpoint: False
   train: True
   continue_training: null
-  ckpt_path: null
-  sequence_idx: null
   log_freq: 10
 
 hydra:
