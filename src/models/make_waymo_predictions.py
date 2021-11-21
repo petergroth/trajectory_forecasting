@@ -23,6 +23,12 @@ def make_predictions(path, config, sequence_idx=0):
     config["datamodule"]["val_batch_size"] = 1
     config["datamodule"]["batch_size"] = 1
     datamodule = eval(config["misc"]["dm_type"])(**config["datamodule"])
+
+    config.datamodule = sequential
+    config.model = rnn_forward
+    config.regressor = sequential
+    config.trainer = sequential
+
     # Load correct model
     if config["misc"]["model_type"] != "ConstantModel":
         regressor = eval(config["misc"]["regressor_type"]).load_from_checkpoint(path)
