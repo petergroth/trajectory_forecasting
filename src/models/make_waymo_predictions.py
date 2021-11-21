@@ -24,11 +24,6 @@ def make_predictions(path, config, sequence_idx=0):
     config["datamodule"]["batch_size"] = 1
     datamodule = eval(config["misc"]["dm_type"])(**config["datamodule"])
 
-    config.datamodule = sequential
-    config.model = rnn_forward
-    config.regressor = sequential
-    config.trainer = sequential
-
     # Load correct model
     if config["misc"]["model_type"] != "ConstantModel":
         regressor = eval(config["misc"]["regressor_type"]).load_from_checkpoint(path)
@@ -44,7 +39,7 @@ def make_predictions(path, config, sequence_idx=0):
     for i, batch in enumerate(loader):
         if i == sequence_idx:
             y_hat, y_target, mask = regressor.predict_step(batch)
-            torch.save((y_hat, y_target, mask), dirpath + f"/sequence_{i:03}.pt")
+            torch.save((y_hat, y_target, mask), dirpath + f"/sequence_{i:04}.pt")
             return
 
 
@@ -53,7 +48,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("config")
     parser.add_argument("ckpt_path")
-    parser.add_argument("sequence_idx")
+    parser.add_argument("sequence_idx", type=int)
     args = parser.parse_args()
 
     # Load yaml
@@ -73,7 +68,7 @@ def main():
     # Location of prediction files
     dir = "src/predictions/raw_preds/waymo/" + config["logger"]["version"] + "/"
     # Load first file in directory
-    path = "sequence_" + f"{config.misc.sequence_idx:03}.pt"
+    path = "sequence_" + f"{args.sequence_idx:04}.pt"
     y_hat, y_target, mask = torch.load(dir + path)
     y_hat = y_hat.detach()
     n_steps, n_agents, n_features = y_hat.shape
@@ -238,7 +233,7 @@ def main():
         vis_dir
         + config["misc"]["model_type"]
         + "_sequence_"
-        + f"{config.misc.sequence_idx:03}.png"
+        + f"{args.sequence_idx:04}.png"
     )
 
 

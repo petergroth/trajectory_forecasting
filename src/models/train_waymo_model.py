@@ -1679,7 +1679,7 @@ class SequentialModule(pl.LightningModule):
             if self.edge_weight:
                 # Encode distance between nodes as edge_attr
                 row, col = edge_index
-                edge_attr = (x_t[row, :2] - x[col, :2]).norm(dim=-1).unsqueeze(1)
+                edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
                 edge_attr = edge_attr.type_as(batch.x)
 
             ######################
@@ -1695,9 +1695,9 @@ class SequentialModule(pl.LightningModule):
                     x_t[:, [0, 1, 2, 3, 4, 7, 8, 9]] /= self.global_scale
                 else:
                     # Center node positions
-                    x[:, [0, 1, 2]] -= batch.loc[batch.batch][mask_t][:, [0, 1, 2]]
+                    x_t[:, [0, 1, 2]] -= batch.loc[batch.batch][mask_t][:, [0, 1, 2]]
                     # Scale all features (except yaws) with global scaler
-                    x[:, [0, 1, 2, 3, 4, 7, 8, 9]] /= self.global_scale
+                    x_t[:, [0, 1, 2, 3, 4, 7, 8, 9]] /= self.global_scale
                     # Scale edge attributes
                     edge_attr /= self.global_scale
 
