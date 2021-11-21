@@ -94,7 +94,8 @@ def main():
                 length = y_target[t, agent, 8].item()
                 angle = y_target[t, agent, 5].item()
                 # If car
-                if int(y_target[t, agent, 11].item()) == 1:
+                # if int(y_target[t, agent, 11].item()) == 1:
+                if True:
                     c, s = np.cos(angle), np.sin(angle)
                     R = np.array(((c, -s), (s, c)))
                     anchor = np.dot(R, np.array([-length / 2, -width / 2])) + np.array(
@@ -111,17 +112,17 @@ def main():
                     )
                     axglob[0].add_patch(rect)
                 # Pedestrian
-                elif int(y_target[t, agent, 12].item()) == 1:
-                    axglob[0].plot(
-                        x, y, marker="o", color=color, alpha=0.05, markerfacecolor=None
-                    )
-                # Bike
-                elif int(y_target[t, agent, 13].item()) == 1:
-                    axglob[0].plot(
-                        x, y, marker="+", color=color, alpha=0.05, markerfacecolor=None
-                    )
-                else:
-                    axglob[0].plot(x, y, marker="x", color=color, alpha=0.05)
+                # elif int(y_target[t, agent, 12].item()) == 1:
+                #     axglob[0].plot(
+                #         x, y, marker="o", color=color, alpha=0.05, markerfacecolor=None
+                #     )
+                # # Bike
+                # elif int(y_target[t, agent, 13].item()) == 1:
+                #     axglob[0].plot(
+                #         x, y, marker="+", color=color, alpha=0.05, markerfacecolor=None
+                #     )
+                # else:
+                #     axglob[0].plot(x, y, marker="x", color=color, alpha=0.05)
 
             # Start
             if t == 0:
@@ -173,7 +174,8 @@ def main():
                 length = y_hat[t, agent, 8].item()
                 angle = y_hat[t, agent, 5].item()
                 # If car
-                if int(y_hat[t, agent, 11].item()) == 1:
+                if True:
+                # if int(y_hat[t, agent, 11].item()) == 1:
                     c, s = np.cos(angle), np.sin(angle)
                     R = np.array(((c, -s), (s, c)))
                     anchor = np.dot(R, np.array([-length / 2, -width / 2])) + np.array(
@@ -190,17 +192,17 @@ def main():
                     )
                     axglob[1].add_patch(rect)
                 # Pedestrian
-                elif int(y_hat[t, agent, 12].item()) == 1:
-                    axglob[1].plot(
-                        x, y, marker="o", color=color, alpha=0.05, markerfacecolor=None
-                    )
-                # Bike
-                elif int(y_hat[t, agent, 13].item()) == 1:
-                    axglob[1].plot(
-                        x, y, marker="+", color=color, alpha=0.05, markerfacecolor=None
-                    )
-                else:
-                    axglob[1].plot(x, y, marker="x", color=color, alpha=0.05)
+                # elif int(y_hat[t, agent, 12].item()) == 1:
+                #     axglob[1].plot(
+                #         x, y, marker="o", color=color, alpha=0.05, markerfacecolor=None
+                #     )
+                # # Bike
+                # elif int(y_hat[t, agent, 13].item()) == 1:
+                #     axglob[1].plot(
+                #         x, y, marker="+", color=color, alpha=0.05, markerfacecolor=None
+                #     )
+                # else:
+                #     axglob[1].plot(x, y, marker="x", color=color, alpha=0.05)
 
             if t == (n_steps - 1) or t == 0 or t == 10:
                 axglob[1].quiver(
