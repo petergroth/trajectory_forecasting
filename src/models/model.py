@@ -403,6 +403,7 @@ class rnn_node_forward_model(nn.Module):
         num_layers: int = 1,
         rnn_size: int = 20,
         out_features: int = 7,
+        **kwargs,
     ):
         super(rnn_node_forward_model, self).__init__()
         self.hidden_size = hidden_size
