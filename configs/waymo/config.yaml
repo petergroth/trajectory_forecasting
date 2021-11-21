@@ -10,7 +10,8 @@ defaults:
 logger:
   offline: False
   version: ???
-  project: meeting_nov_09
+  project: ???
+
 
 misc:
   seed: 1
@@ -22,6 +23,7 @@ misc:
   continue_training: null
   ckpt_path: null
   sequence_idx: null
+  log_freq: 10
 
 hydra:
   output_subdir: null

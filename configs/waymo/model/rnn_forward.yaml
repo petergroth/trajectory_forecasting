@@ -5,4 +5,5 @@ node_features: 15
 edge_features: 1
 skip: True
 aggregate: False
-out_features: 7
+out_features: 9
+
