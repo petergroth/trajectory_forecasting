@@ -27,7 +27,7 @@ def make_predictions(path, config, sequence_idx=0):
     if config["misc"]["model_type"] != "ConstantModel":
         regressor = eval(config["misc"]["regressor_type"]).load_from_checkpoint(path)
     else:
-        regressor = eval(config["misc"]["regressor_type"])(None, **config["regressor"])
+        regressor = eval(config["misc"]["regressor_type"])(None, None, **config["regressor"])
     # Setup
     regressor.eval()
     datamodule.setup()
@@ -42,13 +42,23 @@ def make_predictions(path, config, sequence_idx=0):
             return
 
 
-@hydra.main(config_path="../../configs/waymo/", config_name="config")
-def main(config):
+#@hydra.main(config_path="../../configs/waymo/", config_name="config")
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("config")
+    parser.add_argument("ckpt_path")
+    parser.add_argument("sequence_idx")
+    args = parser.parse_args()
+
+    # Load yaml
+    with open(args.config) as f:
+        config = yaml.safe_load(f)
+
     # Computes predictions for specified sequence
     make_predictions(
-        path=config.misc.ckpt_path,
-        config=dict(config),
-        sequence_idx=config.misc.sequence_idx,
+        path=args.ckpt_path,
+        config=config,
+        sequence_idx=args.sequence_idx,
     )
 
     # Create directory for current model
