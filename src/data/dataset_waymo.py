@@ -4,12 +4,12 @@ import os.path as osp
 import torch
 from torch.nn.functional import one_hot
 
-# from src.utils import parse_sequence
+from src.utils import parse_sequence
 from torch_geometric.data import Data, Dataset, InMemoryDataset
 from torch_geometric.loader import DataLoader
 import pytorch_lightning as pl
 
-# import tensorflow as tf
+import tensorflow as tf
 from typing import Optional
 
 
@@ -220,6 +220,8 @@ class SequentialWaymoTrainDataset(InMemoryDataset):
                         parsed["state/future/" + key].numpy()
                     )
 
+                if torch.any(feature_matrix[0, :, [0, 1]] > 8000) and torch.any(feature_matrix[0, :, [0, 1]] < 9000):
+                    pass
                 # Process yaw-values into [-pi, pi]
                 x_yaws = feature_matrix[:, :, 5:7]
                 x_yaws[x_yaws > 0] = (
@@ -258,7 +260,7 @@ class SequentialWaymoTrainDataset(InMemoryDataset):
 
         # Collate and save
         data, slices = self.collate(data_list)
-        torch.save((data, slices), self.processed_paths[0])
+        # torch.save((data, slices), self.processed_paths[0])
 
 
 class SequentialWaymoValDataset(InMemoryDataset):

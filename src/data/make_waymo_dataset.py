@@ -2,7 +2,7 @@ from src.data.dataset_waymo import OneStepWaymoDataModule, SequentialWaymoDataMo
 
 if __name__ == "__main__":
 
-    dm = OneStepWaymoDataModule(batch_size=128, shuffle=True)
+    dm = SequentialWaymoDataModule(batch_size=32, shuffle=True)
     dm.setup()
-    # dataset = dm.train_dataset
-    # dataset.process()
+    dataset = dm.train_dataset
+    dataset.process()

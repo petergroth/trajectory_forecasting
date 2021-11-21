@@ -1083,8 +1083,8 @@ class SequentialModule(pl.LightningModule):
             # Use groundtruth 'teacher_forcing_ratio' % of the time
             if use_groundtruth:
                 # x_t = torch.cat([batch.x[:, t, :], batch.type], dim=1)
-                x_t = batch.x[:, t, :]
-            x_prev = x_t
+                x_t = batch.x[:, t, :].clone()
+            x_prev = x_t.clone()
 
             ######################
             # Graph construction #
@@ -1203,7 +1203,11 @@ class SequentialModule(pl.LightningModule):
         loss_mask_1 = mask[:, 1:(self.training_horizon+1)]
         # Loss is computed at intersection
         loss_mask = torch.logical_and(loss_mask_0, loss_mask_1)
-        fde_mask = mask[:, -2]
+        # Determine valid end-points
+        fde_mask_0 = mask[:, -1]
+        # Determine valid inputs to end-points
+        fde_mask_1 = mask[:, -2]
+        fde_mask = torch.logical_and(fde_mask_0, fde_mask_1)
 
         # Compute and log loss
         fde_loss = self.train_fde_loss(
