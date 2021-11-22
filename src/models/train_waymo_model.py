@@ -2079,11 +2079,14 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
 
 @hydra.main(config_path="../../configs/waymo/", config_name="config")
 def main(config):
-    # Print configuration file and save
+    # Print configuration for online monitoring
     print(OmegaConf.to_yaml(config))
+    # Save complete yaml file for logging and reproducibility
     log_dir = f"logs/{config.logger.project}/{config.logger.version}"
     os.makedirs(log_dir, exist_ok=True)
-    OmegaConf.save(config, f=f"{log_dir}/{config.logger.version}.yaml")
+    yaml_path = f"{log_dir}/{config.logger.version}.yaml"
+    OmegaConf.save(config, f=yaml_path)
+
     # Seed for reproducibility
     seed_everything(config["misc"]["seed"], workers=True)
     # Load data, model, and regressor
@@ -2096,12 +2099,15 @@ def main(config):
         model_dict, model_type = None, None
 
     # Define LightningModule
-    regressor = eval(config["misc"]["regressor_type"])(model_type=model_type, model_dict=dict(model_dict),
+    regressor = eval(config["misc"]["regressor_type"])(model_type=model_type,
+                                                       model_dict=dict(model_dict),
                                                        **config["regressor"])
 
-    # Setup logging
+    # Setup logging (using saved yaml file)
     wandb_logger = WandbLogger(
-        entity="petergroth", config=dict(config), **config["logger"]
+        entity="petergroth",
+        config=OmegaConf.to_container(config, resolve=True),
+        **config["logger"]
     )
     wandb_logger.watch(regressor, log_freq=config["misc"]["log_freq"], log_graph=False)
     # Add default dir for logs
