@@ -365,3 +365,55 @@ class node_rnn_1(nn.Module):
         out = out.unsqueeze(1)
         out, hidden = self.node_rnn(out, hidden)
         return out.squeeze(), hidden
+
+
+class node_rnn_2(nn.Module):
+    # Input node update function.
+    # Assumes edge attributes have been updated
+    def __init__(
+            self,
+            node_features: int = 5,
+            dropout: float = 0.0,
+            edge_features: int = 0,
+            rnn_size: int = 20,
+            num_layers: int = 1,
+            out_features: int = 7,
+            hidden_size: int = 64,
+    ):
+        super(node_rnn_2, self).__init__()
+        self.out_features = out_features
+        self.rnn_size = rnn_size
+        self.edge_features = edge_features
+        self.num_layers = num_layers
+        self.dropout = dropout if num_layers > 1 else 0.0
+
+        self.node_rnn = nn.GRU(
+            input_size=node_features + edge_features,
+            hidden_size=rnn_size,
+            num_layers=num_layers,
+            dropout=self.dropout,
+            batch_first=True,
+        )
+
+        self.node_mlp = nn.Sequential(
+            nn.Linear(
+                in_features=rnn_size, out_features=hidden_size
+            ),
+            nn.ReLU(),
+            BatchNorm(in_channels=hidden_size),
+            nn.Linear(in_features=hidden_size, out_features=hidden_size),
+        )
+
+    def forward(self, x, edge_index, edge_attr, u, batch, hidden):
+        # x: [N, F_x], where N is the number of nodes.
+        # batch: [N] with max entry B - 1.
+        row, col = edge_index
+        # Aggregate edge attributes
+        edge_attr = scatter_add(edge_attr, row, dim=0, dim_size=x.size(0))
+        # Concatenate
+        out = torch.cat([x, edge_attr], dim=1)
+        # Add extra dimension
+        out = out.unsqueeze(1)
+        out, hidden = self.node_rnn(out, hidden)
+        out = self.node_mlp(out.squeeze())
+        return out, hidden

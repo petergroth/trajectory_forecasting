@@ -1,6 +1,6 @@
 import argparse
 import os
-
+from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 import optuna
 import pytorch_lightning as pl
 import torch
@@ -2135,17 +2135,18 @@ class Objective(object):
         )
         wandb_logger.watch(regressor, log_freq=self.config["misc"]["log_freq"], log_graph=False)
 
+        callbacks = [EarlyStopping(monitor="val_total_loss")]
+
         # Create trainer, fit, and validate
         trainer = pl.Trainer(
-            logger=wandb_logger, **self.config["trainer"], enable_checkpointing=False
+            logger=wandb_logger, **self.config["trainer"], enable_checkpointing=False, callbacks=callbacks
         )
-
         trainer.fit(model=regressor, datamodule=datamodule)
 
         wandb_logger.finalize("0")
         wandb_logger.experiment.finish()
 
-        return trainer.callback_metrics["val_total_loss"].item()
+        return trainer.early_stopping_callback.best_score.item()
 
 @hydra.main(config_path="../../configs/waymo/", config_name="config")
 def main(config):
