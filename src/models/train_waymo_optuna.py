@@ -15,6 +15,9 @@ import hydra
 from omegaconf import DictConfig, OmegaConf
 from typing import Union
 import math
+from pytorch_lightning.callbacks.early_stopping import EarlyStopping
+from optuna.integration import PyTorchLightningPruningCallback
+
 
 class OneStepModule(pl.LightningModule):
     def __init__(
@@ -2084,16 +2087,32 @@ class Objective(object):
     def __call__(self, trial):
 
         # Suggest hyperparameters
-        weight_decay = trial.suggest_categorical("weight_decay", [1e-4, 1e-3, 1e-2, 1e-1, 0, 1, 10, 100])
+
+        # Model
+        hidden_size = trial.suggest_categorical("hidden_size", [64, 96, 128, 192, 256])
+        latent_edge_features = trial.suggest_categorical("latent_edge_features", [64, 96, 128, 192, 256])
+
+        # Regressor
+        weight_decay = trial.suggest_categorical("weight_decay", [1e-4, 5e-4, 1e-3, 5e-3, 1e-2, 1e-1, 0, 1, 10])
         training_horizon = trial.suggest_categorical("training_horizon", [12, 13, 14, 15, 20, 25, 30, 40, 50, 70, 90])
         teacher_forcing_ratio = trial.suggest_float("teacher_forcing_ratio", low=0.0, high=0.9, step=0.1)
         min_dist = trial.suggest_float("min_dist", low=1.0, high=40.0)
-        n_neighbours = trial.suggest_int("n_neighbours", low=0, high=50)
-        # noise = trial.suggest_float("noise", low=0.0, high=1.0)
-        lr = trial.suggest_categorical("lr", [1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1])
-        batch_size = trial.suggest_categorical("batch_size", [2, 4, 8, 16, 32, 48, 64])
+        n_neighbours = trial.suggest_int("n_neighbours", low=1, high=50)
+        lr = trial.suggest_categorical("lr", [1e-6, 5e-6, 1e-5, 5e-5, 1e-4, 5e-4, 1e-3, 5e-3, 1e-2, 1e-1])
+        noise = trial.suggest_float("noise", low=0.0, high=1.0)
+
+        # Datamodule
+        batch_size = trial.suggest_categorical("batch_size", [16, 32, 48, 64, 96, 128])
+
+        # Trainer
+        stochastic_weight_avg = trial.suggest_categorical("stochastic_weight_avg", ["True", "False"])
+        gradient_clip_val = trial.suggest_float("gradient_clip_val", low=0.0, high=1.0)
 
         # Pack regressor parameters together
+        model_kwargs = {
+            "hidden_size": hidden_size,
+            "latent_edge_features": latent_edge_features
+        }
         regressor_kwargs = {
             "weight_decay": weight_decay,
             "n_neighbours": n_neighbours,
@@ -2101,13 +2120,27 @@ class Objective(object):
             "lr": lr,
             "training_horizon": training_horizon,
             "teacher_forcing_ratio": teacher_forcing_ratio,
+            "noise": noise
+        }
+        trainer_kwargs = {
+            "gradient_clip_val": gradient_clip_val,
+            "stochastic_weight_avg": stochastic_weight_avg
         }
 
         # Update model arguments
         self.config.datamodule.batch_size = batch_size
+
         regressor_dict = dict(self.config.regressor)
         regressor_dict.update(regressor_kwargs)
         self.config.regressor = DictConfig(regressor_dict)
+
+        trainer_dict = dict(self.config.trainer)
+        trainer_dict.update(trainer_kwargs)
+        self.config.trainer = DictConfig(trainer_dict)
+
+        model_dict = dict(self.config.model)
+        model_dict.update(model_kwargs)
+        self.config.model = DictConfig(model_dict)
 
         # Seed for reproducibility
         seed_everything(self.config["misc"]["seed"], workers=True)
@@ -2122,9 +2155,10 @@ class Objective(object):
                                                                 model_dict=dict(model_dict),
                                                                 **self.config["regressor"])
 
-
         log_dict = regressor_kwargs
-        log_dict.update({"batch_size": batch_size})
+        log_dict.update(trainer_kwargs)
+        log_dict.update(model_kwargs)
+        log_dict["batch_size"] = batch_size
 
         # Setup logging
         wandb_logger = WandbLogger(
@@ -2135,31 +2169,35 @@ class Objective(object):
         )
         wandb_logger.watch(regressor, log_freq=self.config["misc"]["log_freq"], log_graph=False)
 
+        # callbacks = [EarlyStopping(monitor="val_total_loss"),
+        #             PyTorchLightningPruningCallback(trial, monitor="val_total_loss")]
+
+        callbacks = [EarlyStopping(monitor="val_total_loss")]
+
         # Create trainer, fit, and validate
         trainer = pl.Trainer(
-            logger=wandb_logger, **self.config["trainer"], enable_checkpointing=False
+            logger=wandb_logger, **self.config["trainer"], enable_checkpointing=False, callbacks=callbacks
         )
 
         trainer.fit(model=regressor, datamodule=datamodule)
 
+        val_total_loss = trainer.early_stopping_callback.best_score.item()
+        wandb_logger.log_metrics({"best_total_val_loss": val_total_loss})
         wandb_logger.finalize("0")
         wandb_logger.experiment.finish()
 
-        return trainer.callback_metrics["val_total_loss"].item()
+        return val_total_loss
+
 
 @hydra.main(config_path="../../configs/waymo/", config_name="config")
 def main(config):
     # Print configuration file and save
     # print(OmegaConf.to_yaml(config))
 
-    pruner = optuna.pruners.MedianPruner()
+    # pruner = optuna.pruners.MedianPruner()
 
-    study = optuna.create_study(direction="minimize", pruner=pruner)
-    study.optimize(Objective(config), n_trials=10, timeout=600)
-
-    print("Best trial:")
-    print(study.best_trial)
-
+    study = optuna.create_study(direction="minimize")
+    study.optimize(Objective(config), n_trials=50, timeout=6000)
 
 
 if __name__ == "__main__":
