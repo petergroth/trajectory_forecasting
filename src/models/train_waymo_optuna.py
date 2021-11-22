@@ -1,6 +1,6 @@
 import argparse
 import os
-
+from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 import optuna
 import pytorch_lightning as pl
 import torch
@@ -2169,6 +2169,7 @@ class Objective(object):
         )
         wandb_logger.watch(regressor, log_freq=self.config["misc"]["log_freq"], log_graph=False)
 
+
         # callbacks = [EarlyStopping(monitor="val_total_loss"),
         #             PyTorchLightningPruningCallback(trial, monitor="val_total_loss")]
 
@@ -2178,7 +2179,6 @@ class Objective(object):
         trainer = pl.Trainer(
             logger=wandb_logger, **self.config["trainer"], enable_checkpointing=False, callbacks=callbacks
         )
-
         trainer.fit(model=regressor, datamodule=datamodule)
 
         val_total_loss = trainer.early_stopping_callback.best_score.item()
