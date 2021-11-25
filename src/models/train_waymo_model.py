@@ -819,11 +819,11 @@ class SequentialModule(pl.LightningModule):
         self.train_ade_loss = torchmetrics.MeanSquaredError()
         self.train_fde_loss = torchmetrics.MeanSquaredError()
         self.train_vel_loss = torchmetrics.MeanSquaredError()
-        self.train_yaw_loss = torchmetrics.MeanSquaredError()
+        self.train_yaw_loss = torchmetrics.MeanAbsoluteError()
         self.val_ade_loss = torchmetrics.MeanSquaredError()
         self.val_fde_loss = torchmetrics.MeanSquaredError()
         self.val_vel_loss = torchmetrics.MeanSquaredError()
-        self.val_yaw_loss = torchmetrics.MeanSquaredError()
+        self.val_yaw_loss = torchmetrics.MeanAbsoluteError()
         self.val_fde_ttp_loss = torchmetrics.MeanSquaredError()
         self.val_ade_ttp_loss = torchmetrics.MeanSquaredError()
 
@@ -1234,7 +1234,7 @@ class SequentialModule(pl.LightningModule):
         self.log("train_ade_loss", ade_loss, on_step=True, on_epoch=True, batch_size=loss_mask.sum().item())
         self.log("train_vel_loss", vel_loss, on_step=True, on_epoch=True, batch_size=loss_mask.sum().item())
         self.log("train_yaw_loss", yaw_loss, on_step=True, on_epoch=True, batch_size=loss_mask.sum().item())
-        loss = ade_loss + vel_loss + yaw_loss
+        loss = ade_loss + vel_loss + yaw_loss + fde_loss
         self.log(
             "train_total_loss",
             loss,
