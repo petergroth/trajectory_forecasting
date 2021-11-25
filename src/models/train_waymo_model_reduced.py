@@ -845,7 +845,7 @@ class SequentialModule(pl.LightningModule):
 
         # Model parameters
         self.rnn_type = rnn_type
-        assert out_features == 2
+        # assert out_features == 2
         self.out_features = out_features
         self.edge_features = edge_features
         self.node_features = node_features
@@ -859,6 +859,7 @@ class SequentialModule(pl.LightningModule):
         self.self_loop = self_loop
         self.undirected = undirected
 
+        self.node_indices = [0, 1, 7, 8, 9, 10]
         self.save_hyperparameters()
 
     def training_step(self, batch: Batch, batch_idx: int):
@@ -885,7 +886,7 @@ class SequentialModule(pl.LightningModule):
         batch.type = batch.type[type_mask]
 
         # Reduction: Limit to x-y predictions
-        batch.x = batch.x[:, :, [0, 1, 7, 8, 9, 10]]
+        batch.x = batch.x[:, :, self.node_indices]
 
         # Discard future values not used for training
         batch.x = batch.x[:, :(self.training_horizon+1)]
@@ -983,6 +984,8 @@ class SequentialModule(pl.LightningModule):
                 row, col = edge_index
                 edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
                 edge_attr = edge_attr.type_as(batch.x)
+                edge_attr = 1 / edge_attr
+                edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
 
             #######################
             # Training 1/2        #
@@ -1019,6 +1022,9 @@ class SequentialModule(pl.LightningModule):
                 # Update hidden states
                 h[:, mask_t] = h_t
 
+            if self.normalise:
+                delta_x *= self.global_scale
+
             # Save deltas for loss computation
             y_predictions[mask_t, t, :] = delta_x
 
@@ -1031,6 +1037,7 @@ class SequentialModule(pl.LightningModule):
                     ),
                     dim=-1,
                 )
+                x_t = x_t.type_as(batch.x)
 
         # If using teacher_forcing, draw sample and accept <teach_forcing_ratio*100> % of the time. Else, deny.
         use_groundtruth = (random.random() < self.teacher_forcing_ratio)
@@ -1081,7 +1088,9 @@ class SequentialModule(pl.LightningModule):
                 # Encode distance between nodes as edge_attr
                 row, col = edge_index
                 edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
+                edge_attr = 1 / edge_attr
                 edge_attr = edge_attr.type_as(batch.x)
+                edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
 
             #######################
             # Training 2/2        #
@@ -1090,7 +1099,7 @@ class SequentialModule(pl.LightningModule):
             # Normalise input graph
             if self.normalise:
                 # Center node positions
-                x_t[:, [0, 1]] -= batch.loc[batch.batch][mask_t][:, [0, 1]]
+                x_t[:, [0, 1]] -= batch.loc[batch.batch][:, [0, 1]]
                 # Scale all features (except yaws) with global scaler
                 x_t[:, self.norm_index] /= self.global_scale
                 if edge_attr is not None:
@@ -1114,6 +1123,9 @@ class SequentialModule(pl.LightningModule):
                     hidden=h,
                 )
 
+            if self.normalise:
+                delta_x *= self.global_scale
+
             # Save deltas for loss computation
             y_predictions[mask_t, t, :] = delta_x
 
@@ -1125,6 +1137,7 @@ class SequentialModule(pl.LightningModule):
                 ),
                 dim=-1,
             )
+            x_t = x_t.type_as(batch.x)
 
         # Determine valid inputs
         loss_mask_0 = mask[:, :self.training_horizon]
@@ -1140,15 +1153,15 @@ class SequentialModule(pl.LightningModule):
 
         # Compute and log loss
         fde_loss = self.train_fde_loss(
-            y_predictions[fde_mask, -1, :3], y_target[fde_mask, -1, :3]
+            y_predictions[fde_mask, -1][:, [0, 1]], y_target[fde_mask, -1][:, [0, 1]]
         )
         ade_loss = self.train_ade_loss(
-            y_predictions[:, :self.training_horizon, :3][loss_mask],
-            y_target[:, :self.training_horizon, :3][loss_mask]
+            y_predictions[:, :self.training_horizon, [0, 1]][loss_mask],
+            y_target[:, :self.training_horizon, [0, 1]][loss_mask]
         )
         # vel_loss = self.train_vel_loss(
-        #     y_predictions[:, :self.training_horizon, 3:5][loss_mask],
-        #     y_target[:, :self.training_horizon, 3:5][loss_mask]
+        #     y_predictions[:, :self.training_horizon, [2, 3]][loss_mask],
+        #     y_target[:, :self.training_horizon, [2, 3]][loss_mask]
         # )
         # yaw_loss = self.train_yaw_loss(
         #     y_predictions[:, :self.training_horizon, [5, 6, 7, 8]][loss_mask],
@@ -1159,7 +1172,8 @@ class SequentialModule(pl.LightningModule):
         self.log("train_ade_loss", ade_loss, on_step=True, on_epoch=True, batch_size=loss_mask.sum().item())
         # self.log("train_vel_loss", vel_loss, on_step=True, on_epoch=True, batch_size=loss_mask.sum().item())
         # self.log("train_yaw_loss", yaw_loss, on_step=True, on_epoch=True, batch_size=loss_mask.sum().item())
-        loss = ade_loss
+        loss = ade_loss + fde_loss
+
         self.log(
             "train_total_loss",
             loss,
@@ -1197,7 +1211,7 @@ class SequentialModule(pl.LightningModule):
         batch.type = batch.type[type_mask]
 
         # Reduction: Limit to x-y predictions
-        batch.x = batch.x[:, :, [0, 1, 7, 8, 9, 10]]
+        batch.x = batch.x[:, :, self.node_indices]
 
         # Update mask
         mask = batch.x[:, :, -1].bool()
@@ -1240,6 +1254,7 @@ class SequentialModule(pl.LightningModule):
             mask_t = mask[:, t]
             # x_t = torch.cat([batch.x[mask_t, t, :], batch.type[mask_t]], dim=1)
             x_t = batch.x[mask_t, t, :].clone()
+            x_t = x_t.type_as(batch.x)
 
             # Construct edges
             if self.edge_type == "knn":
@@ -1272,7 +1287,10 @@ class SequentialModule(pl.LightningModule):
                 # Encode distance between nodes as edge_attr
                 row, col = edge_index
                 edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
+                edge_attr = 1 / edge_attr
                 edge_attr = edge_attr.type_as(batch.x)
+                edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
+
 
             ######################
             # Validation 1/2     #
@@ -1308,6 +1326,10 @@ class SequentialModule(pl.LightningModule):
                 h[:, mask_t] = h_t
 
             if t == 10:
+
+                if self.normalise:
+                    delta_x *= self.global_scale
+
                 # Add deltas to input graph
                 predicted_graph = torch.cat(
                     (
@@ -1366,7 +1388,9 @@ class SequentialModule(pl.LightningModule):
                 # Encode distance between nodes as edge_attr
                 row, col = edge_index
                 edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
+                edge_attr = 1 / edge_attr
                 edge_attr = edge_attr.type_as(batch.x)
+                edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
 
             ######################
             # Validation 2/2     #
@@ -1375,7 +1399,7 @@ class SequentialModule(pl.LightningModule):
             # Normalise input graph
             if self.normalise:
                 # Center node positions
-                x_t[:, [0, 1]] -= batch.loc[batch.batch][mask_t][:, [0, 1]]
+                x_t[:, [0, 1]] -= batch.loc[batch.batch][:, [0, 1]]
                 # Scale all features (except yaws) with global scaler
                 x_t[:, self.norm_index] /= self.global_scale
                 if edge_attr is not None:
@@ -1399,6 +1423,9 @@ class SequentialModule(pl.LightningModule):
                     hidden=h,
                 )
 
+            if self.normalise:
+                delta_x *= self.global_scale
+
             # Add deltas to input graph
             predicted_graph = torch.cat(
                 (
@@ -1418,13 +1445,13 @@ class SequentialModule(pl.LightningModule):
 
         # Compute and log loss
         fde_loss = self.val_fde_loss(
-            y_hat[-1, fde_mask, :3], y_target[-1, fde_mask, :3]
+            y_hat[-1, fde_mask][:, [0, 1]], y_target[-1, fde_mask][:, [0, 1]]
         )
         ade_loss = self.val_ade_loss(
-            y_hat[:, :, 0:3][val_mask], y_target[:, :, 0:3][val_mask]
+            y_hat[:, :, [0, 1]][val_mask], y_target[:, :, [0, 1]][val_mask]
         )
         # vel_loss = self.val_vel_loss(
-        #     y_hat[:, :, 3:5][val_mask], y_target[:, :, 3:5][val_mask]
+        #     y_hat[:, :, [2, 3]][val_mask], y_target[:, :, [2, 3]][val_mask]
         # )
         # yaw_loss = self.val_yaw_loss(
         #     y_hat[:, :, 5:7][val_mask], y_target[:, :, 5:7][val_mask]
@@ -1433,13 +1460,13 @@ class SequentialModule(pl.LightningModule):
         # Compute losses on "tracks_to_predict"
         fde_ttp_mask = torch.logical_and(fde_mask, batch.tracks_to_predict)
         fde_ttp_loss = self.val_fde_ttp_loss(
-            y_hat[-1, fde_ttp_mask, :3], y_target[-1, fde_ttp_mask, :3]
+            y_hat[-1, fde_ttp_mask][:, [0, 1]], y_target[-1, fde_ttp_mask][:, [0, 1]]
         )
         ade_ttp_mask = torch.logical_and(
             val_mask, batch.tracks_to_predict.expand((80, mask.size(0)))
         )
         ade_ttp_loss = self.val_ade_loss(
-            y_hat[:, :, 0:3][ade_ttp_mask], y_target[:, :, 0:3][ade_ttp_mask]
+            y_hat[:, :, [0, 1]][ade_ttp_mask], y_target[:, :, [0, 1]][ade_ttp_mask]
         )
 
         ######################
@@ -1450,11 +1477,12 @@ class SequentialModule(pl.LightningModule):
         self.log("val_fde_loss", fde_loss, batch_size=fde_mask.sum().item())
         # self.log("val_vel_loss", vel_loss, batch_size=val_mask.sum().item())
         # self.log("val_yaw_loss", yaw_loss, batch_size=val_mask.sum().item())
-        self.log("val_total_loss", ade_loss, batch_size=val_mask.sum().item())
+        loss = ade_loss + fde_loss
+        self.log("val_total_loss", loss, batch_size=val_mask.sum().item())
         self.log("val_fde_ttp_loss", fde_ttp_loss, batch_size=fde_ttp_mask.sum().item())
         self.log("val_ade_ttp_loss", ade_ttp_loss, batch_size=ade_ttp_mask.sum().item())
 
-        return ade_loss
+        return loss
 
     def predict_step(self, batch, batch_idx=None):
 
@@ -1480,7 +1508,7 @@ class SequentialModule(pl.LightningModule):
         batch.type = batch.type[type_mask]
 
         # Reduction: Limit to x/y
-        batch.x = batch.x[:, :, [0, 1, 7, 8, 9, 10]]
+        batch.x = batch.x[:, :, self.node_indices]
 
         # Update mask
         mask = batch.x[:, :, -1].bool()
@@ -1557,7 +1585,9 @@ class SequentialModule(pl.LightningModule):
                 # Encode distance between nodes as edge_attr
                 row, col = edge_index
                 edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
+                edge_attr = 1 / edge_attr
                 edge_attr = edge_attr.type_as(batch.x)
+                edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
 
             ######################
             # Predictions 1/2    #
@@ -1569,7 +1599,7 @@ class SequentialModule(pl.LightningModule):
                 x_t[:, [0, 1]] -= batch.loc[batch.batch][mask_t][:, [0, 1]]
                 # Scale all features (except yaws) with global scaler
                 x_t[:, self.norm_index] /= self.global_scale
-                if edge_attr is None:
+                if edge_attr is not None:
                     # Scale edge attributes
                     edge_attr /= self.global_scale
 
@@ -1651,7 +1681,9 @@ class SequentialModule(pl.LightningModule):
                 # Encode distance between nodes as edge_attr
                 row, col = edge_index
                 edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
+                edge_attr = 1 / edge_attr
                 edge_attr = edge_attr.type_as(batch.x)
+                edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
 
             ######################
             # Predictions 2/2    #
@@ -1660,10 +1692,10 @@ class SequentialModule(pl.LightningModule):
             # Normalise input graph
             if self.normalise:
                 # Center node positions
-                x_t[:, [0, 1]] -= batch.loc[batch.batch][mask_t][:, [0, 1]]
+                x_t[:, [0, 1]] -= batch.loc[batch.batch][:, [0, 1]]
                 # Scale all features (except yaws) with global scaler
                 x_t[:, self.norm_index] /= self.global_scale
-                if edge_attr is None:
+                if edge_attr is not None:
                     # Scale edge attributes
                     edge_attr /= self.global_scale
 

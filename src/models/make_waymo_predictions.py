@@ -1,7 +1,7 @@
 import argparse
 import pytorch_lightning as pl
 from src.data.dataset_waymo import OneStepWaymoDataModule
-from src.models.train_waymo_model import *
+from src.models.train_waymo_model_reduced import *
 import yaml
 from pytorch_lightning.utilities.seed import seed_everything
 import torch
@@ -32,7 +32,7 @@ def make_predictions(path, config, sequence_idx=0):
     # Setup
     regressor.eval()
     datamodule.setup()
-    loader = datamodule.val_dataloader()
+    loader = datamodule.train_dataloader()
     # Define output path
     dirpath = "src/predictions/raw_preds/waymo/" + config["logger"]["version"]
     os.makedirs(dirpath, exist_ok=True)
@@ -274,141 +274,88 @@ def main():
     )
 
     figglob, axglob = plt.subplots(1, 2, figsize=(20, 10))
-
+    colors = [(np.random.random(), np.random.random(), np.random.random()) for _ in range(n_agents)]
     for agent in range(n_agents):
-        color = (np.random.random(), np.random.random(), np.random.random())
-        for t in range(n_steps):
-            # if t == 0 or t == 10 or t == 89:
-            if True:
-                x = y_target[t, agent, 0].item()
-                y = y_target[t, agent, 1].item()
-                width = y_target[t, agent, 7].item()
-                length = y_target[t, agent, 8].item()
-                # angle = y_target[t, agent, 5].item()
-                # If car
-                # if int(y_target[t, agent, 11].item()) == 1:
-                if True:
-                    axglob[0].scatter(x=x, y=y, s=50, color=color, alpha=0.05)
-                # Pedestrian
-                # elif int(y_target[t, agent, 12].item()) == 1:
-                #     axglob[0].plot(
-                #         x, y, marker="o", color=color, alpha=0.05, markerfacecolor=None
-                #     )
-                # # Bike
-                # elif int(y_target[t, agent, 13].item()) == 1:
-                #     axglob[0].plot(
-                #         x, y, marker="+", color=color, alpha=0.05, markerfacecolor=None
-                #     )
-                # else:
-                #     axglob[0].plot(x, y, marker="x", color=color, alpha=0.05)
+        # color = (np.random.random(), np.random.random(), np.random.random())
+        x = y_target[:, agent, 0].detach().numpy()
+        y = y_target[:, agent, 1].detach().numpy()
+        axglob[0].scatter(x=x, y=y, s=50, color=colors[agent], alpha=0.05)
+        axglob[0].quiver(
+            y_target[0, agent, 0].detach().numpy(),
+            y_target[0, agent, 1].detach().numpy(),
+            y_target[0, agent, 2].detach().numpy(),
+            y_target[0, agent, 3].detach().numpy(),
+            width=0.003,
+            headwidth=5,
+            angles="xy",
+            scale_units="xy",
+            scale=1.0,
+            color="lightgrey",
+        )
+        axglob[0].quiver(
+            y_target[10, agent, 0].detach().numpy(),
+            y_target[10, agent, 1].detach().numpy(),
+            y_target[10, agent, 2].detach().numpy(),
+            y_target[10, agent, 3].detach().numpy(),
+            width=0.003,
+            headwidth=5,
+            angles="xy",
+            scale_units="xy",
+            scale=1.0,
+            color="gray",
+        )
+        axglob[0].quiver(
+            y_target[n_steps-1, agent, 0].detach().numpy(),
+            y_target[n_steps-1, agent, 1].detach().numpy(),
+            y_target[n_steps-1, agent, 2].detach().numpy(),
+            y_target[n_steps-1, agent, 3].detach().numpy(),
+            width=0.003,
+            headwidth=5,
+            angles="xy",
+            scale_units="xy",
+            scale=1.0,
+            color="k",
+        )
 
-            # Start
-            if t == 0:
-                axglob[0].quiver(
-                    y_target[t, agent, 0].detach().numpy(),
-                    y_target[t, agent, 1].detach().numpy(),
-                    y_target[t, agent, 3].detach().numpy(),
-                    y_target[t, agent, 4].detach().numpy(),
-                    width=0.003,
-                    headwidth=5,
-                    angles="xy",
-                    scale_units="xy",
-                    scale=1.0,
-                    color="lightgrey",
-                )
-            elif t == 10:
-                axglob[0].quiver(
-                    y_target[t, agent, 0].detach().numpy(),
-                    y_target[t, agent, 1].detach().numpy(),
-                    y_target[t, agent, 3].detach().numpy(),
-                    y_target[t, agent, 4].detach().numpy(),
-                    width=0.003,
-                    headwidth=5,
-                    angles="xy",
-                    scale_units="xy",
-                    scale=1.0,
-                    color="gray",
-                )
-            elif t == (n_steps - 1):
-                axglob[0].quiver(
-                    y_target[t, agent, 0].detach().numpy(),
-                    y_target[t, agent, 1].detach().numpy(),
-                    y_target[t, agent, 3].detach().numpy(),
-                    y_target[t, agent, 4].detach().numpy(),
-                    width=0.003,
-                    headwidth=5,
-                    angles="xy",
-                    scale_units="xy",
-                    scale=1.0,
-                    color="k",
-                )
-
-        for t in range(n_steps):
-            # if t == 0 or t == 10 or t == 89:
-            if True:
-                x = y_hat[t, agent, 0].item()
-                y = y_hat[t, agent, 1].item()
-                width = y_hat[t, agent, 7].item()
-                length = y_hat[t, agent, 8].item()
-                angle = y_hat[t, agent, 5].item()
-                # If car
-                if True:
-                # if int(y_hat[t, agent, 11].item()) == 1:
-                    axglob[1].scatter(x=x, y=y, s=30, color=color, alpha=0.05)
-
-                # Pedestrian
-                # elif int(y_hat[t, agent, 12].item()) == 1:
-                #     axglob[1].plot(
-                #         x, y, marker="o", color=color, alpha=0.05, markerfacecolor=None
-                #     )
-                # # Bike
-                # elif int(y_hat[t, agent, 13].item()) == 1:
-                #     axglob[1].plot(
-                #         x, y, marker="+", color=color, alpha=0.05, markerfacecolor=None
-                #     )
-                # else:
-                #     axglob[1].plot(x, y, marker="x", color=color, alpha=0.05)
-
-                # Start
-            if t == 0:
-                axglob[1].quiver(
-                    y_hat[t, agent, 0].detach().numpy(),
-                    y_hat[t, agent, 1].detach().numpy(),
-                    y_hat[t, agent, 3].detach().numpy(),
-                    y_hat[t, agent, 4].detach().numpy(),
-                    width=0.003,
-                    headwidth=5,
-                    angles="xy",
-                    scale_units="xy",
-                    scale=1.0,
-                    color="lightgrey",
-                )
-            elif t == 10:
-                axglob[1].quiver(
-                    y_hat[t, agent, 0].detach().numpy(),
-                    y_hat[t, agent, 1].detach().numpy(),
-                    y_hat[t, agent, 3].detach().numpy(),
-                    y_hat[t, agent, 4].detach().numpy(),
-                    width=0.003,
-                    headwidth=5,
-                    angles="xy",
-                    scale_units="xy",
-                    scale=1.0,
-                    color="gray",
-                )
-            elif t == (n_steps - 1):
-                axglob[1].quiver(
-                    y_hat[t, agent, 0].detach().numpy(),
-                    y_hat[t, agent, 1].detach().numpy(),
-                    y_hat[t, agent, 3].detach().numpy(),
-                    y_hat[t, agent, 4].detach().numpy(),
-                    width=0.003,
-                    headwidth=5,
-                    angles="xy",
-                    scale_units="xy",
-                    scale=1.0,
-                    color="k",
-                )
+        x = y_hat[:, agent, 0].detach().numpy()
+        y = y_hat[:, agent, 1].detach().numpy()
+        axglob[1].scatter(x=x, y=y, s=30, color=colors[agent], alpha=0.05)
+        axglob[1].quiver(
+            y_hat[0, agent, 0].detach().numpy(),
+            y_hat[0, agent, 1].detach().numpy(),
+            y_hat[0, agent, 2].detach().numpy(),
+            y_hat[0, agent, 3].detach().numpy(),
+            width=0.003,
+            headwidth=5,
+            angles="xy",
+            scale_units="xy",
+            scale=1.0,
+            color="lightgrey",
+        )
+        axglob[1].quiver(
+            y_hat[0, agent, 0].detach().numpy(),
+            y_hat[0, agent, 1].detach().numpy(),
+            y_hat[0, agent, 2].detach().numpy(),
+            y_hat[0, agent, 3].detach().numpy(),
+            width=0.003,
+            headwidth=5,
+            angles="xy",
+            scale_units="xy",
+            scale=1.0,
+            color="gray",
+        )
+        axglob[1].quiver(
+            y_hat[0, agent, 0].detach().numpy(),
+            y_hat[0, agent, 1].detach().numpy(),
+            y_hat[0, agent, 2].detach().numpy(),
+            y_hat[0, agent, 3].detach().numpy(),
+            width=0.003,
+            headwidth=5,
+            angles="xy",
+            scale_units="xy",
+            scale=1.0,
+            color="k",
+        )
 
     axglob[0].axis("equal")
     axglob[0].set_xlim((x_min, x_max))
