@@ -498,6 +498,7 @@ class rnn_forward_model_v2(nn.Module):
         self.latent_edge_features = latent_edge_features
         self.rnn_size = rnn_size
         self.num_layers = num_layers
+        self.skip = skip
 
         self.GN1 = GraphNetworkBlock(
             edge_model=edge_mlp_1(
@@ -551,8 +552,9 @@ class rnn_forward_model_v2(nn.Module):
             hidden=hidden,
         )
         # Concatenation of node and edge attributes
-        x_1 = torch.cat([x, x_1], dim=1)
-        edge_attr_1 = torch.cat([edge_attr, edge_attr_1], dim=1)
+        if self.skip:
+            x_1 = torch.cat([x, x_1], dim=1)
+            edge_attr_1 = torch.cat([edge_attr, edge_attr_1], dim=1)
         # Second block
         out, _, _ = self.GN2(
             x=x_1, edge_index=edge_index, edge_attr=edge_attr_1, u=u, batch=batch

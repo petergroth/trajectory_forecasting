@@ -29,9 +29,8 @@ class Objective(object):
         # Suggest hyperparameters
 
         # Model
-        hidden_size = trial.suggest_categorical("hidden_size", [64, 96, 128, 192, 256])
-        rnn_size = trial.suggest_categorical("rnn_size", [16, 32, 64, 96, 128, 192, 256])
-        latent_edge_features = trial.suggest_categorical("latent_edge_features", [64, 96, 128, 192, 256])
+        hidden_size = trial.suggest_categorical("hidden_size", [32, 64, 96, 128, 192, 256])
+        latent_edge_features = trial.suggest_categorical("latent_edge_features", [32, 64, 96, 128, 192, 256])
 
         # Regressor
         weight_decay = trial.suggest_categorical("weight_decay", [1e-4, 5e-4, 1e-3, 5e-3, 1e-2, 1e-1, 0, 1, 10])
@@ -41,9 +40,9 @@ class Objective(object):
         n_neighbours = trial.suggest_int("n_neighbours", low=1, high=50)
         lr = trial.suggest_categorical("lr", [1e-6, 5e-6, 1e-5, 5e-5, 1e-4, 5e-4, 1e-3, 5e-3, 1e-2, 1e-1])
         noise = trial.suggest_float("noise", low=0.0, high=1.0)
-        normalise = trial.suggest_categorical("normalise", ["True", "False"])
+
         # Datamodule
-        batch_size = trial.suggest_categorical("batch_size", [16, 32])
+        batch_size = trial.suggest_categorical("batch_size", [16, 32, 48, 64, 96, 128])
 
         # Trainer
         stochastic_weight_avg = trial.suggest_categorical("stochastic_weight_avg", ["True", "False"])
@@ -52,7 +51,6 @@ class Objective(object):
         # Pack regressor parameters together
         model_kwargs = {
             "hidden_size": hidden_size,
-            "rnn_size": rnn_size,
             "latent_edge_features": latent_edge_features
         }
         regressor_kwargs = {
@@ -62,8 +60,7 @@ class Objective(object):
             "lr": lr,
             "training_horizon": training_horizon,
             "teacher_forcing_ratio": teacher_forcing_ratio,
-            "noise": noise,
-            "normalise": normalise
+            "noise": noise
         }
         trainer_kwargs = {
             "gradient_clip_val": gradient_clip_val,
@@ -130,13 +127,9 @@ class Objective(object):
 
 @hydra.main(config_path="../../configs/waymo/", config_name="config")
 def main(config):
-    # Print configuration file and save
-    # print(OmegaConf.to_yaml(config))
-
     # pruner = optuna.pruners.MedianPruner()
-
     study = optuna.create_study(direction="minimize")
-    study.optimize(Objective(config), n_trials=100, timeout=33000, gc_after_trial=True)
+    study.optimize(Objective(config), n_trials=50, timeout=6000)
 
 
 if __name__ == "__main__":

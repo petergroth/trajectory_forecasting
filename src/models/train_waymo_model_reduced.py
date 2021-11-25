@@ -910,7 +910,7 @@ class SequentialModule(pl.LightningModule):
         # Obtain target delta dynamic nodes
         # Use torch.roll to compute differences between x_t and x_{t+1}.
         # Ignore final difference (between t_0 and t_{-1})
-        y_target = batch.x[:, 1:(self.training_horizon+1), :self.out_features]  # CHECK INDEX
+        y_target = batch.x[:, 1:(self.training_horizon+1), :self.out_features] 
         y_target = y_target.type_as(batch.x)
 
         assert y_target.shape == y_predictions.shape
@@ -983,6 +983,8 @@ class SequentialModule(pl.LightningModule):
                 edge_attr = 1 / edge_attr
                 edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
                 edge_attr = edge_attr.type_as(batch.x)
+                edge_attr = 1 / edge_attr
+                edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
 
             #######################
             # Training 1/2        #
@@ -1019,6 +1021,7 @@ class SequentialModule(pl.LightningModule):
                 # Update hidden states
                 h[:, mask_t] = h_t
 
+
             # Add deltas to input graph
             x_t = torch.cat(
                 (
@@ -1029,9 +1032,9 @@ class SequentialModule(pl.LightningModule):
             )
             x_t = x_t.type_as(batch.x)
 
+
             # Save deltas for loss computation
             y_predictions[mask_t, t, :] = x_t[:, :self.out_features]
-
 
         # If using teacher_forcing, draw sample and accept <teach_forcing_ratio*100> % of the time. Else, deny.
         use_groundtruth = (random.random() < self.teacher_forcing_ratio)
@@ -1087,6 +1090,7 @@ class SequentialModule(pl.LightningModule):
                 edge_attr = edge_attr.type_as(batch.x)
 
 
+
             #######################
             # Training 2/2        #
             #######################
@@ -1130,6 +1134,7 @@ class SequentialModule(pl.LightningModule):
 
             # Save deltas for loss computation
             y_predictions[mask_t, t, :] = x_t[:, :self.out_features]
+
 
         # Determine valid targets
         loss_mask = mask[:, 1:(self.training_horizon+1)]
@@ -1311,6 +1316,10 @@ class SequentialModule(pl.LightningModule):
                 h[:, mask_t] = h_t
 
             if t == 10:
+
+                if self.normalise:
+                    delta_x *= self.global_scale
+
                 # Add deltas to input graph
                 predicted_graph = torch.cat(
                     (
@@ -1373,6 +1382,7 @@ class SequentialModule(pl.LightningModule):
                 edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
                 edge_attr = edge_attr.type_as(batch.x)
 
+
             ######################
             # Validation 2/2     #
             ######################
@@ -1403,6 +1413,9 @@ class SequentialModule(pl.LightningModule):
                     batch=batch.batch,
                     hidden=h,
                 )
+
+            if self.normalise:
+                delta_x *= self.global_scale
 
             # Add deltas to input graph
             predicted_graph = torch.cat(
@@ -1564,8 +1577,9 @@ class SequentialModule(pl.LightningModule):
                 row, col = edge_index
                 edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
                 edge_attr = 1 / edge_attr
-                edge_attr = edge_attr.type_as(batch.x)
                 edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
+                edge_attr = edge_attr.type_as(batch.x)
+                
 
             ######################
             # Predictions 1/2    #
@@ -1659,9 +1673,10 @@ class SequentialModule(pl.LightningModule):
                 # Encode distance between nodes as edge_attr
                 row, col = edge_index
                 edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
-                edge_attr = 1 / edge_attr1
+                edge_attr = 1 / edge_attr
                 edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
                 edge_attr = edge_attr.type_as(batch.x)
+
 
             ######################
             # Predictions 2/2    #
