@@ -899,7 +899,7 @@ class SequentialModule(pl.LightningModule):
         # static_features = torch.cat(
         #     [batch.x[:, 10, self.out_features :], batch.type], dim=1
         # )
-        static_features = batch.x[:, 10, self.out_features:].clone()
+        static_features = batch.x[:, 10, self.out_features:]
         static_features = static_features.type_as(batch.x)
         edge_attr = None
         # Extract dimensions and allocate predictions
@@ -910,10 +910,7 @@ class SequentialModule(pl.LightningModule):
         # Obtain target delta dynamic nodes
         # Use torch.roll to compute differences between x_t and x_{t+1}.
         # Ignore final difference (between t_0 and t_{-1})
-        y_target = (
-            torch.roll(batch.x[:, :, : self.out_features], (0, -1, 0), (0, 1, 2))
-            - batch.x[:, :, : self.out_features]
-        )[:, :-1, :]
+        y_target = batch.x[:, 1:(self.training_horizon+1), :self.out_features] 
         y_target = y_target.type_as(batch.x)
 
         assert y_target.shape == y_predictions.shape
@@ -939,7 +936,7 @@ class SequentialModule(pl.LightningModule):
             # Extract current input and target
             mask_t = mask[:, t]
             # x_t = torch.cat([batch.x[mask_t, t, :], batch.type[mask_t]], dim=1)
-            x_t = batch.x[mask_t, t, :].clone()
+            x_t = batch.x[mask_t, t, :]
             x_t = x_t.type_as(batch.x)
 
             # Add noise if specified
@@ -983,6 +980,8 @@ class SequentialModule(pl.LightningModule):
                 # Encode distance between nodes as edge_attr
                 row, col = edge_index
                 edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
+                edge_attr = 1 / edge_attr
+                edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
                 edge_attr = edge_attr.type_as(batch.x)
                 edge_attr = 1 / edge_attr
                 edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
@@ -1022,22 +1021,20 @@ class SequentialModule(pl.LightningModule):
                 # Update hidden states
                 h[:, mask_t] = h_t
 
-            if self.normalise:
-                delta_x *= self.global_scale
+
+            # Add deltas to input graph
+            x_t = torch.cat(
+                (
+                    batch.x[mask_t, t, : self.out_features] + delta_x,
+                    static_features[mask_t],
+                ),
+                dim=-1,
+            )
+            x_t = x_t.type_as(batch.x)
+
 
             # Save deltas for loss computation
-            y_predictions[mask_t, t, :] = delta_x
-
-            if t == 10:
-                # Add deltas to input graph
-                x_t = torch.cat(
-                    (
-                        batch.x[mask_t, t, : self.out_features] + delta_x,
-                        static_features[mask_t],
-                    ),
-                    dim=-1,
-                )
-                x_t = x_t.type_as(batch.x)
+            y_predictions[mask_t, t, :] = x_t[:, :self.out_features]
 
         # If using teacher_forcing, draw sample and accept <teach_forcing_ratio*100> % of the time. Else, deny.
         use_groundtruth = (random.random() < self.teacher_forcing_ratio)
@@ -1089,8 +1086,10 @@ class SequentialModule(pl.LightningModule):
                 row, col = edge_index
                 edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
                 edge_attr = 1 / edge_attr
-                edge_attr = edge_attr.type_as(batch.x)
                 edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
+                edge_attr = edge_attr.type_as(batch.x)
+
+
 
             #######################
             # Training 2/2        #
@@ -1123,41 +1122,32 @@ class SequentialModule(pl.LightningModule):
                     hidden=h,
                 )
 
-            if self.normalise:
-                delta_x *= self.global_scale
-
-            # Save deltas for loss computation
-            y_predictions[mask_t, t, :] = delta_x
-
             # Add deltas to input graph. Input for next timestep
             x_t = torch.cat(
                 (
                     x_prev[:, : self.out_features] + delta_x,
-                    x_prev[:, self.out_features :],
+                    x_prev[:, self.out_features:],
                 ),
                 dim=-1,
             )
             x_t = x_t.type_as(batch.x)
 
-        # Determine valid inputs
-        loss_mask_0 = mask[:, :self.training_horizon]
+            # Save deltas for loss computation
+            y_predictions[mask_t, t, :] = x_t[:, :self.out_features]
+
+
         # Determine valid targets
-        loss_mask_1 = mask[:, 1:(self.training_horizon+1)]
-        # Loss is computed at intersection
-        loss_mask = torch.logical_and(loss_mask_0, loss_mask_1)
+        loss_mask = mask[:, 1:(self.training_horizon+1)]
         # Determine valid end-points
-        fde_mask_0 = mask[:, -1]
-        # Determine valid inputs to end-points
-        fde_mask_1 = mask[:, -2]
-        fde_mask = torch.logical_and(fde_mask_0, fde_mask_1)
+        fde_mask = mask[:, -1]
 
         # Compute and log loss
         fde_loss = self.train_fde_loss(
             y_predictions[fde_mask, -1][:, [0, 1]], y_target[fde_mask, -1][:, [0, 1]]
         )
         ade_loss = self.train_ade_loss(
-            y_predictions[:, :self.training_horizon, [0, 1]][loss_mask],
-            y_target[:, :self.training_horizon, [0, 1]][loss_mask]
+            y_predictions[:, :, [0, 1]][loss_mask],
+            y_target[:, :, [0, 1]][loss_mask]
         )
         # vel_loss = self.train_vel_loss(
         #     y_predictions[:, :self.training_horizon, [2, 3]][loss_mask],
@@ -1226,7 +1216,7 @@ class SequentialModule(pl.LightningModule):
         # static_features = torch.cat(
         #     [batch.x[:, 10, self.out_features :], batch.type], dim=1
         # )
-        static_features = batch.x[:, 10, self.out_features:].clone()
+        static_features = batch.x[:, 10, self.out_features:]
         static_features = static_features.type_as(batch.x)
         edge_attr = None
 
@@ -1253,7 +1243,7 @@ class SequentialModule(pl.LightningModule):
 
             mask_t = mask[:, t]
             # x_t = torch.cat([batch.x[mask_t, t, :], batch.type[mask_t]], dim=1)
-            x_t = batch.x[mask_t, t, :].clone()
+            x_t = batch.x[mask_t, t, :]
             x_t = x_t.type_as(batch.x)
 
             # Construct edges
@@ -1389,8 +1379,9 @@ class SequentialModule(pl.LightningModule):
                 row, col = edge_index
                 edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
                 edge_attr = 1 / edge_attr
-                edge_attr = edge_attr.type_as(batch.x)
                 edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
+                edge_attr = edge_attr.type_as(batch.x)
+
 
             ######################
             # Validation 2/2     #
@@ -1525,7 +1516,7 @@ class SequentialModule(pl.LightningModule):
         # static_features = torch.cat(
         #     [batch.x[:, 10, self.out_features :], batch.type], dim=1
         # )
-        static_features = batch.x[:, 10, self.out_features :].clone()
+        static_features = batch.x[:, 10, self.out_features :]
         edge_attr = None
 
         # Initial hidden state
@@ -1551,7 +1542,7 @@ class SequentialModule(pl.LightningModule):
 
             mask_t = mask[:, t]
             # x_t = torch.cat([batch.x[mask_t, t, :], batch.type[mask_t]], dim=1)
-            x_t = batch.x[mask_t, t, :].clone()
+            x_t = batch.x[mask_t, t, :]
             batch_t = batch.batch[mask_t]
 
             # Construct edges
@@ -1586,8 +1577,9 @@ class SequentialModule(pl.LightningModule):
                 row, col = edge_index
                 edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
                 edge_attr = 1 / edge_attr
-                edge_attr = edge_attr.type_as(batch.x)
                 edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
+                edge_attr = edge_attr.type_as(batch.x)
+                
 
             ######################
             # Predictions 1/2    #
@@ -1636,7 +1628,7 @@ class SequentialModule(pl.LightningModule):
             # y_target[t, mask_t, :] = torch.cat(
             #     [batch.x[mask_t, t + 1, :], batch.type[mask_t]], dim=1
             # )
-            y_target[t, mask_t, :] = batch.x[mask_t, t + 1, :].clone()
+            y_target[t, mask_t, :] = batch.x[mask_t, t + 1, :]
 
         ######################
         # Future             #
@@ -1682,8 +1674,9 @@ class SequentialModule(pl.LightningModule):
                 row, col = edge_index
                 edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
                 edge_attr = 1 / edge_attr
-                edge_attr = edge_attr.type_as(batch.x)
                 edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
+                edge_attr = edge_attr.type_as(batch.x)
+
 
             ######################
             # Predictions 2/2    #
@@ -1728,7 +1721,7 @@ class SequentialModule(pl.LightningModule):
             # Save prediction alongside true value (next time step state)
             y_hat[t, :, :] = predicted_graph
             # y_target[t, :, :] = torch.cat([batch.x[:, t + 1, :], batch.type], dim=1)
-            y_target[t, :, :] = batch.x[:, t + 1, :].clone()
+            y_target[t, :, :] = batch.x[:, t + 1, :]
 
         return y_hat, y_target, mask
 
