@@ -32,7 +32,7 @@ def make_predictions(path, config, sequence_idx=0):
     # Setup
     regressor.eval()
     datamodule.setup()
-    loader = datamodule.train_dataloader()
+    loader = datamodule.val_dataloader()
     # Define output path
     dirpath = "src/predictions/raw_preds/waymo/" + config["logger"]["version"]
     os.makedirs(dirpath, exist_ok=True)
