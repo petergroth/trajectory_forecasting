@@ -36,11 +36,11 @@ class node_mlp_1(nn.Module):
             ),
             nn.Dropout(p=dropout),
             nn.LeakyReLU(),
-            BatchNorm(in_channels=hidden_size),
+            # BatchNorm(in_channels=hidden_size),
             nn.Linear(in_features=hidden_size, out_features=hidden_size),
             nn.Dropout(p=dropout),
             nn.LeakyReLU(),
-            BatchNorm(in_channels=hidden_size),
+            # BatchNorm(in_channels=hidden_size),
             nn.Linear(in_features=hidden_size, out_features=hidden_size),
         )
 
@@ -80,11 +80,11 @@ class node_mlp_out(nn.Module):
             ),
             nn.Dropout(p=dropout),
             nn.LeakyReLU(),
-            BatchNorm(in_channels=hidden_size),
+            # BatchNorm(in_channels=hidden_size),
             nn.Linear(in_features=hidden_size, out_features=hidden_size),
             nn.Dropout(p=dropout),
             nn.LeakyReLU(),
-            BatchNorm(in_channels=hidden_size),
+            # BatchNorm(in_channels=hidden_size),
             nn.Linear(in_features=hidden_size, out_features=self.out_features),
         )
 
@@ -130,11 +130,11 @@ class edge_mlp_1(nn.Module):
             ),
             nn.Dropout(p=dropout),
             nn.LeakyReLU(),
-            BatchNorm(in_channels=hidden_size),
+            # BatchNorm(in_channels=hidden_size),
             nn.Linear(in_features=hidden_size, out_features=hidden_size),
             nn.Dropout(p=dropout),
             nn.LeakyReLU(),
-            BatchNorm(in_channels=hidden_size),
+            # BatchNorm(in_channels=hidden_size),
             nn.Linear(in_features=hidden_size, out_features=latent_edge_features),
         )
 
@@ -400,7 +400,7 @@ class node_rnn_2(nn.Module):
                 in_features=rnn_size, out_features=hidden_size
             ),
             nn.ReLU(),
-            BatchNorm(in_channels=hidden_size),
+            # BatchNorm(in_channels=hidden_size),
             nn.Linear(in_features=hidden_size, out_features=hidden_size),
         )
 

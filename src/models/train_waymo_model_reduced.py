@@ -794,7 +794,6 @@ class SequentialModule(pl.LightningModule):
             lr: float = 1e-4,
             weight_decay: float = 0.0,
             noise: Union[None, float] = None,
-            teacher_forcing: bool = False,
             teacher_forcing_ratio: float = 0.3,
             min_dist: int = 0,
             n_neighbours: int = 30,
@@ -840,7 +839,7 @@ class SequentialModule(pl.LightningModule):
         self.weight_decay = weight_decay
         self.teacher_forcing_ratio = teacher_forcing_ratio
         self.training_horizon = training_horizon
-        self.norm_index = [0, 1, 2, 3, 4]
+        self.norm_index = [0, 1, 2, 3, 4, 5, 6]
 
         # Model parameters
         self.rnn_type = rnn_type
@@ -857,7 +856,7 @@ class SequentialModule(pl.LightningModule):
         self.self_loop = self_loop
         self.undirected = undirected
 
-        self.node_indices = [0, 1, 7, 8, 9, 10]
+        self.node_indices = [0, 1, 3, 4, 7, 8, 9, 10]
         self.save_hyperparameters()
 
     def training_step(self, batch: Batch, batch_idx: int):
@@ -1148,10 +1147,10 @@ class SequentialModule(pl.LightningModule):
             y_predictions[:, :, [0, 1]][loss_mask],
             y_target[:, :, [0, 1]][loss_mask]
         )
-        # vel_loss = self.train_vel_loss(
-        #     y_predictions[:, :self.training_horizon, [2, 3]][loss_mask],
-        #     y_target[:, :self.training_horizon, [2, 3]][loss_mask]
-        # )
+        vel_loss = self.train_vel_loss(
+            y_predictions[:, :, [2, 3]][loss_mask],
+            y_target[:, :, [2, 3]][loss_mask]
+        )
         # yaw_loss = self.train_yaw_loss(
         #     y_predictions[:, :self.training_horizon, [5, 6, 7, 8]][loss_mask],
         #     y_target[:, :self.training_horizon, [5, 6, 7, 8]][loss_mask]
@@ -1159,9 +1158,9 @@ class SequentialModule(pl.LightningModule):
 
         self.log("train_fde_loss", fde_loss, on_step=True, on_epoch=True, batch_size=fde_mask.sum().item())
         self.log("train_ade_loss", ade_loss, on_step=True, on_epoch=True, batch_size=loss_mask.sum().item())
-        # self.log("train_vel_loss", vel_loss, on_step=True, on_epoch=True, batch_size=loss_mask.sum().item())
+        self.log("train_vel_loss", vel_loss, on_step=True, on_epoch=True, batch_size=loss_mask.sum().item())
         # self.log("train_yaw_loss", yaw_loss, on_step=True, on_epoch=True, batch_size=loss_mask.sum().item())
-        loss = ade_loss + fde_loss
+        loss = ade_loss + fde_loss + vel_loss
 
         self.log(
             "train_total_loss",
@@ -1315,9 +1314,6 @@ class SequentialModule(pl.LightningModule):
 
             if t == 10:
 
-                if self.normalise:
-                    delta_x *= self.global_scale
-
                 # Add deltas to input graph
                 predicted_graph = torch.cat(
                     (
@@ -1411,9 +1407,6 @@ class SequentialModule(pl.LightningModule):
                     hidden=h,
                 )
 
-            if self.normalise:
-                delta_x *= self.global_scale
-
             # Add deltas to input graph
             predicted_graph = torch.cat(
                 (
@@ -1438,9 +1431,9 @@ class SequentialModule(pl.LightningModule):
         ade_loss = self.val_ade_loss(
             y_hat[:, :, [0, 1]][val_mask], y_target[:, :, [0, 1]][val_mask]
         )
-        # vel_loss = self.val_vel_loss(
-        #     y_hat[:, :, [2, 3]][val_mask], y_target[:, :, [2, 3]][val_mask]
-        # )
+        vel_loss = self.val_vel_loss(
+            y_hat[:, :, [2, 3]][val_mask], y_target[:, :, [2, 3]][val_mask]
+        )
         # yaw_loss = self.val_yaw_loss(
         #     y_hat[:, :, 5:7][val_mask], y_target[:, :, 5:7][val_mask]
         # )
@@ -1463,9 +1456,9 @@ class SequentialModule(pl.LightningModule):
 
         self.log("val_ade_loss", ade_loss, batch_size=val_mask.sum().item())
         self.log("val_fde_loss", fde_loss, batch_size=fde_mask.sum().item())
-        # self.log("val_vel_loss", vel_loss, batch_size=val_mask.sum().item())
+        self.log("val_vel_loss", vel_loss, batch_size=val_mask.sum().item())
         # self.log("val_yaw_loss", yaw_loss, batch_size=val_mask.sum().item())
-        loss = ade_loss + fde_loss
+        loss = ade_loss + fde_loss + vel_loss
         self.log("val_total_loss", loss, batch_size=val_mask.sum().item())
         self.log("val_fde_ttp_loss", fde_ttp_loss, batch_size=fde_ttp_mask.sum().item())
         self.log("val_ade_ttp_loss", ade_ttp_loss, batch_size=ade_ttp_mask.sum().item())
