@@ -819,11 +819,11 @@ class SequentialModule(pl.LightningModule):
         self.train_ade_loss = torchmetrics.MeanSquaredError()
         self.train_fde_loss = torchmetrics.MeanSquaredError()
         self.train_vel_loss = torchmetrics.MeanSquaredError()
-        self.train_yaw_loss = torchmetrics.MeanSquaredError()
+        # self.train_yaw_loss = torchmetrics.MeanSquaredError()
         self.val_ade_loss = torchmetrics.MeanSquaredError()
         self.val_fde_loss = torchmetrics.MeanSquaredError()
         self.val_vel_loss = torchmetrics.MeanSquaredError()
-        self.val_yaw_loss = torchmetrics.MeanSquaredError()
+        # self.val_yaw_loss = torchmetrics.MeanSquaredError()
         self.val_fde_ttp_loss = torchmetrics.MeanSquaredError()
         self.val_ade_ttp_loss = torchmetrics.MeanSquaredError()
 
@@ -842,8 +842,8 @@ class SequentialModule(pl.LightningModule):
         self.norm_index = [0, 1, 2, 3, 4, 5, 6]
 
         # Model parameters
-        assert model_dict.rnn_type in ["GRU", "LSTM"]
-        self.rnn_type = model_dict.rnn_type
+        assert model_dict["rnn_type"] in ["GRU", "LSTM"]
+        self.rnn_type = model_dict["rnn_type"]
         self.out_features = out_features
         self.edge_features = edge_features
         self.node_features = node_features
@@ -1891,11 +1891,11 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
         self.log("val_fde_loss", fde_loss)
         self.log("val_vel_loss", vel_loss)
         # self.log("val_yaw_loss", yaw_loss)
-        self.log("val_total_loss", (ade_loss + vel_loss + fde_loss)
+        self.log("val_total_loss", ade_loss + vel_loss + fde_loss)
         self.log("val_fde_ttp_loss", fde_ttp_loss)
         self.log("val_ade_ttp_loss", ade_ttp_loss)
 
-        return (ade_loss + vel_loss + yaw_loss) / 3
+        return ade_loss + vel_loss + fde_loss
 
     def predict_step(self, batch, batch_idx=None):
 

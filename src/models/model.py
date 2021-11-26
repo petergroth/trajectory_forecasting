@@ -575,6 +575,7 @@ class rnn_forward_model_v3(nn.Module):
         num_layers: int = 1,
         rnn_size: int = 20,
         out_features: int = 7,
+        rnn_type: str = "GRU",
         **kwargs,
     ):
         super(rnn_forward_model_v3, self).__init__()
@@ -586,6 +587,7 @@ class rnn_forward_model_v3(nn.Module):
         self.rnn_size = rnn_size
         self.num_layers = num_layers
         self.skip = skip
+        self.rnn_type = rnn_type
 
         self.GN1 = GraphNetworkBlock(
             edge_model=edge_mlp_1(
@@ -602,6 +604,7 @@ class rnn_forward_model_v3(nn.Module):
                 dropout=dropout,
                 num_layers=num_layers,
                 out_features=out_features,
+                rnn_type=rnn_type
             ),
         )
         GN2_node_input = rnn_size + node_features if skip else rnn_size
