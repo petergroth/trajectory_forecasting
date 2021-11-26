@@ -12,5 +12,4 @@ undirected: False
 normalise: False
 node_features: 15
 edge_features: 1
-rnn_type: null
 teacher_forcing_ratio: 0.3

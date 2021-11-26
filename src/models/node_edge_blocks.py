@@ -429,6 +429,7 @@ class node_rnn_simple(nn.Module):
             rnn_size: int = 20,
             num_layers: int = 1,
             out_features: int = 7,
+            rnn_type: str = "GRU"
     ):
         super(node_rnn_simple, self).__init__()
         self.out_features = out_features
@@ -437,7 +438,7 @@ class node_rnn_simple(nn.Module):
         self.num_layers = num_layers
         self.dropout = dropout if num_layers > 1 else 0.0
 
-        self.node_rnn = nn.GRU(
+        self.node_rnn = eval(f"nn.{rnn_type}")(
             input_size=node_features + edge_features,
             hidden_size=rnn_size,
             num_layers=num_layers,
