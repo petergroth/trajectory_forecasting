@@ -66,7 +66,7 @@ class node_mlp_out(nn.Module):
     # Output level node update function. Produces target attributes
     def __init__(
         self,
-        hidden_size: int,
+        hidden_size: int = 64,
         node_features: int = 5,
         dropout: float = 0.0,
         edge_features: int = 0,
