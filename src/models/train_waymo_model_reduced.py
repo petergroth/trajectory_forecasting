@@ -802,7 +802,7 @@ class SequentialModule(pl.LightningModule):
             edge_type: str = "knn",
             self_loop: bool = True,
             undirected: bool = False,
-            rnn_type: str = "GRU",
+            #rnn_type: str = "GRU",
             out_features: int = 6,
             node_features: int = 9,
             edge_features: int = 1,
@@ -842,7 +842,8 @@ class SequentialModule(pl.LightningModule):
         self.norm_index = [0, 1, 2, 3, 4, 5, 6]
 
         # Model parameters
-        self.rnn_type = rnn_type
+        assert model_dict.rnn_type in ["GRU", "LSTM"]
+        self.rnn_type = model_dict.rnn_type
         self.out_features = out_features
         self.edge_features = edge_features
         self.node_features = node_features
@@ -916,13 +917,14 @@ class SequentialModule(pl.LightningModule):
         if self.rnn_type == "GRU":
             h = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
             h = h.type_as(batch.x)
+            c = None
         elif self.rnn_type == "LSTM":
-            raise NotImplementedError
-            h = torch.zeros((self.model.num_layers, 1, self.model.rnn_size))
-            c = torch.zeros((self.model.num_layers, 1, self.model.rnn_size))
-            h = (h, c)
+            h = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
+            h = h.type_as(batch.x)
+            c = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
+            c = c.type_as(batch.x)
         else:
-            h = None
+            h, c = None, None
 
         ######################
         # History            #
@@ -1003,9 +1005,7 @@ class SequentialModule(pl.LightningModule):
                     edge_attr=edge_attr,
                     batch=batch.batch[mask_t],
                 )
-            else:
-                # Add zero rows for new columns
-                assert self.rnn_type == "GRU"
+            elif self.rnn_type == "GRU":
                 delta_x, h_t = self.model(
                     x=x_t,
                     edge_index=edge_index,
@@ -1015,6 +1015,17 @@ class SequentialModule(pl.LightningModule):
                 )
                 # Update hidden states
                 h[:, mask_t] = h_t
+
+            else:  # LSTM
+                delta_x, (h_t, c_t) = self.model(
+                    x=x_t,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    batch=batch.batch[mask_t],
+                    hidden=(h[:, mask_t], c[:, mask_t])
+                )
+                h[:, mask_t] = h_t
+                c[:, mask_t] = c_t
 
             # Add deltas to input graph
             x_t = torch.cat(
@@ -1104,13 +1115,21 @@ class SequentialModule(pl.LightningModule):
                     edge_attr=edge_attr,
                     batch=batch.batch,
                 )
-            else:
+            elif self.rnn_type == "GRU":
                 delta_x, h = self.model(
                     x=x_t,
                     edge_index=edge_index,
                     edge_attr=edge_attr,
                     batch=batch.batch,
                     hidden=h,
+                )
+            else:
+                delta_x, (h, c) = self.model(
+                    x=x_t,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    batch=batch.batch,
+                    hidden=(h, c),
                 )
 
             # Add deltas to input graph. Input for next timestep
@@ -1222,12 +1241,14 @@ class SequentialModule(pl.LightningModule):
         if self.rnn_type == "GRU":
             h = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
             h = h.type_as(batch.x)
+            c = None
         elif self.rnn_type == "LSTM":
-            h = torch.zeros((self.model.num_layers, 1, self.model.rnn_size))
-            c = torch.zeros((self.model.num_layers, 1, self.model.rnn_size))
-            h = (h, c)
+            h = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
+            h = h.type_as(batch.x)
+            c = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
+            c = c.type_as(batch.x)
         else:
-            h = None
+            h, c = None, None
 
         ######################
         # History            #
@@ -1301,7 +1322,7 @@ class SequentialModule(pl.LightningModule):
                     edge_attr=edge_attr,
                     batch=batch.batch[mask_t],
                 )
-            else:
+            elif self.rnn_type == "GRU":
                 delta_x, h_t = self.model(
                     x=x_t,
                     edge_index=edge_index,
@@ -1311,6 +1332,17 @@ class SequentialModule(pl.LightningModule):
                 )
                 # Update hidden state
                 h[:, mask_t] = h_t
+            else:  # LSTM
+                delta_x, (h_t, c_t) = self.model(
+                    x=x_t,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    batch=batch.batch[mask_t],
+                    hidden=(h[:, mask_t], c[:, mask_t]),
+                )
+                # Update hidden state
+                h[:, mask_t] = h_t
+                c[:, mask_t] = c_t
 
             if t == 10:
 
@@ -1398,13 +1430,21 @@ class SequentialModule(pl.LightningModule):
                     edge_attr=edge_attr,
                     batch=batch.batch,
                 )
-            else:
+            elif self.rnn_type == "GRU":
                 delta_x, h = self.model(
                     x=x_t,
                     edge_index=edge_index,
                     edge_attr=edge_attr,
                     batch=batch.batch,
                     hidden=h,
+                )
+            else:
+                delta_x, (h, c) = self.model(
+                    x=x_t,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    batch=batch.batch,
+                    hidden=(h, c),
                 )
 
             # Add deltas to input graph
@@ -1513,12 +1553,14 @@ class SequentialModule(pl.LightningModule):
         if self.rnn_type == "GRU":
             h = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
             h = h.type_as(batch.x)
+            c = None
         elif self.rnn_type == "LSTM":
-            h = torch.zeros((self.model.num_layers, 1, self.model.rnn_size))
-            c = torch.zeros((self.model.num_layers, 1, self.model.rnn_size))
-            h = (h, c)
+            h = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
+            h = h.type_as(batch.x)
+            c = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
+            c = c.type_as(batch.x)
         else:
-            h = None
+            h, c = None, None
 
         ######################
         # History            #
@@ -1592,7 +1634,7 @@ class SequentialModule(pl.LightningModule):
                     edge_attr=edge_attr,
                     batch=batch.batch[mask_t],
                 )
-            else:
+            elif self.rnn_type == "GRU":
                 delta_x, h_t = self.model(
                     x=x_t,
                     edge_index=edge_index,
@@ -1601,6 +1643,16 @@ class SequentialModule(pl.LightningModule):
                     hidden=h[:, mask_t],
                 )
                 h[:, mask_t] = h_t
+            else:  # LSTM
+                delta_x, (h_t, c_t) = self.model(
+                    x=x_t,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    batch=batch.batch[mask_t],
+                    hidden=(h[:, mask_t], c[:, mask_t]),
+                )
+                h[:, mask_t] = h_t
+                c[:, mask_t] = c_t
 
             # Add deltas to input graph
             predicted_graph = torch.cat(
@@ -1688,13 +1740,21 @@ class SequentialModule(pl.LightningModule):
                     edge_attr=edge_attr,
                     batch=batch.batch,
                 )
-            else:
+            elif self.rnn_type == "GRU":
                 delta_x, h = self.model(
                     x=x_t,
                     edge_index=edge_index,
                     edge_attr=edge_attr,
                     batch=batch.batch,
                     hidden=h,
+                )
+            else:  # LSTM
+                delta_x, (h, c) = self.model(
+                    x=x_t,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    batch=batch.batch,
+                    hidden=(h, c),
                 )
 
             predicted_graph = torch.cat(
@@ -1725,7 +1785,7 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
         assert model is None
         self.val_ade_loss = torchmetrics.MeanSquaredError()
         self.val_fde_loss = torchmetrics.MeanSquaredError()
-        self.val_yaw_loss = torchmetrics.MeanSquaredError()
+        # self.val_yaw_loss = torchmetrics.MeanSquaredError()
         self.val_vel_loss = torchmetrics.MeanSquaredError()
         self.val_fde_ttp_loss = torchmetrics.MeanSquaredError()
         self.val_ade_ttp_loss = torchmetrics.MeanSquaredError()
@@ -1807,9 +1867,9 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
         vel_loss = self.val_vel_loss(
             y_hat[:, :, 3:5][val_mask], y_target[:, :, 3:5][val_mask]
         )
-        yaw_loss = self.val_yaw_loss(
-            y_hat[:, :, 5:7][val_mask], y_target[:, :, 5:7][val_mask]
-        )
+        # yaw_loss = self.val_yaw_loss(
+        #     y_hat[:, :, 5:7][val_mask], y_target[:, :, 5:7][val_mask]
+        # )
 
         # Compute losses on "tracks_to_predict"
         fde_ttp_mask = torch.logical_and(fde_mask, batch.tracks_to_predict)
@@ -1830,8 +1890,8 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
         self.log("val_ade_loss", ade_loss)
         self.log("val_fde_loss", fde_loss)
         self.log("val_vel_loss", vel_loss)
-        self.log("val_yaw_loss", yaw_loss)
-        self.log("val_total_loss", (ade_loss + vel_loss + yaw_loss) / 3)
+        # self.log("val_yaw_loss", yaw_loss)
+        self.log("val_total_loss", (ade_loss + vel_loss + fde_loss)
         self.log("val_fde_ttp_loss", fde_ttp_loss)
         self.log("val_ade_ttp_loss", ade_ttp_loss)
 
