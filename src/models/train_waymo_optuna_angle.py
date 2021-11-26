@@ -11,7 +11,7 @@ from src.data.dataset_waymo import OneStepWaymoDataModule, SequentialWaymoDataMo
 import torchmetrics
 from torch_geometric.data import Batch
 from src.models.model import *
-from src.models.train_waymo_model_reduced import *
+from src.models.train_waymo_model_angle_param import *
 import hydra
 from omegaconf import DictConfig, OmegaConf
 from typing import Union
@@ -32,8 +32,6 @@ class Objective(object):
         hidden_size = trial.suggest_categorical("hidden_size", [32, 64, 96, 128, 192, 256])
         latent_edge_features = trial.suggest_categorical("latent_edge_features", [32, 64, 96, 128, 192, 256])
         rnn_size = trial.suggest_categorical("rnn_size", [8, 16, 24, 32, 64])
-        dropout = trial.suggest_float("dropout", low=0.0, high=0.5)
-        num_layers = trial.suggest_categorical("num_layers", [1, 2])
 
         # Regressor
         weight_decay = trial.suggest_categorical("weight_decay", [1e-4, 5e-4, 1e-3, 5e-3, 1e-2, 1e-1, 0, 1, 10])
@@ -49,16 +47,14 @@ class Objective(object):
 
         # Trainer
         # stochastic_weight_avg = trial.suggest_categorical("stochastic_weight_avg", ["True", "False"])
-        # gradient_clip_val = trial.suggest_float("gradient_clip_val", low=0.0, high=1.0)
+        gradient_clip_val = trial.suggest_float("gradient_clip_val", low=0.0, high=1.0)
 
 
         # Pack regressor parameters together
         model_kwargs = {
             "hidden_size": hidden_size,
             "latent_edge_features": latent_edge_features,
-            "rnn_size": rnn_size,
-            "dropout": dropout,
-            "num_layers": num_layers
+            "rnn_size": rnn_size
         }
         regressor_kwargs = {
             "weight_decay": weight_decay,
@@ -69,10 +65,10 @@ class Objective(object):
             "teacher_forcing_ratio": teacher_forcing_ratio,
             # "noise": noise
         }
-        # trainer_kwargs = {
-        #     "gradient_clip_val": gradient_clip_val,
-        #     # "stochastic_weight_avg": stochastic_weight_avg
-        # }
+        trainer_kwargs = {
+            "gradient_clip_val": gradient_clip_val,
+            # "stochastic_weight_avg": stochastic_weight_avg
+        }
 
         # Update model arguments
         self.config.datamodule.batch_size = batch_size
@@ -81,9 +77,9 @@ class Objective(object):
         regressor_dict.update(regressor_kwargs)
         self.config.regressor = DictConfig(regressor_dict)
 
-        # trainer_dict = dict(self.config.trainer)
-        # trainer_dict.update(trainer_kwargs)
-        # self.config.trainer = DictConfig(trainer_dict)
+        trainer_dict = dict(self.config.trainer)
+        trainer_dict.update(trainer_kwargs)
+        self.config.trainer = DictConfig(trainer_dict)
 
         model_dict = dict(self.config.model)
         model_dict.update(model_kwargs)
@@ -128,7 +124,6 @@ class Objective(object):
         wandb_logger.log_metrics({"best_total_val_loss": val_total_loss})
         wandb_logger.finalize("0")
         wandb_logger.experiment.finish()
-        del trainer
 
         return val_total_loss
 
@@ -136,8 +131,8 @@ class Objective(object):
 @hydra.main(config_path="../../configs/waymo/", config_name="config")
 def main(config):
     # pruner = optuna.pruners.MedianPruner()
-    study = optuna.create_study(direction="minimize", study_name=config.logger.version)
-    study.optimize(Objective(config), n_trials=50, timeout=32000, gc_after_trial=True)
+    study = optuna.create_study(direction="minimize")
+    study.optimize(Objective(config), n_trials=50, timeout=6000)
 
 
 if __name__ == "__main__":

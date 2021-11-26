@@ -562,6 +562,92 @@ class rnn_forward_model_v2(nn.Module):
         return out, hidden
 
 
+class rnn_forward_model_v3(nn.Module):
+    # Forward model with edge update function
+    def __init__(
+        self,
+        hidden_size: int = 64,
+        node_features: int = 5,
+        dropout: float = 0.0,
+        edge_features: int = 0,
+        latent_edge_features: int = 0,
+        skip: bool = True,
+        num_layers: int = 1,
+        rnn_size: int = 20,
+        out_features: int = 7,
+        **kwargs,
+    ):
+        super(rnn_forward_model_v3, self).__init__()
+        self.hidden_size = hidden_size
+        self.node_features = node_features
+        self.dropout = dropout
+        self.edge_features = edge_features
+        self.latent_edge_features = latent_edge_features
+        self.rnn_size = rnn_size
+        self.num_layers = num_layers
+        self.skip = skip
+
+        self.GN1 = GraphNetworkBlock(
+            edge_model=edge_mlp_1(
+                node_features=node_features,
+                edge_features=edge_features,
+                hidden_size=hidden_size,
+                dropout=dropout,
+                latent_edge_features=latent_edge_features,
+            ),
+            node_model=node_rnn_simple(
+                node_features=node_features,
+                edge_features=latent_edge_features,
+                rnn_size=rnn_size,
+                dropout=dropout,
+                num_layers=num_layers,
+                out_features=out_features,
+            ),
+        )
+        GN2_node_input = rnn_size + node_features if skip else rnn_size
+        GN2_edge_input = (
+            latent_edge_features + edge_features if skip else latent_edge_features
+        )
+
+        self.GN2 = GraphNetworkBlock(
+            edge_model=edge_mlp_1(
+                node_features=GN2_node_input,
+                edge_features=GN2_edge_input,
+                hidden_size=hidden_size,
+                dropout=dropout,
+                latent_edge_features=latent_edge_features,
+            ),
+            node_model=node_mlp_out(
+                hidden_size=hidden_size,
+                node_features=GN2_node_input,
+                dropout=dropout,
+                edge_features=latent_edge_features,
+                out_features=out_features,
+            ),
+        )
+
+    def forward(self, x, edge_index, edge_attr, batch=None, u=None, hidden=None):
+        # Normalisation is applied in regressor module
+        # First block
+        x_1, edge_attr_1, _, hidden = self.GN1(
+            x=x,
+            edge_index=edge_index,
+            edge_attr=edge_attr,
+            u=u,
+            batch=batch,
+            hidden=hidden,
+        )
+        # Concatenation of node and edge attributes
+        if self.skip:
+            x_1 = torch.cat([x, x_1], dim=1)
+            edge_attr_1 = torch.cat([edge_attr, edge_attr_1], dim=1)
+        # Second block
+        out, _, _ = self.GN2(
+            x=x_1, edge_index=edge_index, edge_attr=edge_attr_1, u=u, batch=batch
+        )
+        return out, hidden
+
+
 class conv_model(nn.Module):
     # Forward model without edge update function
     def __init__(

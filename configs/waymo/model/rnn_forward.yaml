@@ -6,4 +6,6 @@ edge_features: 1
 skip: True
 aggregate: False
 rnn_size: 64
-out_features: 9
+out_features: 7
+num_layers: 1
+rnn_type: GRU
