@@ -458,3 +458,59 @@ class node_rnn_simple(nn.Module):
         out = out.unsqueeze(1)
         out, hidden = self.node_rnn(out, hidden)
         return out.squeeze(), hidden
+
+
+class node_gat_in(nn.Module):
+    # Input node update function.
+    # Assumes edge attributes have been updated
+    def __init__(
+            self,
+            node_features: int = 5,
+            dropout: float = 0.0,
+            out_features: int = 64,
+            heads: int = 4,
+            edge_features: int = 1
+    ):
+        super(node_gat_in, self).__init__()
+        self.dropout = dropout
+        self.gat = GATConv(
+            in_channels=node_features,
+            out_channels=out_features,
+            heads=heads,
+            dropout=dropout,
+            concat=True,
+            edge_dim=edge_features
+        )
+
+    def forward(self, x, edge_index, edge_attr, u, batch):
+        # Dropout + GAT
+        out = F.dropout(x, p=self.dropout)
+        out = F.elu(self.gat(x=out, edge_index=edge_index, edge_attr=edge_attr))
+        return out
+
+
+class node_gat_out(nn.Module):
+    def __init__(
+            self,
+            node_features: int = 5,
+            dropout: float = 0.0,
+            out_features: int = 64,
+            heads: int = 4,
+            edge_features: int = 1
+    ):
+        super(node_gat_out, self).__init__()
+        self.dropout = dropout
+        self.gat = GATConv(
+            in_channels=node_features,
+            out_channels=out_features,
+            heads=heads,
+            dropout=dropout,
+            concat=False,
+            edge_dim=edge_features
+        )
+
+    def forward(self, x, edge_index, edge_attr, u, batch):
+        # Dropout + GAT
+        out = F.dropout(x, p=self.dropout)
+        out = self.gat(x=out, edge_index=edge_index, edge_attr=edge_attr)
+        return out

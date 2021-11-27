@@ -992,111 +992,70 @@ class rnn_graph_baseline(nn.Module):
         return torch.reshape(out, (self.n_nodes * n_graphs, self.out_features)), hidden
 
 
-class NormalisationBlock:
+class attentional_model(nn.Module):
     def __init__(
         self,
-        normalise: bool = True,
+        hidden_size: int = 64,
         node_features: int = 5,
-        edge_features: int = 2,
-        subtract_edge_mean: bool = True,
+        dropout: float = 0.0,
+        heads: int = 4,
+        middle_gat: bool = False,
         out_features: int = 4,
+        edge_features: int = 1
     ):
-        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        self.normalise = normalise
+        super(attentional_model, self).__init__()
+        self.hidden_size = hidden_size
         self.node_features = node_features
-        self.edge_features = edge_features
-        self.subtract_edge_mean = subtract_edge_mean
+        self.dropout = dropout
+        self.middle_gat = middle_gat
+        self.GN1 = GraphNetworkBlock(
+            node_model=node_gat_in(
+                node_features=node_features,
+                dropout=dropout,
+                heads=heads,
+                out_features=hidden_size,
+                edge_features=edge_features
+            ),
+        )
 
-        # Node normalisation parameters
-        # self.node_counter = torch.zeros(1).to(self.device)
-        self.register_buffer("node_counter", torch.zeros(1))
-        # self.node_in_sum = torch.zeros(node_features).to(self.device)
-        self.register_buffer("node_in_sum", torch.zeros(node_features))
-        # self.node_in_squaresum = torch.zeros(node_features).to(self.device)
-        self.register_buffer("node_in_squaresum", torch.zeros(node_features))
-        # self.node_in_std = torch.ones(node_features).to(self.device)
-        self.register_buffer("node_in_std", torch.ones(node_features))
-        # self.node_in_mean = torch.zeros(node_features).to(self.device)
-        # self.register_buffer("node_in_mean", torch.zeros(node_features))
-
-        # Output normalisation parameters
-        self.node_out_sum = torch.zeros(out_features).to(self.device)
-        self.node_out_squaresum = torch.zeros(out_features).to(self.device)
-        self.node_out_std = torch.ones(out_features).to(self.device)
-        self.node_out_mean = torch.zeros(out_features).to(self.device)
-
-        # Edge normalisation parameters
-        self.edge_counter = torch.zeros(1).to(self.device)
-        self.edge_in_sum = torch.zeros(edge_features).to(self.device)
-        self.edge_in_squaresum = torch.zeros(edge_features).to(self.device)
-        self.edge_in_std = torch.ones(edge_features).to(self.device)
-        self.edge_in_mean = torch.zeros(edge_features).to(self.device)
-        self.edge_in_mean = torch.zeros(edge_features).to(self.device)
-
-    def update_in_normalisation(self, x, edge_attr=None):
-        if self.normalise:
-            # Node normalisation
-            tmp = torch.sum(x, dim=0)
-            self.node_in_sum += tmp
-            self.node_in_squaresum += tmp * tmp
-            self.node_counter += torch.Tensor([x.shape[0]])
-            self.node_in_mean = self.node_in_sum / self.node_counter
-            self.node_in_std = torch.sqrt(
-                (
-                    (self.node_in_squaresum / self.node_counter)
-                    - (self.node_in_sum / self.node_counter) ** 2
-                )
+        if middle_gat:
+            self.GN2 = GraphNetworkBlock(
+                node_model=node_gat_in(
+                    node_features=hidden_size*heads,
+                    dropout=dropout,
+                    heads=heads,
+                    out_features=hidden_size,
+                    edge_features=edge_features
+                ),
             )
+            # Apply skip connection across this layer. Compute new input size
+            hidden_size = hidden_size*2
 
-            # Edge normalisation
-            if edge_attr is not None:
-                tmp = torch.sum(edge_attr, dim=0)
-                self.edge_in_sum += tmp
-                self.edge_in_squaresum += tmp * tmp
-                self.edge_counter += torch.Tensor([edge_attr.shape[0]])
-                self.edge_in_mean = self.edge_in_sum / self.edge_counter
-                self.edge_in_std = torch.sqrt(
-                    (
-                        (self.edge_in_squaresum / self.edge_counter)
-                        - (self.edge_in_sum / self.edge_counter) ** 2
-                    )
-                )
+        self.GN3 = GraphNetworkBlock(
+            node_model=node_gat_out(
+                node_features=hidden_size*heads,
+                dropout=dropout,
+                heads=heads,
+                out_features=out_features,
+                edge_features=edge_features
+            ),
+        )
 
-    def in_normalise(self, x, edge_attr=None):
-        if self.normalise:
-            # x = x.detach()
-            x = torch.sub(x, self.node_in_mean)
-            x = torch.div(x, self.node_in_std)
+    def forward(self, x, edge_index, edge_attr, batch=None, u=None):
+        # Input GAT
+        out, _, _ = self.GN1(
+            x=x, edge_index=edge_index, edge_attr=edge_attr, u=u, batch=batch
+        )
 
-            # Edge normalisation
-            if edge_attr is not None:
-                if self.subtract_edge_mean:
-                    edge_attr = torch.sub(edge_attr, self.edge_in_mean)
-                edge_attr = torch.div(edge_attr, self.edge_in_std)
-
-        return x, edge_attr
-
-    def update_out_normalisation(self, x):
-        if self.normalise:
-            tmp = torch.sum(x, dim=0)
-            self.node_out_sum += tmp
-            self.node_out_squaresum += tmp * tmp
-            self.node_out_mean = self.node_out_sum / self.node_counter
-            self.node_out_std = torch.sqrt(
-                (
-                    (self.node_out_squaresum / self.node_counter)
-                    - (self.node_out_sum / self.node_counter) ** 2
-                )
+        if self.middle_gat:
+            out_middle, _, _ = self.GN2(
+                x=out, edge_index=edge_index, edge_attr=edge_attr, u=u, batch=batch
             )
+            # Skip connection
+            out = torch.cat([out, out_middle], dim=-1)
 
-    def out_normalise(self, x):
-        if self.normalise:
-            x = torch.sub(x, self.node_out_mean)
-            x = torch.div(x, self.node_out_std)
-        return x
+        out, _, _ = self.GN3(
+            x=out, edge_index=edge_index, edge_attr=edge_attr, u=u, batch=batch
+        )
 
-    def out_renormalise(self, x):
-        if self.normalise:
-            x = torch.mul(self.node_out_std, x)
-            x = torch.add(x, self.node_out_mean)
-        return x
+        return out
