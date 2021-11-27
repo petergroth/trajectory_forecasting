@@ -842,8 +842,7 @@ class SequentialModule(pl.LightningModule):
         self.norm_index = [0, 1, 2, 3, 4, 5, 6]
 
         # Model parameters
-        assert model_dict["rnn_type"] in ["GRU", "LSTM"]
-        self.rnn_type = model_dict["rnn_type"]
+        self.rnn_type = model_dict["rnn_type"] if "rnn_type" in model_dict.keys() else None
         self.out_features = out_features
         self.edge_features = edge_features
         self.node_features = node_features
