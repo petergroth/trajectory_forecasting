@@ -651,59 +651,6 @@ class rnn_forward_model_v3(nn.Module):
         return out, hidden
 
 
-class conv_model(nn.Module):
-    # Forward model without edge update function
-    def __init__(
-        self,
-        hidden_size: int = 64,
-        node_features: int = 5,
-        dropout: float = 0.0,
-        skip: bool = True,
-        normalise: bool = True,
-        edge_features: int = 1,
-        **kwargs
-    ):
-        super(conv_model, self).__init__()
-        self.edge_features = 1
-        self.hidden_size = hidden_size
-        self.node_features = node_features
-        self.dropout = dropout
-        self.out_features = 4
-
-        self.GN1 = GraphNetworkBlock(
-            node_model=GCNConv(in_channels=node_features, out_channels=hidden_size)
-        )
-
-        GN2_node_input = hidden_size + node_features if skip else hidden_size
-
-        self.GN2 = GraphNetworkBlock(
-            node_model=GCNConv(
-                in_channels=GN2_node_input, out_channels=self.out_features
-            )
-        )
-
-        # self.NormBlock = NormalisationBlock(
-        #     normalise=normalise,
-        #     node_features=node_features,
-        #     edge_features=edge_features,
-        # )
-
-    def forward(self, x, edge_index, edge_attr, batch=None, u=None):
-        # Normalisation is applied in regressor module
-
-        # First block
-        x_1, edge_attr_1, _ = self.GN1(
-            x=x, edge_index=edge_index, edge_attr=edge_attr, u=u, batch=batch
-        )
-        # concatenation of node and edge attributes
-        x_1 = torch.cat([x, x_1], dim=1)
-        # edge_attr_1 = torch.cat([edge_attr, edge_attr_1], dim=1)
-        # Second block
-        out, _, _ = self.GN2(
-            x=x_1, edge_index=edge_index, edge_attr=edge_attr_1, u=u, batch=batch
-        )
-        return out
-
 
 class GraphNetworkBlock(MetaLayer):
     def __init__(self, edge_model=None, node_model=None, global_model=None):
@@ -1056,6 +1003,39 @@ class attentional_model(nn.Module):
 
         out, _, _ = self.GN3(
             x=out, edge_index=edge_index, edge_attr=edge_attr, u=u, batch=batch
+        )
+
+        return out
+
+class convolutional_model(nn.Module):
+    def __init__(
+        self,
+        hidden_size: int = 64,
+        node_features: int = 5,
+        dropout: float = 0.0,
+        skip: bool = False,
+        out_features: int = 4,
+        edge_features: int = 1
+    ):
+        super(convolutional_model, self).__init__()
+        self.hidden_size = hidden_size
+        self.node_features = node_features
+        self.dropout = dropout
+        self.GN1 = GraphNetworkBlock(
+            node_model=node_gcn(
+                node_features=node_features,
+                dropout=dropout,
+                skip=skip,
+                out_features=out_features,
+                edge_features=edge_features,
+                hidden_size=hidden_size
+            ),
+        )
+
+    def forward(self, x, edge_index, edge_attr, batch=None, u=None):
+        # Input GAT
+        out, _, _ = self.GN1(
+            x=x, edge_index=edge_index, edge_attr=edge_attr, u=u, batch=batch
         )
 
         return out
