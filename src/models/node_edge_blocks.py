@@ -514,3 +514,37 @@ class node_gat_out(nn.Module):
         out = F.dropout(x, p=self.dropout)
         out = self.gat(x=out, edge_index=edge_index, edge_attr=edge_attr)
         return out
+
+
+class node_gcn(nn.Module):
+    def __init__(
+            self,
+            node_features: int = 5,
+            dropout: float = 0.0,
+            hidden_size: int = 64,
+            out_features: int = 4,
+            edge_features: int = 1,
+            skip: bool = False,
+    ):
+        super(node_gcn, self).__init__()
+        assert edge_features == 1
+        self.dropout = dropout
+        self.skip = skip
+        self.gcn_in = GCNConv(
+            in_channels=node_features,
+            out_channels=hidden_size,
+        )
+        out_in = hidden_size+node_features if skip else hidden_size
+        self.gcn_out = GCNConv(
+            in_channels=out_in,
+            out_channels=out_features
+        )
+
+    def forward(self, x, edge_index, edge_attr, u, batch):
+        out = F.relu(self.gcn_in(x=x, edge_index=edge_index, edge_weight=edge_attr.squeeze()))
+        out = F.dropout(out, p=self.dropout)
+        if self.skip:
+            out = torch.cat([x, out], dim=-1)
+        out = self.gcn_out(x=out, edge_index=edge_index, edge_weight=edge_attr.squeeze())
+
+        return out
