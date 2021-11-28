@@ -280,82 +280,82 @@ def main():
         x = y_target[:, agent, 0].detach().numpy()
         y = y_target[:, agent, 1].detach().numpy()
         axglob[0].scatter(x=x, y=y, s=50, color=colors[agent], alpha=0.05)
-        axglob[0].quiver(
-            y_target[0, agent, 0].detach().numpy(),
-            y_target[0, agent, 1].detach().numpy(),
-            y_target[0, agent, 2].detach().numpy(),
-            y_target[0, agent, 3].detach().numpy(),
-            width=0.003,
-            headwidth=5,
-            angles="xy",
-            scale_units="xy",
-            scale=1.0,
-            color="lightgrey",
-        )
-        axglob[0].quiver(
-            y_target[10, agent, 0].detach().numpy(),
-            y_target[10, agent, 1].detach().numpy(),
-            y_target[10, agent, 2].detach().numpy(),
-            y_target[10, agent, 3].detach().numpy(),
-            width=0.003,
-            headwidth=5,
-            angles="xy",
-            scale_units="xy",
-            scale=1.0,
-            color="gray",
-        )
-        axglob[0].quiver(
-            y_target[n_steps-1, agent, 0].detach().numpy(),
-            y_target[n_steps-1, agent, 1].detach().numpy(),
-            y_target[n_steps-1, agent, 2].detach().numpy(),
-            y_target[n_steps-1, agent, 3].detach().numpy(),
-            width=0.003,
-            headwidth=5,
-            angles="xy",
-            scale_units="xy",
-            scale=1.0,
-            color="k",
-        )
+        # axglob[0].quiver(
+        #     y_target[0, agent, 0].detach().numpy(),
+        #     y_target[0, agent, 1].detach().numpy(),
+        #     y_target[0, agent, 2].detach().numpy(),
+        #     y_target[0, agent, 3].detach().numpy(),
+        #     width=0.003,
+        #     headwidth=5,
+        #     angles="xy",
+        #     scale_units="xy",
+        #     scale=1.0,
+        #     color="lightgrey",
+        # )
+        # axglob[0].quiver(
+        #     y_target[10, agent, 0].detach().numpy(),
+        #     y_target[10, agent, 1].detach().numpy(),
+        #     y_target[10, agent, 2].detach().numpy(),
+        #     y_target[10, agent, 3].detach().numpy(),
+        #     width=0.003,
+        #     headwidth=5,
+        #     angles="xy",
+        #     scale_units="xy",
+        #     scale=1.0,
+        #     color="gray",
+        # )
+        # axglob[0].quiver(
+        #     y_target[n_steps-1, agent, 0].detach().numpy(),
+        #     y_target[n_steps-1, agent, 1].detach().numpy(),
+        #     y_target[n_steps-1, agent, 2].detach().numpy(),
+        #     y_target[n_steps-1, agent, 3].detach().numpy(),
+        #     width=0.003,
+        #     headwidth=5,
+        #     angles="xy",
+        #     scale_units="xy",
+        #     scale=1.0,
+        #     color="k",
+        # )
 
         x = y_hat[:, agent, 0].detach().numpy()
         y = y_hat[:, agent, 1].detach().numpy()
         axglob[1].scatter(x=x, y=y, s=30, color=colors[agent], alpha=0.05)
-        axglob[1].quiver(
-            y_hat[0, agent, 0].detach().numpy(),
-            y_hat[0, agent, 1].detach().numpy(),
-            y_hat[0, agent, 2].detach().numpy(),
-            y_hat[0, agent, 3].detach().numpy(),
-            width=0.003,
-            headwidth=5,
-            angles="xy",
-            scale_units="xy",
-            scale=1.0,
-            color="lightgrey",
-        )
-        axglob[1].quiver(
-            y_hat[0, agent, 0].detach().numpy(),
-            y_hat[0, agent, 1].detach().numpy(),
-            y_hat[0, agent, 2].detach().numpy(),
-            y_hat[0, agent, 3].detach().numpy(),
-            width=0.003,
-            headwidth=5,
-            angles="xy",
-            scale_units="xy",
-            scale=1.0,
-            color="gray",
-        )
-        axglob[1].quiver(
-            y_hat[0, agent, 0].detach().numpy(),
-            y_hat[0, agent, 1].detach().numpy(),
-            y_hat[0, agent, 2].detach().numpy(),
-            y_hat[0, agent, 3].detach().numpy(),
-            width=0.003,
-            headwidth=5,
-            angles="xy",
-            scale_units="xy",
-            scale=1.0,
-            color="k",
-        )
+        # axglob[1].quiver(
+        #     y_hat[0, agent, 0].detach().numpy(),
+        #     y_hat[0, agent, 1].detach().numpy(),
+        #     y_hat[0, agent, 2].detach().numpy(),
+        #     y_hat[0, agent, 3].detach().numpy(),
+        #     width=0.003,
+        #     headwidth=5,
+        #     angles="xy",
+        #     scale_units="xy",
+        #     scale=1.0,
+        #     color="lightgrey",
+        # )
+        # axglob[1].quiver(
+        #     y_hat[0, agent, 0].detach().numpy(),
+        #     y_hat[0, agent, 1].detach().numpy(),
+        #     y_hat[0, agent, 2].detach().numpy(),
+        #     y_hat[0, agent, 3].detach().numpy(),
+        #     width=0.003,
+        #     headwidth=5,
+        #     angles="xy",
+        #     scale_units="xy",
+        #     scale=1.0,
+        #     color="gray",
+        # )
+        # axglob[1].quiver(
+        #     y_hat[0, agent, 0].detach().numpy(),
+        #     y_hat[0, agent, 1].detach().numpy(),
+        #     y_hat[0, agent, 2].detach().numpy(),
+        #     y_hat[0, agent, 3].detach().numpy(),
+        #     width=0.003,
+        #     headwidth=5,
+        #     angles="xy",
+        #     scale_units="xy",
+        #     scale=1.0,
+        #     color="k",
+        # )
 
     axglob[0].axis("equal")
     axglob[0].set_xlim((x_min, x_max))

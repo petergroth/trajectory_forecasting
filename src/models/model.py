@@ -576,6 +576,7 @@ class rnn_forward_model_v3(nn.Module):
         rnn_size: int = 20,
         out_features: int = 7,
         rnn_type: str = "GRU",
+        aggregate: bool = False,
         **kwargs,
     ):
         super(rnn_forward_model_v3, self).__init__()
@@ -588,6 +589,7 @@ class rnn_forward_model_v3(nn.Module):
         self.num_layers = num_layers
         self.skip = skip
         self.rnn_type = rnn_type
+        self.aggregate = aggregate
 
         self.GN1 = GraphNetworkBlock(
             edge_model=edge_mlp_1(
@@ -642,7 +644,11 @@ class rnn_forward_model_v3(nn.Module):
         )
         # Concatenation of node and edge attributes
         if self.skip:
-            x_1 = torch.cat([x, x_1], dim=1)
+            if self.aggregate:
+                x_1 = scatter_add(x_1, batch, dim=0)
+                x_1 = torch.cat([x, x_1[batch]], dim=1)
+            else:
+                x_1 = torch.cat([x, x_1], dim=1)
             edge_attr_1 = torch.cat([edge_attr, edge_attr_1], dim=1)
         # Second block
         out, _, _ = self.GN2(
