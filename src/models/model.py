@@ -1013,6 +1013,7 @@ class attentional_model(nn.Module):
 
         return out
 
+
 class convolutional_model(nn.Module):
     def __init__(
         self,

@@ -17,7 +17,7 @@ from pytorch_lightning.callbacks import RichProgressBar
 import math
 import random
 
-class OneStepModule(pl.LightningModule):
+class OneStepModule(pl.LightningModule):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
     def __init__(
         self,
         model_type: Union[None, str],
@@ -896,6 +896,7 @@ class SequentialModule(pl.LightningModule):
         # static_features = torch.cat(
         #     [batch.x[:, 10, self.out_features :], batch.type], dim=1
         # )
+
         static_features = batch.x[:, 10, (self.out_features-2):]
         static_features = static_features.type_as(batch.x)
         edge_attr = None
@@ -1243,6 +1244,7 @@ class SequentialModule(pl.LightningModule):
         # static_features = torch.cat(
         #     [batch.x[:, 10, self.out_features :], batch.type], dim=1
         # )
+
         static_features = batch.x[:, 10, (self.out_features-2):]
         static_features = static_features.type_as(batch.x)
         edge_attr = None

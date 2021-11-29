@@ -802,7 +802,6 @@ class SequentialModule(pl.LightningModule):
             edge_type: str = "knn",
             self_loop: bool = True,
             undirected: bool = False,
-            #rnn_type: str = "GRU",
             out_features: int = 6,
             node_features: int = 9,
             edge_features: int = 1,
@@ -904,9 +903,7 @@ class SequentialModule(pl.LightningModule):
         y_predictions = torch.zeros((n_nodes, self.training_horizon, self.out_features))
         y_predictions = y_predictions.type_as(batch.x)
 
-        # Obtain target delta dynamic nodes
-        # Use torch.roll to compute differences between x_t and x_{t+1}.
-        # Ignore final difference (between t_0 and t_{-1})
+        # Define target values
         y_target = batch.x[:, 1:(self.training_horizon + 1), :self.out_features]
         y_target = y_target.type_as(batch.x)
 
