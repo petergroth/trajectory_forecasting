@@ -15,6 +15,7 @@ from omegaconf import DictConfig, OmegaConf
 from typing import Union
 from pytorch_lightning.callbacks import RichProgressBar
 import math
+import random
 
 class OneStepModule(pl.LightningModule):
     def __init__(
@@ -802,7 +803,6 @@ class SequentialModule(pl.LightningModule):
         edge_type: str = "knn",
         self_loop: bool = True,
         undirected: bool = False,
-        rnn_type: str = "GRU",
         out_features: int = 6,
         node_features: int = 9,
         edge_features: int = 1,
@@ -814,6 +814,9 @@ class SequentialModule(pl.LightningModule):
         assert edge_type in ["knn", "distance"]
         if edge_type == "distance":
             assert min_dist > 0.0
+
+        assert out_features == 9
+        assert node_features == 12
 
         # Set up metrics
         self.train_ade_loss = torchmetrics.MeanSquaredError()
@@ -840,9 +843,10 @@ class SequentialModule(pl.LightningModule):
         self.teacher_forcing = teacher_forcing
         self.teacher_forcing_ratio = teacher_forcing_ratio
         self.training_horizon = training_horizon
+        self.norm_index = [0, 1, 2, 3, 4, 9, 10, 11]  # Don't normalise sines/cosines
 
         # Model parameters
-        self.rnn_type = rnn_type
+        self.rnn_type = model_dict["rnn_type"] if "rnn_type" in model_dict.keys() else None
         self.out_features = out_features
         self.edge_features = edge_features
         self.node_features = node_features
@@ -887,53 +891,52 @@ class SequentialModule(pl.LightningModule):
         # Update mask
         mask = batch.x[:, :, -1].bool()
 
-        # Discard masks and extract static features
+        # Discard mask and extract static features
         batch.x = batch.x[:, :, :-1]
         # static_features = torch.cat(
         #     [batch.x[:, 10, self.out_features :], batch.type], dim=1
         # )
-        static_features = batch.x[:, 10, self.out_features:].clone()
+        static_features = batch.x[:, 10, (self.out_features-2):]
         static_features = static_features.type_as(batch.x)
         edge_attr = None
+
         # Extract dimensions and allocate predictions
         n_nodes = batch.num_nodes
-        y_predictions = torch.zeros((n_nodes, self.training_horizon, self.out_features+2))
+        y_predictions = torch.zeros((n_nodes, self.training_horizon, self.out_features))
         y_predictions = y_predictions.type_as(batch.x)
 
-        # Obtain target delta dynamic nodes
-        # Use torch.roll to compute differences between x_t and x_{t+1}.
-        # Ignore final difference (between t_0 and t_{-1})
-        y_target = (
-            torch.roll(batch.x[:, :, : self.out_features], (0, -1, 0), (0, 1, 2))
-            - batch.x[:, :, : self.out_features]
-        )[:, :-1, :]
+        # Decompose angular attributes into sines/cosines
+        sines = torch.sin(batch.x[:, :, [5, 6]])
+        cosines = torch.cos(batch.x[:, :, [5, 6]])
 
-        # Transform yaw values to their sines/cosines
-        sines = torch.sin(y_target[:, :, [5, 6]])
-        cosines = torch.cos(y_target[:, :, [5, 6]])
-
-        # Replace yaws with sines/cosines
-        y_target = torch.cat([
-            y_target[:, :, [0, 1, 2, 3, 4]],
+        # Replace yaws with sine/cosine pairs
+        batch.x = torch.cat([
+            batch.x[:, :, [0, 1, 2, 3, 4]],
             sines[:, :, 0].unsqueeze(2),
             cosines[:, :, 0].unsqueeze(2),
             sines[:, :, 1].unsqueeze(2),
-            cosines[:, :, 1].unsqueeze(2)
+            cosines[:, :, 1].unsqueeze(2),
+            batch.x[:, :, (self.out_features-2):]
         ], dim=-1)
+
+        # Define target values
+        y_target = batch.x[:, 1:(self.training_horizon + 1), :self.out_features]
         y_target = y_target.type_as(batch.x)
+
         assert y_target.shape == y_predictions.shape
 
         # Initial hidden state
         if self.rnn_type == "GRU":
             h = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
             h = h.type_as(batch.x)
+            c = None
         elif self.rnn_type == "LSTM":
-            raise NotImplementedError
-            h = torch.zeros((self.model.num_layers, 1, self.model.rnn_size))
-            c = torch.zeros((self.model.num_layers, 1, self.model.rnn_size))
-            h = (h, c)
+            h = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
+            h = h.type_as(batch.x)
+            c = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
+            c = c.type_as(batch.x)
         else:
-            h = None
+            h, c = None, None
 
         ######################
         # History            #
@@ -941,10 +944,10 @@ class SequentialModule(pl.LightningModule):
 
         for t in range(11):
 
-            # Extract current input and target
+            # Extract current input
             mask_t = mask[:, t]
             # x_t = torch.cat([batch.x[mask_t, t, :], batch.type[mask_t]], dim=1)
-            x_t = batch.x[mask_t, t, :].clone()
+            x_t = batch.x[mask_t, t, :]
             x_t = x_t.type_as(batch.x)
 
             # Add noise if specified
@@ -988,6 +991,8 @@ class SequentialModule(pl.LightningModule):
                 # Encode distance between nodes as edge_attr
                 row, col = edge_index
                 edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
+                edge_attr = 1 / edge_attr
+                edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
                 edge_attr = edge_attr.type_as(batch.x)
 
             #######################
@@ -996,16 +1001,11 @@ class SequentialModule(pl.LightningModule):
 
             # Normalise input graph
             if self.normalise:
-                if edge_attr is None:
-                    # Center node positions
-                    x_t[:, [0, 1, 2]] -= batch.loc[batch.batch][mask_t][:, [0, 1, 2]]
-                    # Scale all features (except yaws) with global scaler
-                    x_t[:, [0, 1, 2, 3, 4, 7, 8, 9]] /= self.global_scale
-                else:
-                    # Center node positions
-                    x_t[:, [0, 1, 2]] -= batch.loc[batch.batch][mask_t][:, [0, 1, 2]]
-                    # Scale all features (except yaws) with global scaler
-                    x_t[:, [0, 1, 2, 3, 4, 7, 8, 9]] /= self.global_scale
+                # Center node positions
+                x_t[:, [0, 1, 2]] -= batch.loc[batch.batch][mask_t][:, [0, 1, 2]]
+                # Scale all features (except yaws) with global scaler
+                x_t[:, self.norm_index] /= self.global_scale
+                if edge_attr is not None:
                     # Scale edge attributes
                     edge_attr /= self.global_scale
 
@@ -1017,9 +1017,7 @@ class SequentialModule(pl.LightningModule):
                     edge_attr=edge_attr,
                     batch=batch.batch[mask_t],
                 )
-            else:
-                # Add zero rows for new columns
-                assert self.rnn_type == "GRU"
+            elif self.rnn_type == "GRU":
                 delta_x, h_t = self.model(
                     x=x_t,
                     edge_index=edge_index,
@@ -1030,54 +1028,32 @@ class SequentialModule(pl.LightningModule):
                 # Update hidden states
                 h[:, mask_t] = h_t
 
-            # Process predicted yaw values
-            yaw_pred = torch.tanh(delta_x[:, 5:9])
-            delta_x[:, [5, 6, 7, 8]] = yaw_pred
-
-            # Save deltas for loss computation
-            y_predictions[mask_t, t, :] = delta_x
-
-            if t == 10:
-                # Transform yaw values for next graph
-                bbox_yaw = torch.atan2(
-                    torch.tanh(delta_x[:, 5]), torch.tanh(delta_x[:, 6])
-                ).unsqueeze(1)
-                vel_yaw = torch.atan2(
-                    torch.tanh(delta_x[:, 7]), torch.tanh(delta_x[:, 8])
-                ).unsqueeze(1)
-                tmp = torch.cat([delta_x[:, 0:5], bbox_yaw, vel_yaw], dim=1)
-                delta_x = tmp
-
-                # Add deltas to input graph
-                x_t = torch.cat(
-                    (
-                        batch.x[mask_t, t, : self.out_features] + delta_x,
-                        static_features[mask_t],
-                    ),
-                    dim=-1,
+            else:  # LSTM
+                delta_x, (h_t, c_t) = self.model(
+                    x=x_t,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    batch=batch.batch[mask_t],
+                    hidden=(h[:, mask_t], c[:, mask_t])
                 )
+                h[:, mask_t] = h_t
+                c[:, mask_t] = c_t
 
-                # Process yaw values of latest graph to ensure [-pi, pi] interval
-                yaws = x_t[:, [5, 6]]
-                yaws[yaws > 0] = (
-                        torch.fmod(yaws[yaws > 0] + math.pi, torch.tensor(2 * math.pi))
-                        - math.pi
-                )
-                yaws[yaws < 0] = (
-                        torch.fmod(yaws[yaws < 0] - math.pi, torch.tensor(2 * math.pi))
-                        + math.pi
-                )
-                x_t[:, [5, 6]] = yaws
+            # Process predicted yaw values into sine/cosines via tanh
+            yaw_pred = torch.tanh(delta_x[:, [5, 6, 7, 8]])
+
+            # Add deltas to input graph and update yaw values directly
+            x_t = torch.cat([
+                batch.x[mask_t, t, : (self.out_features-4)] + delta_x[:, :5],
+                yaw_pred,
+                static_features[mask_t],
+            ], dim=-1)
+
+            # Save predictions
+            y_predictions[mask_t, t, :] = x_t[:, :self.out_features]
 
         # If using teacher_forcing, draw sample and accept <teach_forcing_ratio*100> % of the time. Else, deny.
-        use_groundtruth = (
-            (
-                torch.distributions.uniform.Uniform(0, 1).sample()
-                < self.teacher_forcing_ratio
-            )
-            if self.teacher_forcing
-            else False
-        )
+        use_groundtruth = (random.random() < self.teacher_forcing_ratio)
 
         ######################
         # Future             #
@@ -1125,6 +1101,8 @@ class SequentialModule(pl.LightningModule):
                 # Encode distance between nodes as edge_attr
                 row, col = edge_index
                 edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
+                edge_attr = 1 / edge_attr
+                edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
                 edge_attr = edge_attr.type_as(batch.x)
 
             #######################
@@ -1133,16 +1111,11 @@ class SequentialModule(pl.LightningModule):
 
             # Normalise input graph
             if self.normalise:
-                if edge_attr is None:
-                    # Center node positions
-                    x_t[:, [0, 1, 2]] -= batch.loc[batch.batch][:, [0, 1, 2]]
-                    # Scale all features (except yaws) with global scaler
-                    x_t[:, [0, 1, 2, 3, 4, 7, 8, 9]] /= self.global_scale
-                else:
-                    # Center node positions
-                    x_t[:, [0, 1, 2]] -= batch.loc[batch.batch][:, [0, 1, 2]]
-                    # Scale all features (except yaws) with global scaler
-                    x_t[:, [0, 1, 2, 3, 4, 7, 8, 9]] /= self.global_scale
+                # Center node positions
+                x_t[:, [0, 1, 2]] -= batch.loc[batch.batch][:, [0, 1, 2]]
+                # Scale all features (except yaws) with global scaler
+                x_t[:, self.norm_index] /= self.global_scale
+                if edge_attr is not None:
                     # Scale edge attributes
                     edge_attr /= self.global_scale
 
@@ -1154,7 +1127,7 @@ class SequentialModule(pl.LightningModule):
                     edge_attr=edge_attr,
                     batch=batch.batch,
                 )
-            else:
+            elif self.rnn_type == "GRU":
                 delta_x, h = self.model(
                     x=x_t,
                     edge_index=edge_index,
@@ -1162,72 +1135,59 @@ class SequentialModule(pl.LightningModule):
                     batch=batch.batch,
                     hidden=h,
                 )
+            else:
+                delta_x, (h, c) = self.model(
+                    x=x_t,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    batch=batch.batch,
+                    hidden=(h, c),
+                )
 
             # Process predicted yaw values
             yaw_pred = torch.tanh(delta_x[:, 5:9])
-            delta_x[:, [5, 6, 7, 8]] = yaw_pred
-
-            # Save deltas for loss computation
-            y_predictions[mask_t, t, :] = delta_x
-
-            # Transform yaw
-            bbox_yaw = torch.atan2(
-                torch.tanh(delta_x[:, 5]), torch.tanh(delta_x[:, 6])
-            ).unsqueeze(1)
-            vel_yaw = torch.atan2(
-                torch.tanh(delta_x[:, 7]), torch.tanh(delta_x[:, 8])
-            ).unsqueeze(1)
-            tmp = torch.cat([delta_x[:, 0:5], bbox_yaw, vel_yaw], dim=1)
-            delta_x = tmp
 
             # Add deltas to input graph. Input for next timestep
             x_t = torch.cat(
                 (
-                    x_prev[:, : self.out_features] + delta_x,
-                    x_prev[:, self.out_features :],
+                    x_prev[:, : (self.out_features-4)] + delta_x[:, :5],
+                    yaw_pred,
+                    x_prev[:, self.out_features:],
                 ),
                 dim=-1,
             )
 
-            # Process yaw values to ensure [-pi, pi] interval
-            yaws = x_t[:, [5, 6]]
-            yaws[yaws > 0] = (
-                    torch.fmod(yaws[yaws > 0] + math.pi, torch.tensor(2 * math.pi))
-                    - math.pi
-            )
-            yaws[yaws < 0] = (
-                    torch.fmod(yaws[yaws < 0] - math.pi, torch.tensor(2 * math.pi))
-                    + math.pi
-            )
-            x_t[:, [5, 6]] = yaws
+            # Save predictions
+            y_predictions[:, t, :] = x_t[:, :self.out_features]
 
-        # Determine valid inputs
-        loss_mask_0 = mask[:, :self.training_horizon]
-        # Determine valid targets
-        loss_mask_1 = mask[:, 1:(self.training_horizon+1)]
-        # Loss is computed at intersection
-        loss_mask = torch.logical_and(loss_mask_0, loss_mask_1)
+        # Determine valid input and target pairs. Compute loss mask as their intersection
+        loss_mask_target = mask[:, 1:(self.training_horizon + 1)]
+        loss_mask_input = mask[:, 0:self.training_horizon]
+        loss_mask = torch.logical_and(loss_mask_input, loss_mask_target)
+
         # Determine valid end-points
-        fde_mask_0 = mask[:, -1]
-        # Determine valid inputs to end-points
-        fde_mask_1 = mask[:, -2]
-        fde_mask = torch.logical_and(fde_mask_0, fde_mask_1)
+        fde_mask_target = mask[:, -1]
+        fde_mask_input = mask[:, -2]
+        fde_mask = torch.logical_and(fde_mask_input, fde_mask_target)
+
+        assert (y_target[:, :, [0, 1]][loss_mask] == 0).sum() == 0
+        assert (y_predictions[:, :, [0, 1]][loss_mask] == 0).sum() == 0
 
         # Compute and log loss
         fde_loss = self.train_fde_loss(
-            y_predictions[fde_mask, -1, :3], y_target[fde_mask, -1, :3]
+            y_predictions[fde_mask, -1][:, [0, 1]], y_target[fde_mask, -1][:, [0, 1]]
         )
         ade_loss = self.train_ade_loss(
-            y_predictions[:, :self.training_horizon, :3][loss_mask],
-            y_target[:, :self.training_horizon, :3][loss_mask]
+            y_predictions[:, :, [0, 1]][loss_mask],
+            y_target[:, :, [0, 1]][loss_mask]
         )
         vel_loss = self.train_vel_loss(
-            y_predictions[:, :self.training_horizon, 3:5][loss_mask],
-            y_target[:, :self.training_horizon, 3:5][loss_mask]
+            y_predictions[:, :, [2, 3]][loss_mask],
+            y_target[:, :, [2, 3]][loss_mask]
         )
         yaw_loss = self.train_yaw_loss(
-            y_predictions[:, :self.training_horizon, [5, 6, 7, 8]][loss_mask],
-            y_target[:, :self.training_horizon, [5, 6, 7, 8]][loss_mask]
+            y_predictions[:, :, [5, 6, 7, 8]][loss_mask],
+            y_target[:, :, [5, 6, 7, 8]][loss_mask]
         )
 
         self.log("train_fde_loss", fde_loss, on_step=True, on_epoch=True, batch_size=fde_mask.sum().item())
@@ -1278,26 +1238,48 @@ class SequentialModule(pl.LightningModule):
         n_nodes = batch.num_nodes
         y_hat = torch.zeros((80, n_nodes, self.out_features))
         y_hat = y_hat.type_as(batch.x)
-        y_target = torch.zeros((80, n_nodes, self.out_features))
-        y_target = y_target.type_as(batch.x)
+
         batch.x = batch.x[:, :, :-1]
         # static_features = torch.cat(
         #     [batch.x[:, 10, self.out_features :], batch.type], dim=1
         # )
-        static_features = batch.x[:, 10, self.out_features:].clone()
+        static_features = batch.x[:, 10, (self.out_features-2):]
         static_features = static_features.type_as(batch.x)
         edge_attr = None
+
+        # Decompose angular attributes into sines/cosines
+        sines = torch.sin(batch.x[:, :, [5, 6]])
+        cosines = torch.cos(batch.x[:, :, [5, 6]])
+
+        # Replace yaws with sine/cosine pairs
+        batch.x = torch.cat([
+            batch.x[:, :, [0, 1, 2, 3, 4]],
+            sines[:, :, 0].unsqueeze(2),
+            cosines[:, :, 0].unsqueeze(2),
+            sines[:, :, 1].unsqueeze(2),
+            cosines[:, :, 1].unsqueeze(2),
+            batch.x[:, :, (self.out_features - 2):]
+        ], dim=-1)
+
+        # Define target values
+        y_target = batch.x[:, 11:(self.training_horizon + 1), :self.out_features]
+        y_target = y_target.type_as(batch.x)
+        y_target = y_target.permute(1, 0, 2)
+
+        assert y_target.shape == y_hat.shape
 
         # Initial hidden state
         if self.rnn_type == "GRU":
             h = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
             h = h.type_as(batch.x)
+            c = None
         elif self.rnn_type == "LSTM":
-            h = torch.zeros((self.model.num_layers, 1, self.model.rnn_size))
-            c = torch.zeros((self.model.num_layers, 1, self.model.rnn_size))
-            h = (h, c)
+            h = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
+            h = h.type_as(batch.x)
+            c = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
+            c = c.type_as(batch.x)
         else:
-            h = None
+            h, c = None, None
 
         ######################
         # History            #
@@ -1311,7 +1293,7 @@ class SequentialModule(pl.LightningModule):
 
             mask_t = mask[:, t]
             # x_t = torch.cat([batch.x[mask_t, t, :], batch.type[mask_t]], dim=1)
-            x_t = batch.x[mask_t, t, :].clone()
+            x_t = batch.x[mask_t, t, :]
 
             # Construct edges
             if self.edge_type == "knn":
@@ -1344,7 +1326,9 @@ class SequentialModule(pl.LightningModule):
                 # Encode distance between nodes as edge_attr
                 row, col = edge_index
                 edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
+                edge_attr = 1 / edge_attr
                 edge_attr = edge_attr.type_as(batch.x)
+                edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
 
             ######################
             # Validation 1/2     #
@@ -1352,16 +1336,11 @@ class SequentialModule(pl.LightningModule):
 
             # Normalise input graph
             if self.normalise:
-                if edge_attr is None:
-                    # Center node positions
-                    x_t[:, [0, 1, 2]] -= batch.loc[batch.batch][mask_t][:, [0, 1, 2]]
-                    # Scale all features (except yaws) with global scaler
-                    x_t[:, [0, 1, 2, 3, 4, 7, 8, 9]] /= self.global_scale
-                else:
-                    # Center node positions
-                    x_t[:, [0, 1, 2]] -= batch.loc[batch.batch][mask_t][:, [0, 1, 2]]
-                    # Scale all features (except yaws) with global scaler
-                    x_t[:, [0, 1, 2, 3, 4, 7, 8, 9]] /= self.global_scale
+                # Center node positions
+                x_t[:, [0, 1, 2]] -= batch.loc[batch.batch][mask_t][:, [0, 1, 2]]
+                # Scale all features (except yaws) with global scaler
+                x_t[:, self.norm_index] /= self.global_scale
+                if edge_attr is not None:
                     # Scale edge attributes
                     edge_attr /= self.global_scale
 
@@ -1373,7 +1352,7 @@ class SequentialModule(pl.LightningModule):
                     edge_attr=edge_attr,
                     batch=batch.batch[mask_t],
                 )
-            else:
+            elif self.rnn_type == "GRU":
                 delta_x, h_t = self.model(
                     x=x_t,
                     edge_index=edge_index,
@@ -1383,43 +1362,31 @@ class SequentialModule(pl.LightningModule):
                 )
                 # Update hidden state
                 h[:, mask_t] = h_t
+            else:  # LSTM
+                delta_x, (h_t, c_t) = self.model(
+                    x=x_t,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    batch=batch.batch[mask_t],
+                    hidden=(h[:, mask_t], c[:, mask_t]),
+                )
+                # Update hidden state
+                h[:, mask_t] = h_t
+                c[:, mask_t] = c_t
 
             if t == 10:
-                # Transform yaw
-                bbox_yaw = torch.atan2(
-                    torch.tanh(delta_x[:, 5]), torch.tanh(delta_x[:, 6])
-                ).unsqueeze(1)
-                vel_yaw = torch.atan2(
-                    torch.tanh(delta_x[:, 7]), torch.tanh(delta_x[:, 8])
-                ).unsqueeze(1)
-                tmp = torch.cat([delta_x[:, 0:5], bbox_yaw, vel_yaw], dim=1)
-                delta_x = tmp
-
-                # Add deltas to input graph
-                predicted_graph = torch.cat(
-                    (
-                        batch.x[mask_t, t, : self.out_features] + delta_x,
-                        static_features[mask_t],
-                    ),
-                    dim=-1,
-                )
+                # Process predicted yaw values into sine/cosines via tanh
+                yaw_pred = torch.tanh(delta_x[:, [5, 6, 7, 8]])
+                # Add deltas to input graph and update yaw values directly
+                predicted_graph = torch.cat([
+                    batch.x[mask_t, t, : (self.out_features - 4)] + delta_x[:, :5],
+                    yaw_pred,
+                    static_features[mask_t],
+                ], dim=-1)
                 predicted_graph = predicted_graph.type_as(batch.x)
-
-                # Process yaw values to ensure [-pi, pi] interval
-                yaws = predicted_graph[:, [5, 6]]
-                yaws[yaws > 0] = (
-                        torch.fmod(yaws[yaws > 0] + math.pi, torch.tensor(2 * math.pi))
-                        - math.pi
-                )
-                yaws[yaws < 0] = (
-                        torch.fmod(yaws[yaws < 0] - math.pi, torch.tensor(2 * math.pi))
-                        + math.pi
-                )
-                predicted_graph[:, [5, 6]] = yaws
 
         # Save first prediction and target
         y_hat[0, mask_t, :] = predicted_graph[:, : self.out_features]
-        y_target[0, mask_t, :] = batch.x[mask_t, 11, : self.out_features]
 
         ######################
         # Future             #
@@ -1473,16 +1440,11 @@ class SequentialModule(pl.LightningModule):
 
             # Normalise input graph
             if self.normalise:
-                if edge_attr is None:
-                    # Center node positions
-                    x_t[:, [0, 1, 2]] -= batch.loc[batch.batch][:, [0, 1, 2]]
-                    # Scale all features (except yaws) with global scaler
-                    x_t[:, [0, 1, 2, 3, 4, 7, 8, 9]] /= self.global_scale
-                else:
-                    # Center node positions
-                    x_t[:, [0, 1, 2]] -= batch.loc[batch.batch][:, [0, 1, 2]]
-                    # Scale all features (except yaws) with global scaler
-                    x_t[:, [0, 1, 2, 3, 4, 7, 8, 9]] /= self.global_scale
+                # Center node positions
+                x_t[:, [0, 1, 2]] -= batch.loc[batch.batch][:, [0, 1, 2]]
+                # Scale all features (except yaws) with global scaler
+                x_t[:, self.norm_index] /= self.global_scale
+                if edge_attr is not None:
                     # Scale edge attributes
                     edge_attr /= self.global_scale
 
@@ -1494,7 +1456,7 @@ class SequentialModule(pl.LightningModule):
                     edge_attr=edge_attr,
                     batch=batch.batch,
                 )
-            else:
+            elif self.rnn_type == "GRU":
                 delta_x, h = self.model(
                     x=x_t,
                     edge_index=edge_index,
@@ -1502,58 +1464,47 @@ class SequentialModule(pl.LightningModule):
                     batch=batch.batch,
                     hidden=h,
                 )
+            else:
+                delta_x, (h, c) = self.model(
+                    x=x_t,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    batch=batch.batch,
+                    hidden=(h, c),
+                )
 
-            # Transform yaw
-            bbox_yaw = torch.atan2(
-                torch.tanh(delta_x[:, 5]), torch.tanh(delta_x[:, 6])
-            ).unsqueeze(1)
-            vel_yaw = torch.atan2(
-                torch.tanh(delta_x[:, 7]), torch.tanh(delta_x[:, 8])
-            ).unsqueeze(1)
-            tmp = torch.cat([delta_x[:, 0:5], bbox_yaw, vel_yaw], dim=1)
-            delta_x = tmp
+            # Process predicted yaw values
+            yaw_pred = torch.tanh(delta_x[:, 5:9])
 
-            # Add deltas to input graph
+            # Add deltas to input graph. Input for next timestep
             predicted_graph = torch.cat(
                 (
-                    predicted_graph[:, : self.out_features] + delta_x,
-                    predicted_graph[:, self.out_features :],
+                    predicted_graph[:, : (self.out_features - 4)] + delta_x[:, :5],
+                    yaw_pred,
+                    predicted_graph[:, self.out_features:],
                 ),
                 dim=-1,
             )
             predicted_graph = predicted_graph.type_as(batch.x)
 
-            # Process yaw values to ensure [-pi, pi] interval
-            yaws = predicted_graph[:, [5, 6]]
-            yaws[yaws > 0] = (
-                    torch.fmod(yaws[yaws > 0] + math.pi, torch.tensor(2 * math.pi))
-                    - math.pi
-            )
-            yaws[yaws < 0] = (
-                    torch.fmod(yaws[yaws < 0] - math.pi, torch.tensor(2 * math.pi))
-                    + math.pi
-            )
-            predicted_graph[:, [5, 6]] = yaws
-
             # Save prediction alongside true value (next time step state)
             y_hat[t - 10, :, :] = predicted_graph[:, : self.out_features]
-            y_target[t - 10, :, :] = batch.x[:, t + 1, : self.out_features]
 
         fde_mask = mask[:, -1]
         val_mask = mask[:, 11:].permute(1, 0)
 
         # Compute and log loss
         fde_loss = self.val_fde_loss(
-            y_hat[-1, fde_mask, :3], y_target[-1, fde_mask, :3]
+            y_hat[-1, fde_mask][:, [0, 1, 2]], y_target[-1, fde_mask][:, [0, 1, 2]]
         )
         ade_loss = self.val_ade_loss(
-            y_hat[:, :, 0:3][val_mask], y_target[:, :, 0:3][val_mask]
+            y_hat[:, :, [0, 1, 2]][val_mask], y_target[:, :, [0, 1, 2]][val_mask]
         )
         vel_loss = self.val_vel_loss(
-            y_hat[:, :, 3:5][val_mask], y_target[:, :, 3:5][val_mask]
+            y_hat[:, :, [3, 4]][val_mask], y_target[:, :, [3, 4]][val_mask]
         )
         yaw_loss = self.val_yaw_loss(
-            y_hat[:, :, 5:7][val_mask], y_target[:, :, 5:7][val_mask]
+            y_hat[:, :, [5, 6, 7, 8]][val_mask], y_target[:, :, [5, 6, 7, 8]][val_mask]
         )
 
         # Compute losses on "tracks_to_predict"
@@ -1576,11 +1527,11 @@ class SequentialModule(pl.LightningModule):
         self.log("val_fde_loss", fde_loss, batch_size=fde_mask.sum().item())
         self.log("val_vel_loss", vel_loss, batch_size=val_mask.sum().item())
         self.log("val_yaw_loss", yaw_loss, batch_size=val_mask.sum().item())
-        self.log("val_total_loss", (ade_loss + vel_loss + yaw_loss) / 3, batch_size=val_mask.sum().item())
+        self.log("val_total_loss", ade_loss + vel_loss + yaw_loss + fde_loss, batch_size=val_mask.sum().item())
         self.log("val_fde_ttp_loss", fde_ttp_loss, batch_size=fde_ttp_mask.sum().item())
         self.log("val_ade_ttp_loss", ade_ttp_loss, batch_size=ade_ttp_mask.sum().item())
 
-        return (ade_loss + vel_loss + yaw_loss) / 3
+        return ade_loss + vel_loss + yaw_loss + fde_loss
 
     def predict_step(self, batch, batch_idx=None):
 
@@ -1612,6 +1563,7 @@ class SequentialModule(pl.LightningModule):
         n_nodes = batch.num_nodes
         y_hat = torch.zeros((90, n_nodes, self.node_features))
         y_target = torch.zeros((90, n_nodes, self.node_features))
+
         # Ensure device placement
         y_hat = y_hat.type_as(batch.x)
         y_target = y_target.type_as(batch.x)
@@ -1620,19 +1572,35 @@ class SequentialModule(pl.LightningModule):
         # static_features = torch.cat(
         #     [batch.x[:, 10, self.out_features :], batch.type], dim=1
         # )
-        static_features = batch.x[:, 10, self.out_features :].clone()
+        static_features = batch.x[:, 10, (self.out_features-2) :]
         edge_attr = None
+
+        # Decompose angular attributes into sines/cosines
+        sines = torch.sin(batch.x[:, :, [5, 6]])
+        cosines = torch.cos(batch.x[:, :, [5, 6]])
+
+        # Replace yaws with sine/cosine pairs
+        batch.x = torch.cat([
+            batch.x[:, :, [0, 1, 2, 3, 4]],
+            sines[:, :, 0].unsqueeze(2),
+            cosines[:, :, 0].unsqueeze(2),
+            sines[:, :, 1].unsqueeze(2),
+            cosines[:, :, 1].unsqueeze(2),
+            batch.x[:, :, (self.out_features - 2):]
+        ], dim=-1)
 
         # Initial hidden state
         if self.rnn_type == "GRU":
             h = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
             h = h.type_as(batch.x)
+            c = None
         elif self.rnn_type == "LSTM":
-            h = torch.zeros((self.model.num_layers, 1, self.model.rnn_size))
-            c = torch.zeros((self.model.num_layers, 1, self.model.rnn_size))
-            h = (h, c)
+            h = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
+            h = h.type_as(batch.x)
+            c = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
+            c = c.type_as(batch.x)
         else:
-            h = None
+            h, c = None, None
 
         ######################
         # History            #
@@ -1680,7 +1648,9 @@ class SequentialModule(pl.LightningModule):
                 # Encode distance between nodes as edge_attr
                 row, col = edge_index
                 edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
+                edge_attr = 1 / edge_attr
                 edge_attr = edge_attr.type_as(batch.x)
+                edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
 
             ######################
             # Predictions 1/2    #
@@ -1688,16 +1658,11 @@ class SequentialModule(pl.LightningModule):
 
             # Normalise input graph
             if self.normalise:
-                if edge_attr is None:
-                    # Center node positions
-                    x_t[:, [0, 1, 2]] -= batch.loc[batch.batch][mask_t][:, [0, 1, 2]]
-                    # Scale all features (except yaws) with global scaler
-                    x_t[:, [0, 1, 2, 3, 4, 7, 8, 9]] /= self.global_scale
-                else:
-                    # Center node positions
-                    x_t[:, [0, 1, 2]] -= batch.loc[batch.batch][mask_t][:, [0, 1, 2]]
-                    # Scale all features (except yaws) with global scaler
-                    x_t[:, [0, 1, 2, 3, 4, 7, 8, 9]] /= self.global_scale
+                # Center node positions
+                x_t[:, [0, 1, 2]] -= batch.loc[batch.batch][mask_t][:, [0, 1, 2]]
+                # Scale all features (except yaws) with global scaler
+                x_t[:, self.norm_index] /= self.global_scale
+                if edge_attr is not None:
                     # Scale edge attributes
                     edge_attr /= self.global_scale
 
@@ -1709,7 +1674,7 @@ class SequentialModule(pl.LightningModule):
                     edge_attr=edge_attr,
                     batch=batch.batch[mask_t],
                 )
-            else:
+            elif self.rnn_type == "GRU":
                 delta_x, h_t = self.model(
                     x=x_t,
                     edge_index=edge_index,
@@ -1717,46 +1682,37 @@ class SequentialModule(pl.LightningModule):
                     batch=batch.batch[mask_t],
                     hidden=h[:, mask_t],
                 )
+                # Update hidden state
                 h[:, mask_t] = h_t
+            else:  # LSTM
+                delta_x, (h_t, c_t) = self.model(
+                    x=x_t,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    batch=batch.batch[mask_t],
+                    hidden=(h[:, mask_t], c[:, mask_t]),
+                )
+                # Update hidden state
+                h[:, mask_t] = h_t
+                c[:, mask_t] = c_t
 
-            # Process yaw values
-            bbox_yaw = torch.atan2(
-                torch.tanh(delta_x[:, 5]), torch.tanh(delta_x[:, 6])
-            ).unsqueeze(1)
-            vel_yaw = torch.atan2(
-                torch.tanh(delta_x[:, 7]), torch.tanh(delta_x[:, 8])
-            ).unsqueeze(1)
-            tmp = torch.cat([delta_x[:, 0:5], bbox_yaw, vel_yaw], dim=1)
-            delta_x = tmp
+            # Process predicted yaw values into sine/cosines via tanh
+            yaw_pred = torch.tanh(delta_x[:, [5, 6, 7, 8]])
 
-            # Add deltas to input graph
-            predicted_graph = torch.cat(
-                (
-                    batch.x[mask_t, t, : self.out_features] + delta_x,
-                    static_features[mask_t],
-                ),
-                dim=-1,
-            )
+            # Add deltas to input graph and update yaw values directly
+            predicted_graph = torch.cat([
+                batch.x[mask_t, t, : (self.out_features - 4)] + delta_x[:, :5],
+                yaw_pred,
+                static_features[mask_t],
+            ], dim=-1)
             predicted_graph = predicted_graph.type_as(batch.x)
-
-            # Process yaw values to ensure [-pi, pi] interval
-            yaws = predicted_graph[:, [5, 6]]
-            yaws[yaws > 0] = (
-                    torch.fmod(yaws[yaws > 0] + math.pi, torch.tensor(2 * math.pi))
-                    - math.pi
-            )
-            yaws[yaws < 0] = (
-                    torch.fmod(yaws[yaws < 0] - math.pi, torch.tensor(2 * math.pi))
-                    + math.pi
-            )
-            predicted_graph[:, [5, 6]] = yaws
 
             # Save predictions and targets
             y_hat[t, mask_t, :] = predicted_graph
             # y_target[t, mask_t, :] = torch.cat(
             #     [batch.x[mask_t, t + 1, :], batch.type[mask_t]], dim=1
             # )
-            y_target[t, mask_t, :] = batch.x[mask_t, t + 1, :].clone()
+            y_target[t, mask_t, :] = batch.x[mask_t, t + 1, :]
 
         ######################
         # Future             #
@@ -1801,7 +1757,9 @@ class SequentialModule(pl.LightningModule):
                 # Encode distance between nodes as edge_attr
                 row, col = edge_index
                 edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
+                edge_attr = 1 / edge_attr
                 edge_attr = edge_attr.type_as(batch.x)
+                edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
 
             ######################
             # Predictions 2/2    #
@@ -1809,16 +1767,11 @@ class SequentialModule(pl.LightningModule):
 
             # Normalise input graph
             if self.normalise:
-                if edge_attr is None:
-                    # Center node positions
-                    x_t[:, [0, 1, 2]] -= batch.loc[batch.batch][:, [0, 1, 2]]
-                    # Scale all features (except yaws) with global scaler
-                    x_t[:, [0, 1, 2, 3, 4, 7, 8, 9]] /= self.global_scale
-                else:
-                    # Center node positions
-                    x_t[:, [0, 1, 2]] -= batch.loc[batch.batch][:, [0, 1, 2]]
-                    # Scale all features (except yaws) with global scaler
-                    x_t[:, [0, 1, 2, 3, 4, 7, 8, 9]] /= self.global_scale
+                # Center node positions
+                x_t[:, [0, 1, 2]] -= batch.loc[batch.batch][mask_t][:, [0, 1, 2]]
+                # Scale all features (except yaws) with global scaler
+                x_t[:, self.norm_index] /= self.global_scale
+                if edge_attr is not None:
                     # Scale edge attributes
                     edge_attr /= self.global_scale
 
@@ -1828,52 +1781,72 @@ class SequentialModule(pl.LightningModule):
                     x=x_t,
                     edge_index=edge_index,
                     edge_attr=edge_attr,
-                    batch=batch.batch,
+                    batch=batch.batch[mask_t],
                 )
-            else:
-                delta_x, h = self.model(
+            elif self.rnn_type == "GRU":
+                delta_x, h_t = self.model(
                     x=x_t,
                     edge_index=edge_index,
                     edge_attr=edge_attr,
-                    batch=batch.batch,
-                    hidden=h,
+                    batch=batch.batch[mask_t],
+                    hidden=h[:, mask_t],
                 )
+                # Update hidden state
+                h[:, mask_t] = h_t
+            else:  # LSTM
+                delta_x, (h_t, c_t) = self.model(
+                    x=x_t,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    batch=batch.batch[mask_t],
+                    hidden=(h[:, mask_t], c[:, mask_t]),
+                )
+                # Update hidden state
+                h[:, mask_t] = h_t
+                c[:, mask_t] = c_t
 
-            # Transform yaw
-            bbox_yaw = torch.atan2(
-                torch.tanh(delta_x[:, 5]), torch.tanh(delta_x[:, 6])
-            ).unsqueeze(1)
-            vel_yaw = torch.atan2(
-                torch.tanh(delta_x[:, 7]), torch.tanh(delta_x[:, 8])
-            ).unsqueeze(1)
-            tmp = torch.cat([delta_x[:, 0:5], bbox_yaw, vel_yaw], dim=1)
-            delta_x = tmp
-
-            predicted_graph = torch.cat(
-                (
-                    predicted_graph[:, : self.out_features] + delta_x,
-                    predicted_graph[:, self.out_features :],
-                ),
-                dim=-1,
-            )
+            # Process predicted yaw values into sine/cosines via tanh
+            yaw_pred = torch.tanh(delta_x[:, [5, 6, 7, 8]])
+            # Add deltas to input graph and update yaw values directly
+            predicted_graph = torch.cat([
+                predicted_graph[:, t, : (self.out_features - 4)] + delta_x[:, :5],
+                yaw_pred,
+                predicted_graph[:, self.out_features :],
+            ], dim=-1)
             predicted_graph = predicted_graph.type_as(batch.x)
-
-            # Process yaw values to ensure [-pi, pi] interval
-            yaws = predicted_graph[:, [5, 6]]
-            yaws[yaws > 0] = (
-                    torch.fmod(yaws[yaws > 0] + math.pi, torch.tensor(2 * math.pi))
-                    - math.pi
-            )
-            yaws[yaws < 0] = (
-                    torch.fmod(yaws[yaws < 0] - math.pi, torch.tensor(2 * math.pi))
-                    + math.pi
-            )
-            predicted_graph[:, [5, 6]] = yaws
-
             # Save prediction alongside true value (next time step state)
             y_hat[t, :, :] = predicted_graph
             # y_target[t, :, :] = torch.cat([batch.x[:, t + 1, :], batch.type], dim=1)
-            y_target[t, :, :] = batch.x[:, t + 1, :].clone()
+            y_target[t, :, :] = batch.x[:, t + 1, :]
+
+        # Process sine/cosines into angular values
+        yaws = y_target[:, :, [5, 6, 7, 8]]
+        bbox_yaws = torch.atan2(
+            yaws[:, :, 0], yaws[:, :, 1]
+        )
+        vel_yaws = torch.atan2(
+            yaws[:, :, 2], yaws[:, :, 3]
+        )
+        y_target = torch.cat([
+            y_target[:, :, [0, 1, 2, 3, 4]],
+            bbox_yaws.unsqueeze(2),
+            vel_yaws.unsqueeze(2),
+            y_target[:, :, [9, 10, 11]]
+        ], dim=-1)
+
+        yaws = y_hat[:, :, [5, 6, 7, 8]]
+        bbox_yaws = torch.atan2(
+            yaws[:, :, 0], yaws[:, :, 1]
+        )
+        vel_yaws = torch.atan2(
+            yaws[:, :, 2], yaws[:, :, 3]
+        )
+        y_hat = torch.cat([
+            y_hat[:, :, [0, 1, 2, 3, 4]],
+            bbox_yaws.unsqueeze(2),
+            vel_yaws.unsqueeze(2),
+            y_hat[:, :, [9, 10, 11]]
+        ], dim=-1)
 
         return y_hat, y_target, mask
 
