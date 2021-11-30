@@ -39,7 +39,7 @@ class mlp_forward_model(nn.Module):
         dropout: float = 0.0,
         skip: bool = True,
         aggregate: bool = False,
-        **kwargs
+        **kwargs,
     ):
         super(mlp_forward_model, self).__init__()
         self.aggregate = aggregate
@@ -176,7 +176,7 @@ class mpnn_forward_model(nn.Module):
         rounds: int = 1,
         shared_params: bool = True,
         out_features: int = 7,
-        **kwargs
+        **kwargs,
     ):
         super(mpnn_forward_model, self).__init__()
         self.hidden_size = hidden_size
@@ -606,7 +606,7 @@ class rnn_forward_model_v3(nn.Module):
                 dropout=dropout,
                 num_layers=num_layers,
                 out_features=out_features,
-                rnn_type=rnn_type
+                rnn_type=rnn_type,
             ),
         )
         GN2_node_input = rnn_size + node_features if skip else rnn_size
@@ -655,7 +655,6 @@ class rnn_forward_model_v3(nn.Module):
             x=x_1, edge_index=edge_index, edge_attr=edge_attr_1, u=u, batch=batch
         )
         return out, hidden
-
 
 
 class GraphNetworkBlock(MetaLayer):
@@ -736,7 +735,7 @@ class mlp_baseline(nn.Module):
         normalise: bool = True,
         dropout: float = 0.0,
         permute: bool = False,
-        **kwargs
+        **kwargs,
     ):
         super(mlp_baseline, self).__init__()
         self.hidden_size = hidden_size
@@ -791,7 +790,7 @@ class mlp_node_baseline(nn.Module):
         n_nodes: int = 10,
         dropout: float = 0.0,
         out_features: int = 7,
-        **kwargs
+        **kwargs,
     ):
         super(mlp_node_baseline, self).__init__()
         self.hidden_size = hidden_size
@@ -838,7 +837,7 @@ class rnn_baseline(nn.Module):
         dropout: float = 0.0,
         rnn_size: int = 20,
         num_layers: int = 1,
-        **kwargs
+        **kwargs,
     ):
         super(rnn_baseline, self).__init__()
         self.normalise = normalise
@@ -893,7 +892,7 @@ class rnn_graph_baseline(nn.Module):
         dropout: float = 0.0,
         rnn_size: int = 20,
         num_layers: int = 1,
-        **kwargs
+        **kwargs,
     ):
         super(rnn_graph_baseline, self).__init__()
         self.hidden_size = hidden_size
@@ -954,7 +953,7 @@ class attentional_model(nn.Module):
         heads: int = 4,
         middle_gat: bool = False,
         out_features: int = 4,
-        edge_features: int = 1
+        edge_features: int = 1,
     ):
         super(attentional_model, self).__init__()
         self.hidden_size = hidden_size
@@ -967,30 +966,30 @@ class attentional_model(nn.Module):
                 dropout=dropout,
                 heads=heads,
                 out_features=hidden_size,
-                edge_features=edge_features
+                edge_features=edge_features,
             ),
         )
 
         if middle_gat:
             self.GN2 = GraphNetworkBlock(
                 node_model=node_gat_in(
-                    node_features=hidden_size*heads,
+                    node_features=hidden_size * heads,
                     dropout=dropout,
                     heads=heads,
                     out_features=hidden_size,
-                    edge_features=edge_features
+                    edge_features=edge_features,
                 ),
             )
             # Apply skip connection across this layer. Compute new input size
-            hidden_size = hidden_size*2
+            hidden_size = hidden_size * 2
 
         self.GN3 = GraphNetworkBlock(
             node_model=node_gat_out(
-                node_features=hidden_size*heads,
+                node_features=hidden_size * heads,
                 dropout=dropout,
                 heads=heads,
                 out_features=out_features,
-                edge_features=edge_features
+                edge_features=edge_features,
             ),
         )
 
@@ -1022,7 +1021,7 @@ class convolutional_model(nn.Module):
         dropout: float = 0.0,
         skip: bool = False,
         out_features: int = 4,
-        edge_features: int = 1
+        edge_features: int = 1,
     ):
         super(convolutional_model, self).__init__()
         self.hidden_size = hidden_size
@@ -1035,7 +1034,7 @@ class convolutional_model(nn.Module):
                 skip=skip,
                 out_features=out_features,
                 edge_features=edge_features,
-                hidden_size=hidden_size
+                hidden_size=hidden_size,
             ),
         )
 

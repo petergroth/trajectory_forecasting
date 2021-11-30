@@ -29,32 +29,45 @@ class Objective(object):
         # Suggest hyperparameters
 
         # Model
-        hidden_size = trial.suggest_categorical("hidden_size", [32, 64, 96, 128, 192, 256])
-        latent_edge_features = trial.suggest_categorical("latent_edge_features", [32, 64, 96, 128, 192, 256])
+        hidden_size = trial.suggest_categorical(
+            "hidden_size", [32, 64, 96, 128, 192, 256]
+        )
+        latent_edge_features = trial.suggest_categorical(
+            "latent_edge_features", [32, 64, 96, 128, 192, 256]
+        )
         rnn_size = trial.suggest_categorical("rnn_size", [8, 16, 24, 32, 64])
 
         # Regressor
-        weight_decay = trial.suggest_categorical("weight_decay", [1e-4, 5e-4, 1e-3, 5e-3, 1e-2, 1e-1, 0, 1, 10])
-        training_horizon = trial.suggest_categorical("training_horizon", [12, 13, 14, 15, 20, 25, 30, 40, 50, 70, 90])
-        teacher_forcing_ratio = trial.suggest_float("teacher_forcing_ratio", low=0.0, high=0.3, step=0.05)
+        weight_decay = trial.suggest_categorical(
+            "weight_decay", [1e-4, 5e-4, 1e-3, 5e-3, 1e-2, 1e-1, 0, 1, 10]
+        )
+        training_horizon = trial.suggest_categorical(
+            "training_horizon", [12, 13, 14, 15, 20, 25, 30, 40, 50, 70, 90]
+        )
+        teacher_forcing_ratio = trial.suggest_float(
+            "teacher_forcing_ratio", low=0.0, high=0.3, step=0.05
+        )
         min_dist = trial.suggest_float("min_dist", low=1.0, high=20.0, step=1.0)
         # n_neighbours = trial.suggest_int("n_neighbours", low=1, high=50)
-        lr = trial.suggest_categorical("lr", [1e-6, 5e-6, 1e-5, 5e-5, 1e-4, 5e-4, 1e-3, 5e-3, 1e-2])
+        lr = trial.suggest_categorical(
+            "lr", [1e-6, 5e-6, 1e-5, 5e-5, 1e-4, 5e-4, 1e-3, 5e-3, 1e-2]
+        )
         # noise = trial.suggest_float("noise", low=0.0, high=1.0)
 
         # Datamodule
-        batch_size = trial.suggest_categorical("batch_size", [8, 16, 32, 48, 64, 96, 128])
+        batch_size = trial.suggest_categorical(
+            "batch_size", [8, 16, 32, 48, 64, 96, 128]
+        )
 
         # Trainer
         # stochastic_weight_avg = trial.suggest_categorical("stochastic_weight_avg", ["True", "False"])
         gradient_clip_val = trial.suggest_float("gradient_clip_val", low=0.0, high=1.0)
 
-
         # Pack regressor parameters together
         model_kwargs = {
             "hidden_size": hidden_size,
             "latent_edge_features": latent_edge_features,
-            "rnn_size": rnn_size
+            "rnn_size": rnn_size,
         }
         regressor_kwargs = {
             "weight_decay": weight_decay,
@@ -94,9 +107,11 @@ class Objective(object):
         model_type = self.config["misc"]["model_type"]
 
         # Define LightningModule
-        regressor = eval(self.config["misc"]["regressor_type"])(model_type=model_type,
-                                                                model_dict=dict(model_dict),
-                                                                **self.config["regressor"])
+        regressor = eval(self.config["misc"]["regressor_type"])(
+            model_type=model_type,
+            model_dict=dict(model_dict),
+            **self.config["regressor"]
+        )
 
         log_dict = regressor_kwargs
         log_dict.update(trainer_kwargs)
@@ -110,13 +125,18 @@ class Objective(object):
             project=self.config["logger"]["project"],
             reinit=True,
         )
-        wandb_logger.watch(regressor, log_freq=self.config["misc"]["log_freq"], log_graph=False)
+        wandb_logger.watch(
+            regressor, log_freq=self.config["misc"]["log_freq"], log_graph=False
+        )
 
         callbacks = [EarlyStopping(monitor="val_total_loss", patience=4, min_delta=1)]
 
         # Create trainer, fit, and validate
         trainer = pl.Trainer(
-            logger=wandb_logger, **self.config["trainer"], enable_checkpointing=False, callbacks=callbacks
+            logger=wandb_logger,
+            **self.config["trainer"],
+            enable_checkpointing=False,
+            callbacks=callbacks
         )
         trainer.fit(model=regressor, datamodule=datamodule)
 

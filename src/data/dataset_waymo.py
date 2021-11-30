@@ -220,7 +220,9 @@ class SequentialWaymoTrainDataset(InMemoryDataset):
                         parsed["state/future/" + key].numpy()
                     )
 
-                if torch.any(feature_matrix[0, :, [0, 1]] > 8000) and torch.any(feature_matrix[0, :, [0, 1]] < 9000):
+                if torch.any(feature_matrix[0, :, [0, 1]] > 8000) and torch.any(
+                    feature_matrix[0, :, [0, 1]] < 9000
+                ):
                     pass
                 # Process yaw-values into [-pi, pi]
                 x_yaws = feature_matrix[:, :, 5:7]

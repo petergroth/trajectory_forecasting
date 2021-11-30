@@ -4,4 +4,3 @@ if __name__ == "__main__":
 
     dm = SequentialWaymoDataModule(batch_size=32, shuffle=True)
     dm.setup()
-
