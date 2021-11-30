@@ -28,7 +28,9 @@ def make_predictions(path, config, sequence_idx=0):
     if config["misc"]["model_type"] != "ConstantModel":
         regressor = eval(config["misc"]["regressor_type"]).load_from_checkpoint(path)
     else:
-        regressor = eval(config["misc"]["regressor_type"])(None, None, **config["regressor"])
+        regressor = eval(config["misc"]["regressor_type"])(
+            None, None, **config["regressor"]
+        )
     # Setup
     regressor.eval()
     datamodule.setup()
@@ -41,6 +43,7 @@ def make_predictions(path, config, sequence_idx=0):
             y_hat, y_target, mask = regressor.predict_step(batch)
             torch.save((y_hat, y_target, mask), dirpath + f"/sequence_{i:04}.pt")
             return
+
 
 #
 # #@hydra.main(config_path="../../configs/waymo/", config_name="config")
@@ -233,7 +236,7 @@ def make_predictions(path, config, sequence_idx=0):
 #     figglob.savefig(f"{args.output_path}/sequence_{args.sequence_idx:04}.png")
 
 
-#@hydra.main(config_path="../../configs/waymo/", config_name="config")
+# @hydra.main(config_path="../../configs/waymo/", config_name="config")
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("config")
@@ -274,7 +277,10 @@ def main():
     )
 
     figglob, axglob = plt.subplots(1, 2, figsize=(20, 10))
-    colors = [(np.random.random(), np.random.random(), np.random.random()) for _ in range(n_agents)]
+    colors = [
+        (np.random.random(), np.random.random(), np.random.random())
+        for _ in range(n_agents)
+    ]
     for agent in range(n_agents):
         # color = (np.random.random(), np.random.random(), np.random.random())
         x = y_target[:, agent, 0].detach().numpy()
@@ -305,10 +311,10 @@ def main():
             color="gray",
         )
         axglob[0].quiver(
-            y_target[n_steps-1, agent, 0].detach().numpy(),
-            y_target[n_steps-1, agent, 1].detach().numpy(),
-            y_target[n_steps-1, agent, 2].detach().numpy(),
-            y_target[n_steps-1, agent, 3].detach().numpy(),
+            y_target[n_steps - 1, agent, 0].detach().numpy(),
+            y_target[n_steps - 1, agent, 1].detach().numpy(),
+            y_target[n_steps - 1, agent, 2].detach().numpy(),
+            y_target[n_steps - 1, agent, 3].detach().numpy(),
             width=0.003,
             headwidth=5,
             angles="xy",
@@ -368,7 +374,6 @@ def main():
 
     plt.show()
     figglob.savefig(f"{args.output_path}/dots_sequence_{args.sequence_idx:04}.png")
-
 
 
 if __name__ == "__main__":

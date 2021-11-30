@@ -115,7 +115,7 @@ class edge_mlp_1(nn.Module):
         hidden_size: int = 128,
         dropout: float = 0.0,
         latent_edge_features: int = 32,
-        **kwargs
+        **kwargs,
     ):
         super(edge_mlp_1, self).__init__()
         self.edge_features = edge_features
@@ -371,14 +371,14 @@ class node_rnn_2(nn.Module):
     # Input node update function.
     # Assumes edge attributes have been updated
     def __init__(
-            self,
-            node_features: int = 5,
-            dropout: float = 0.0,
-            edge_features: int = 0,
-            rnn_size: int = 20,
-            num_layers: int = 1,
-            out_features: int = 7,
-            hidden_size: int = 64,
+        self,
+        node_features: int = 5,
+        dropout: float = 0.0,
+        edge_features: int = 0,
+        rnn_size: int = 20,
+        num_layers: int = 1,
+        out_features: int = 7,
+        hidden_size: int = 64,
     ):
         super(node_rnn_2, self).__init__()
         self.out_features = out_features
@@ -396,9 +396,7 @@ class node_rnn_2(nn.Module):
         )
 
         self.node_mlp = nn.Sequential(
-            nn.Linear(
-                in_features=rnn_size, out_features=hidden_size
-            ),
+            nn.Linear(in_features=rnn_size, out_features=hidden_size),
             nn.LeakyReLU(),
             # BatchNorm(in_channels=hidden_size),
             nn.Linear(in_features=hidden_size, out_features=hidden_size),
@@ -418,18 +416,19 @@ class node_rnn_2(nn.Module):
         out = self.node_mlp(out.squeeze())
         return out, hidden
 
+
 class node_rnn_simple(nn.Module):
     # Input node update function.
     # Assumes edge attributes have been updated
     def __init__(
-            self,
-            node_features: int = 5,
-            dropout: float = 0.0,
-            edge_features: int = 0,
-            rnn_size: int = 20,
-            num_layers: int = 1,
-            out_features: int = 7,
-            rnn_type: str = "GRU"
+        self,
+        node_features: int = 5,
+        dropout: float = 0.0,
+        edge_features: int = 0,
+        rnn_size: int = 20,
+        num_layers: int = 1,
+        out_features: int = 7,
+        rnn_type: str = "GRU",
     ):
         super(node_rnn_simple, self).__init__()
         self.out_features = out_features
@@ -464,12 +463,12 @@ class node_gat_in(nn.Module):
     # Input node update function.
     # Assumes edge attributes have been updated
     def __init__(
-            self,
-            node_features: int = 5,
-            dropout: float = 0.0,
-            out_features: int = 64,
-            heads: int = 4,
-            edge_features: int = 1
+        self,
+        node_features: int = 5,
+        dropout: float = 0.0,
+        out_features: int = 64,
+        heads: int = 4,
+        edge_features: int = 1,
     ):
         super(node_gat_in, self).__init__()
         self.dropout = dropout
@@ -479,7 +478,7 @@ class node_gat_in(nn.Module):
             heads=heads,
             dropout=dropout,
             concat=True,
-            edge_dim=edge_features
+            edge_dim=edge_features,
         )
 
     def forward(self, x, edge_index, edge_attr, u, batch):
@@ -491,12 +490,12 @@ class node_gat_in(nn.Module):
 
 class node_gat_out(nn.Module):
     def __init__(
-            self,
-            node_features: int = 5,
-            dropout: float = 0.0,
-            out_features: int = 64,
-            heads: int = 4,
-            edge_features: int = 1
+        self,
+        node_features: int = 5,
+        dropout: float = 0.0,
+        out_features: int = 64,
+        heads: int = 4,
+        edge_features: int = 1,
     ):
         super(node_gat_out, self).__init__()
         self.dropout = dropout
@@ -506,7 +505,7 @@ class node_gat_out(nn.Module):
             heads=heads,
             dropout=dropout,
             concat=False,
-            edge_dim=edge_features
+            edge_dim=edge_features,
         )
 
     def forward(self, x, edge_index, edge_attr, u, batch):
@@ -518,13 +517,13 @@ class node_gat_out(nn.Module):
 
 class node_gcn(nn.Module):
     def __init__(
-            self,
-            node_features: int = 5,
-            dropout: float = 0.0,
-            hidden_size: int = 64,
-            out_features: int = 4,
-            edge_features: int = 1,
-            skip: bool = False,
+        self,
+        node_features: int = 5,
+        dropout: float = 0.0,
+        hidden_size: int = 64,
+        out_features: int = 4,
+        edge_features: int = 1,
+        skip: bool = False,
     ):
         super(node_gcn, self).__init__()
         assert edge_features == 1
@@ -534,17 +533,18 @@ class node_gcn(nn.Module):
             in_channels=node_features,
             out_channels=hidden_size,
         )
-        out_in = hidden_size+node_features if skip else hidden_size
-        self.gcn_out = GCNConv(
-            in_channels=out_in,
-            out_channels=out_features
-        )
+        out_in = hidden_size + node_features if skip else hidden_size
+        self.gcn_out = GCNConv(in_channels=out_in, out_channels=out_features)
 
     def forward(self, x, edge_index, edge_attr, u, batch):
-        out = F.relu(self.gcn_in(x=x, edge_index=edge_index, edge_weight=edge_attr.squeeze()))
+        out = F.relu(
+            self.gcn_in(x=x, edge_index=edge_index, edge_weight=edge_attr.squeeze())
+        )
         out = F.dropout(out, p=self.dropout)
         if self.skip:
             out = torch.cat([x, out], dim=-1)
-        out = self.gcn_out(x=out, edge_index=edge_index, edge_weight=edge_attr.squeeze())
+        out = self.gcn_out(
+            x=out, edge_index=edge_index, edge_weight=edge_attr.squeeze()
+        )
 
         return out
