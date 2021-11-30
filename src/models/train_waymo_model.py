@@ -17,7 +17,7 @@ from pytorch_lightning.callbacks import RichProgressBar
 import math
 import random
 
-class OneStepModule(pl.LightningModule):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
+class OneStepModule(pl.LightningModule):
     def __init__(
         self,
         model_type: Union[None, str],
@@ -1264,7 +1264,7 @@ class SequentialModule(pl.LightningModule):
         ], dim=-1)
 
         # Define target values
-        y_target = batch.x[:, 11:(self.training_horizon + 1), :self.out_features]
+        y_target = batch.x[:, 11:, :self.out_features]
         y_target = y_target.type_as(batch.x)
         y_target = y_target.permute(1, 0, 2)
 
@@ -1770,7 +1770,7 @@ class SequentialModule(pl.LightningModule):
             # Normalise input graph
             if self.normalise:
                 # Center node positions
-                x_t[:, [0, 1, 2]] -= batch.loc[batch.batch][mask_t][:, [0, 1, 2]]
+                x_t[:, [0, 1, 2]] -= batch.loc[batch.batch][:, [0, 1, 2]]
                 # Scale all features (except yaws) with global scaler
                 x_t[:, self.norm_index] /= self.global_scale
                 if edge_attr is not None:
@@ -1783,35 +1783,30 @@ class SequentialModule(pl.LightningModule):
                     x=x_t,
                     edge_index=edge_index,
                     edge_attr=edge_attr,
-                    batch=batch.batch[mask_t],
+                    batch=batch.batch,
                 )
             elif self.rnn_type == "GRU":
-                delta_x, h_t = self.model(
+                delta_x, h = self.model(
                     x=x_t,
                     edge_index=edge_index,
                     edge_attr=edge_attr,
-                    batch=batch.batch[mask_t],
-                    hidden=h[:, mask_t],
+                    batch=batch.batc,
+                    hidden=h,
                 )
-                # Update hidden state
-                h[:, mask_t] = h_t
             else:  # LSTM
-                delta_x, (h_t, c_t) = self.model(
+                delta_x, (h, c) = self.model(
                     x=x_t,
                     edge_index=edge_index,
                     edge_attr=edge_attr,
-                    batch=batch.batch[mask_t],
-                    hidden=(h[:, mask_t], c[:, mask_t]),
+                    batch=batch.batch,
+                    hidden=(h, c),
                 )
-                # Update hidden state
-                h[:, mask_t] = h_t
-                c[:, mask_t] = c_t
 
             # Process predicted yaw values into sine/cosines via tanh
             yaw_pred = torch.tanh(delta_x[:, [5, 6, 7, 8]])
             # Add deltas to input graph and update yaw values directly
             predicted_graph = torch.cat([
-                predicted_graph[:, t, : (self.out_features - 4)] + delta_x[:, :5],
+                predicted_graph[:, : (self.out_features - 4)] + delta_x[:, :5],
                 yaw_pred,
                 predicted_graph[:, self.out_features :],
             ], dim=-1)
