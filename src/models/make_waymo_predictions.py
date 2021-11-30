@@ -1,7 +1,7 @@
 import argparse
 import pytorch_lightning as pl
 from src.data.dataset_waymo import OneStepWaymoDataModule
-from src.models.train_waymo_model_reduced import *
+from src.models.train_waymo_model import *
 import yaml
 from pytorch_lightning.utilities.seed import seed_everything
 import torch
@@ -47,6 +47,7 @@ def make_predictions(path, config, sequence_idx=0):
 
 #
 # #@hydra.main(config_path="../../configs/waymo/", config_name="config")
+
 # def main():
 #     parser = argparse.ArgumentParser()
 #     parser.add_argument("config")
@@ -277,6 +278,7 @@ def main():
     )
 
     figglob, axglob = plt.subplots(1, 2, figsize=(20, 10))
+
     colors = [
         (np.random.random(), np.random.random(), np.random.random())
         for _ in range(n_agents)
@@ -373,7 +375,7 @@ def main():
     axglob[1].set_title("Predicted trajectories")
 
     plt.show()
-    figglob.savefig(f"{args.output_path}/dots_sequence_{args.sequence_idx:04}.png")
+    figglob.savefig(f"{args.output_path}/sequence_{args.sequence_idx:04}.png")
 
 
 if __name__ == "__main__":
