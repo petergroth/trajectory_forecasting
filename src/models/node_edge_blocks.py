@@ -13,7 +13,7 @@ from torch_geometric.nn.norm import BatchNorm
 from torch_geometric.nn.meta import MetaLayer
 import torch.nn.functional as F
 from torch_scatter import scatter_mean, scatter_add
-
+from typing import Union
 # from src.data.dataset import SequentialNBodyDataModule, OneStepNBodyDataModule
 from torch_geometric.utils import dropout_adj
 
@@ -152,23 +152,21 @@ class edge_mlp_1(nn.Module):
 
 
 class edge_rnn_1(nn.Module):
-    # Input edge update function
     def __init__(
         self,
-        node_features: int = 5,
         edge_features: int = 1,
         dropout: float = 0.0,
         rnn_size: int = 20,
         num_layers: int = 1,
+        rnn_type: str = "LSTM",
     ):
         super(edge_rnn_1, self).__init__()
         self.edge_features = edge_features
-        self.node_features = node_features
         self.dropout = dropout if num_layers > 1 else 0.0
         self.rnn_size = rnn_size
 
-        self.message_rnn = nn.GRU(
-            input_size=node_features * 2 + edge_features,
+        self.edge_history = eval(f"nn.{rnn_type}")(
+            input_size=edge_features,
             hidden_size=rnn_size,
             num_layers=num_layers,
             dropout=self.dropout,
@@ -177,24 +175,18 @@ class edge_rnn_1(nn.Module):
 
     def forward(
         self,
-        src,
-        dest,
         edge_attr,
         hidden,
-        edge_index=None,
-        u=None,
-        batch=None,
+        edge_index,
+        x_size,
     ):
-        # src, dest: [E, F_x], where E is the number of edges.
-        # edge_attr: [E, F_e]
-        # batch: [E] with max entry B - 1.
-
-        # Concatenate input values
-        input = torch.cat([src, dest, edge_attr], dim=1)
-        # Add empty seq_len dimension
+        # Split rows and columns
+        rows, cols = edge_index
+        # Sum over all edge attributes per node.
+        input = scatter_add(edge_attr, rows, dim=0, dim_size=x_size)
         input = input.unsqueeze(1)
         # Compute messages
-        messages, hidden = self.message_rnn(input, hidden)
+        messages, hidden = self.edge_history(input, hidden)
         return messages.squeeze(), hidden
 
 
@@ -446,16 +438,17 @@ class node_rnn_simple(nn.Module):
         )
 
     def forward(self, x, edge_index, edge_attr, u, batch, hidden):
-        # x: [N, F_x], where N is the number of nodes.
-        # batch: [N] with max entry B - 1.
-        if edge_attr is not None:
+        # If using also encoding edge attributes
+        if self.edge_features > 0:
             row, col = edge_index
-            # Aggregate edge attributes
+            # Aggregate edge attributes if present
             edge_attr = scatter_add(edge_attr, row, dim=0, dim_size=x.size(0))
             # Concatenate
             out = torch.cat([x, edge_attr], dim=1)
         else:
+            # Only encoding node history
             out = x
+
         # Add extra dimension
         out = out.unsqueeze(1)
         out, hidden = self.node_rnn(out, hidden)
