@@ -309,7 +309,6 @@ class rnn_message_passing(nn.Module):
     def __init__(
             self,
             hidden_size: int = 64,
-            hidden_edge_size: int = 16,
             dropout: float = 0.0,
             node_features: int = 5,
             edge_features: int = 0,
@@ -317,9 +316,155 @@ class rnn_message_passing(nn.Module):
             rnn_size: int = 20,
             rnn_edge_size: int = 8,
             out_features: int = 4,
-            rnn_type: str = "LSTM"
+            rnn_type: str = "LSTM",
+            latent_edge_features: int = 32
     ):
         super(rnn_message_passing, self).__init__()
+        self.num_layers = num_layers
+        self.rnn_size = rnn_size
+        self.rnn_edge_size = rnn_edge_size
+        self.dropout = dropout
+
+        # Encoding module. Encodes node and edge history separately.
+        self.node_history_encoder = node_rnn_simple(
+            node_features=node_features,
+            edge_features=0,
+            rnn_size=rnn_size,
+            dropout=dropout,
+            num_layers=num_layers,
+            rnn_type=rnn_type
+        )
+        self.edge_history_encoder = edge_rnn_1(
+            edge_features=edge_features,
+            rnn_size=rnn_edge_size,
+            dropout=dropout,
+            num_layers=num_layers,
+            rnn_type=rnn_type
+        )
+
+        self.GN = GraphNetworkBlock(
+            edge_model=edge_mlp_1(
+                node_features=rnn_size+rnn_edge_size,
+                edge_features=edge_features,
+                hidden_size=hidden_size,
+                dropout=dropout,
+                latent_edge_features=latent_edge_features,
+            ),
+            node_model=node_mlp_out(
+                hidden_size=hidden_size,
+                node_features=rnn_size+rnn_edge_size,
+                dropout=dropout,
+                edge_features=latent_edge_features,
+                out_features=out_features
+            ),
+        )
+
+    def forward(self, x, edge_index, edge_attr, batch=None, u=None, hidden=None):
+        # Unpack hidden states
+        h_node, h_edge = hidden
+
+        # Perform edge dropout
+        # edge_index, edge_attr = dropout_adj(edge_index=edge_index, edge_attr=edge_attr, p=self.dropout)
+
+        # Encode histories
+        edge_attr_encoded, h_edge = self.edge_history_encoder(edge_attr=edge_attr, hidden=h_edge, edge_index=edge_index,
+                                                              x_size=x.size(0))
+
+        x_encoded, h_node = self.node_history_encoder(x=x, edge_index=edge_index, edge_attr=None, u=None, batch=None,
+                                                      hidden=h_node)
+
+        # Concatenate
+        x_concat = torch.cat([x_encoded, edge_attr_encoded], dim=-1)
+        print(x_concat.shape)
+
+        out = self.GN(x=x_concat, edge_index=edge_index, edge_attr=edge_attr, u=None, batch=None, hidden=None)
+
+        return out, (h_node, h_edge)
+
+
+class rnn_gat(nn.Module):
+    # Forward model with edge update function
+    def __init__(
+            self,
+            hidden_size: int = 64,
+            dropout: float = 0.0,
+            node_features: int = 5,
+            edge_features: int = 0,
+            num_layers: int = 1,
+            rnn_size: int = 20,
+            rnn_edge_size: int = 8,
+            out_features: int = 4,
+            rnn_type: str = "LSTM",
+            heads: int = 4
+    ):
+        super(rnn_gat, self).__init__()
+        self.num_layers = num_layers
+        self.rnn_size = rnn_size
+        self.rnn_edge_size = rnn_edge_size
+        self.dropout = dropout
+
+        # Encoding module. Encodes node and edge history separately.
+        self.node_history_encoder = node_rnn_simple(
+            node_features=node_features,
+            edge_features=0,
+            rnn_size=rnn_size,
+            dropout=dropout,
+            num_layers=num_layers,
+            rnn_type=rnn_type
+        )
+        self.edge_history_encoder = edge_rnn_1(
+            edge_features=edge_features,
+            rnn_size=rnn_edge_size,
+            dropout=dropout,
+            num_layers=num_layers,
+            rnn_type=rnn_type
+        )
+
+        self.gat_out = GATConv(
+            in_channels=rnn_size+rnn_edge_size,
+            out_channels=out_features,
+            heads=heads,
+            dropout=dropout,
+            concat=False,
+        )
+
+    def forward(self, x, edge_index, edge_attr, hidden, batch=None, u=None):
+        # Unpack hidden states
+        h_node, h_edge = hidden
+
+        # Encode histories
+        edge_attr_encoded, h_edge = self.edge_history_encoder(edge_attr=edge_attr, hidden=h_edge, edge_index=edge_index,
+                                                              x_size=x.size(0))
+
+        x_encoded, h_node = self.node_history_encoder(x=x, edge_index=edge_index, edge_attr=None, u=None, batch=None,
+                                                      hidden=h_node)
+
+        # Perform edge dropout
+        edge_index, edge_attr_encoded = dropout_adj(edge_index=edge_index, edge_attr=edge_attr_encoded, p=self.dropout)
+
+        # Concatenate
+        out = torch.cat([x_encoded, edge_attr_encoded], dim=-1)
+        out = self.gat_out(out, edge_index=edge_index)
+
+        return out, (h_node, h_edge)
+
+
+class rnn_mp_gat(nn.Module):
+    def __init__(
+            self,
+            hidden_size: int = 64,
+            dropout: float = 0.0,
+            node_features: int = 5,
+            edge_features: int = 0,
+            num_layers: int = 1,
+            rnn_size: int = 20,
+            rnn_edge_size: int = 8,
+            out_features: int = 4,
+            rnn_type: str = "LSTM",
+            heads: int = 4,
+            latent_edge_features: int = 32
+    ):
+        super(rnn_mp_gat, self).__init__()
         self.num_layers = num_layers
         self.rnn_size = rnn_size
         self.rnn_edge_size = rnn_edge_size
@@ -341,19 +486,32 @@ class rnn_message_passing(nn.Module):
             rnn_type=rnn_type
         )
 
-        self.decoder = nn.Sequential(
-            nn.Linear(
-                in_features=rnn_size + rnn_edge_size, out_features=hidden_size
-            ),
-            nn.Dropout(p=dropout),
-            nn.LeakyReLU(),
-            nn.Linear(in_features=hidden_size, out_features=hidden_size),
-            nn.Dropout(p=dropout),
-            nn.LeakyReLU(),
-            nn.Linear(in_features=hidden_size, out_features=out_features),
+        self.gat_in = GATConv(
+            in_channels=hidden_size,
+            out_channels=out_features,
+            heads=heads,
+            dropout=dropout,
+            concat=False,
         )
 
-    def forward(self, x, edge_index, edge_attr, batch=None, u=None, hidden=None):
+        self.GN = GraphNetworkBlock(
+            edge_model=edge_mlp_1(
+                node_features=rnn_size*heads,
+                edge_features=rnn_edge_size,
+                hidden_size=hidden_size,
+                dropout=dropout,
+                latent_edge_features=latent_edge_features,
+            ),
+            node_model=node_mlp_out(
+                hidden_size=hidden_size,
+                node_features=rnn_size*heads,
+                dropout=dropout,
+                edge_features=latent_edge_features,
+                out_features=out_features
+            ),
+        )
+
+    def forward(self, x, edge_index, edge_attr, hidden, batch=None, u=None):
         # Unpack hidden states
         h_node, h_edge = hidden
 
@@ -364,9 +522,14 @@ class rnn_message_passing(nn.Module):
         x_encoded, h_node = self.node_history_encoder(x=x, edge_index=edge_index, edge_attr=None, u=None, batch=None,
                                                       hidden=h_node)
 
-         # Concatenate
-        input = torch.cat([x_encoded, edge_attr_encoded], dim=-1)
-        out = self.decoder(input)
+        # Perform edge dropout
+        edge_index, edge_attr = dropout_adj(edge_index=edge_index, edge_attr=edge_attr_encoded, p=self.dropout)
+
+        # Attention module
+        x_encoded = self.gat_in(x=x_encoded, edge_index=edge_index)
+
+        # Message passing
+        out = self.GN(x=x_encoded, edge_index=edge_index, edge_attr=edge_attr_encoded, u=None, batch=None, hidden=None)
 
         return out, (h_node, h_edge)
 
@@ -670,92 +833,6 @@ class rnn_forward_model_v4(nn.Module):
         self.GN1 = GraphNetworkBlock(
             node_model=node_rnn_simple(
                 node_features=node_features,
-                edge_features=edge_features,
-                rnn_size=rnn_size,
-                dropout=dropout,
-                num_layers=num_layers,
-                out_features=out_features,
-                rnn_type=rnn_type,
-            ),
-        )
-        GN2_node_input = rnn_size + node_features if skip else rnn_size
-        GN2_edge_input = edge_features
-
-        self.GN2 = GraphNetworkBlock(
-            edge_model=edge_mlp_1(
-                node_features=GN2_node_input,
-                edge_features=GN2_edge_input,
-                hidden_size=hidden_size,
-                dropout=dropout,
-                latent_edge_features=latent_edge_features,
-            ),
-            node_model=node_mlp_out(
-                hidden_size=hidden_size,
-                node_features=GN2_node_input,
-                dropout=dropout,
-                edge_features=latent_edge_features,
-                out_features=out_features,
-            ),
-        )
-
-    def forward(self, x, edge_index, edge_attr, batch=None, u=None, hidden=None):
-        # Normalisation is applied in regressor module
-        # Encode node wise history
-        x_1, _, _, hidden = self.GN1(
-            x=x,
-            edge_index=edge_index,
-            edge_attr=None,
-            u=u,
-            batch=batch,
-            hidden=hidden,
-        )
-        # Concatenation of node and edge attributes
-        if self.skip:
-            if self.aggregate:
-                x_1 = scatter_add(x_1, batch, dim=0)
-                x_1 = torch.cat([x, x_1[batch]], dim=1)
-            else:
-                x_1 = torch.cat([x, x_1], dim=1)
-            # edge_attr_1 = torch.cat([edge_attr, edge_attr_1], dim=1)
-        # Second block
-        out, _, _ = self.GN2(
-            x=x_1, edge_index=edge_index, edge_attr=edge_attr, u=u, batch=batch
-        )
-        return out, hidden
-
-
-class rnn_forward_model_v4(nn.Module):
-    # Forward model with edge update function
-    def __init__(
-        self,
-        hidden_size: int = 64,
-        node_features: int = 5,
-        dropout: float = 0.0,
-        edge_features: int = 0,
-        latent_edge_features: int = 0,
-        skip: bool = True,
-        num_layers: int = 1,
-        rnn_size: int = 20,
-        out_features: int = 7,
-        rnn_type: str = "GRU",
-        aggregate: bool = False,
-        **kwargs,
-    ):
-        super(rnn_forward_model_v4, self).__init__()
-        self.hidden_size = hidden_size
-        self.node_features = node_features
-        self.dropout = dropout
-        self.edge_features = edge_features
-        self.latent_edge_features = latent_edge_features
-        self.rnn_size = rnn_size
-        self.num_layers = num_layers
-        self.skip = skip
-        self.rnn_type = rnn_type
-        self.aggregate = aggregate
-
-        self.GN1 = GraphNetworkBlock(
-            node_model=node_rnn_simple(
-                node_features=node_features,
                 edge_features=0,
                 rnn_size=rnn_size,
                 dropout=dropout,
@@ -809,91 +886,6 @@ class rnn_forward_model_v4(nn.Module):
         )
         return out, hidden
 
-
-class rnn_forward_model_v5(nn.Module):
-    # Forward model with edge update function
-    def __init__(
-        self,
-        hidden_size: int = 64,
-        node_features: int = 5,
-        dropout: float = 0.0,
-        edge_features: int = 0,
-        latent_edge_features: int = 0,
-        skip: bool = True,
-        num_layers: int = 1,
-        rnn_size: int = 20,
-        out_features: int = 7,
-        rnn_type: str = "GRU",
-        aggregate: bool = False,
-        **kwargs,
-    ):
-        super(rnn_forward_model_v5, self).__init__()
-        self.hidden_size = hidden_size
-        self.node_features = node_features
-        self.dropout = dropout
-        self.edge_features = edge_features
-        self.latent_edge_features = latent_edge_features
-        self.rnn_size = rnn_size
-        self.num_layers = num_layers
-        self.skip = skip
-        self.rnn_type = rnn_type
-        self.aggregate = aggregate
-
-        self.GN1 = GraphNetworkBlock(
-            node_model=node_rnn_simple(
-                node_features=node_features,
-                edge_features=edge_features,
-                rnn_size=rnn_size,
-                dropout=dropout,
-                num_layers=num_layers,
-                out_features=out_features,
-                rnn_type=rnn_type,
-            ),
-        )
-        GN2_node_input = rnn_size + node_features if skip else rnn_size
-        GN2_edge_input = edge_features
-
-        self.GN2 = GraphNetworkBlock(
-            edge_model=edge_mlp_1(
-                node_features=GN2_node_input,
-                edge_features=GN2_edge_input,
-                hidden_size=hidden_size,
-                dropout=dropout,
-                latent_edge_features=latent_edge_features,
-            ),
-            node_model=node_mlp_out(
-                hidden_size=hidden_size,
-                node_features=GN2_node_input,
-                dropout=dropout,
-                edge_features=latent_edge_features,
-                out_features=out_features,
-            ),
-        )
-
-    def forward(self, x, edge_index, edge_attr, batch=None, u=None, hidden=None):
-        # Normalisation is applied in regressor module
-        # Encode node wise history
-        x_1, _, _, hidden = self.GN1(
-            x=x,
-            edge_index=edge_index,
-            edge_attr=edge_attr,
-            u=u,
-            batch=batch,
-            hidden=hidden,
-        )
-        # Concatenation of node and edge attributes
-        if self.skip:
-            if self.aggregate:
-                x_1 = scatter_add(x_1, batch, dim=0)
-                x_1 = torch.cat([x, x_1[batch]], dim=1)
-            else:
-                x_1 = torch.cat([x, x_1], dim=1)
-            # edge_attr_1 = torch.cat([edge_attr, edge_attr_1], dim=1)
-        # Second block
-        out, _, _ = self.GN2(
-            x=x_1, edge_index=edge_index, edge_attr=edge_attr, u=u, batch=batch
-        )
-        return out, hidden
 
 
 class GraphNetworkBlock(MetaLayer):
