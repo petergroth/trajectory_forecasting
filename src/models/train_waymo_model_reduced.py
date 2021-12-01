@@ -1203,7 +1203,7 @@ class SequentialModule(pl.LightningModule):
             batch_size=loss_mask.sum().item(),
         )
         # self.log("train_yaw_loss", yaw_loss, on_step=True, on_epoch=True, batch_size=loss_mask.sum().item())
-        loss = ade_loss + fde_loss + vel_loss
+        loss = ade_loss + vel_loss
 
         self.log(
             "train_total_loss",
