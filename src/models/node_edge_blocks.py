@@ -139,15 +139,15 @@ class edge_mlp_1(nn.Module):
         )
 
     def forward(self, src, dest, edge_attr, edge_index=None, u=None, batch=None):
-        # src, dest: [E, F_x], where E is the number of edges.
-        # edge_attr: [E, F_e]
-        # batch: [E] with max entry B - 1.
 
         # Concatenate input values
-        input = torch.cat([src, dest, edge_attr], dim=1)
+        if edge_attr is not None:
+            input = torch.cat([src, dest, edge_attr], dim=1)
+        else:
+            input = torch.cat([src, dest], dim=1)
         messages = self.message_mlp(
             input
-        )  # Output size: [n_edges, latent_edge_features]
+        )
         return messages
 
 

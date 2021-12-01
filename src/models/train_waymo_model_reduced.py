@@ -976,8 +976,8 @@ class SequentialModule(pl.LightningModule):
                 # Encode distance between nodes as edge_attr
                 row, col = edge_index
                 edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
-                edge_attr = 1 / edge_attr
-                edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
+                # edge_attr = 1 / edge_attr
+                # edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
                 edge_attr = edge_attr.type_as(batch.x)
 
             #######################
@@ -1093,8 +1093,8 @@ class SequentialModule(pl.LightningModule):
                 # Encode distance between nodes as edge_attr
                 row, col = edge_index
                 edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
-                edge_attr = 1 / edge_attr
-                edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
+                # edge_attr = 1 / edge_attr
+                # edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
                 edge_attr = edge_attr.type_as(batch.x)
 
             #######################
@@ -1321,8 +1321,8 @@ class SequentialModule(pl.LightningModule):
                 # Encode distance between nodes as edge_attr
                 row, col = edge_index
                 edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
-                edge_attr = 1 / edge_attr
-                edge_attr = edge_attr.type_as(batch.x)
+                # edge_attr = 1 / edge_attr
+                # edge_attr = edge_attr.type_as(batch.x)
                 edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
 
             ######################
@@ -1425,8 +1425,8 @@ class SequentialModule(pl.LightningModule):
                 # Encode distance between nodes as edge_attr
                 row, col = edge_index
                 edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
-                edge_attr = 1 / edge_attr
-                edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
+                # edge_attr = 1 / edge_attr
+                # edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
                 edge_attr = edge_attr.type_as(batch.x)
 
             ######################
@@ -1625,8 +1625,8 @@ class SequentialModule(pl.LightningModule):
                 # Encode distance between nodes as edge_attr
                 row, col = edge_index
                 edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
-                edge_attr = 1 / edge_attr
-                edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
+                # edge_attr = 1 / edge_attr
+                # edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
                 edge_attr = edge_attr.type_as(batch.x)
 
             ######################
@@ -1728,8 +1728,8 @@ class SequentialModule(pl.LightningModule):
                 # Encode distance between nodes as edge_attr
                 row, col = edge_index
                 edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
-                edge_attr = 1 / edge_attr
-                edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
+                # edge_attr = 1 / edge_attr
+                # edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
                 edge_attr = edge_attr.type_as(batch.x)
 
             ######################

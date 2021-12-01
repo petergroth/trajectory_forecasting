@@ -216,8 +216,8 @@ class SequentialModule(pl.LightningModule):
                 # Encode distance between nodes as edge_attr
                 row, col = edge_index
                 edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
-                edge_attr = 1 / edge_attr
-                edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
+                # edge_attr = 1 / edge_attr
+                # edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
                 edge_attr = edge_attr.type_as(batch.x)
 
             #######################
@@ -324,8 +324,8 @@ class SequentialModule(pl.LightningModule):
                 # Encode distance between nodes as edge_attr
                 row, col = edge_index
                 edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
-                edge_attr = 1 / edge_attr
-                edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
+                # edge_attr = 1 / edge_attr
+                # edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
                 edge_attr = edge_attr.type_as(batch.x)
 
             #######################
@@ -539,9 +539,9 @@ class SequentialModule(pl.LightningModule):
                 # Encode distance between nodes as edge_attr
                 row, col = edge_index
                 edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
-                edge_attr = 1 / edge_attr
+                # edge_attr = 1 / edge_attr
                 edge_attr = edge_attr.type_as(batch.x)
-                edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
+                # edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
 
             ######################
             # Validation 1/2     #
@@ -588,6 +588,7 @@ class SequentialModule(pl.LightningModule):
                 c_edge[:, mask_t] = h_edge_out[1]
 
             if t == 10:
+                print(delta_x.shape)
                 vel = delta_x[:, [0, 1]]
                 pos = batch.x[mask_t, t][:, self.pos_index] + 0.1 * vel
                 predicted_graph = torch.cat([pos, vel, static_features[mask_t]], dim=-1)
@@ -641,8 +642,8 @@ class SequentialModule(pl.LightningModule):
                 # Encode distance between nodes as edge_attr
                 row, col = edge_index
                 edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
-                edge_attr = 1 / edge_attr
-                edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
+                # edge_attr = 1 / edge_attr
+                # edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
                 edge_attr = edge_attr.type_as(batch.x)
 
             ######################
@@ -777,16 +778,20 @@ class SequentialModule(pl.LightningModule):
 
         # Initial hidden state
         if self.rnn_type == "GRU":
-            h = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
-            h = h.type_as(batch.x)
-            c = None
-        elif self.rnn_type == "LSTM":
-            h = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
-            h = h.type_as(batch.x)
-            c = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
-            c = c.type_as(batch.x)
+            h_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
+            h_edge = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_edge_size))
+            h_node = h_node.type_as(batch.x)
+            h_edge = h_edge.type_as(batch.x)
+            c_node, c_edge = None, None
         else:
-            h, c = None, None
+            h_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
+            h_edge = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_edge_size))
+            h_node = h_node.type_as(batch.x)
+            h_edge = h_edge.type_as(batch.x)
+            c_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
+            c_edge = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_edge_size))
+            c_node = c_node.type_as(batch.x)
+            c_edge = c_edge.type_as(batch.x)
 
         ######################
         # History            #
@@ -855,32 +860,32 @@ class SequentialModule(pl.LightningModule):
                     edge_attr /= self.global_scale
 
             # Obtain normalised predicted delta dynamics
-            if h is None:
-                delta_x = self.model(
-                    x=x_t,
-                    edge_index=edge_index,
-                    edge_attr=edge_attr,
-                    batch=batch.batch[mask_t],
-                )
-            elif self.rnn_type == "GRU":
+            if self.rnn_type == "GRU":
+                hidden_in = (h_node[:, mask_t], h_edge[:, mask_t])
                 delta_x, h_t = self.model(
                     x=x_t,
                     edge_index=edge_index,
                     edge_attr=edge_attr,
                     batch=batch.batch[mask_t],
-                    hidden=h[:, mask_t],
+                    hidden=hidden_in,
                 )
-                h[:, mask_t] = h_t
+                # Update hidden states
+                h_node[:, mask_t] = h_t[0]
+                h_edge[:, mask_t] = h_t[1]
+
             else:  # LSTM
-                delta_x, (h_t, c_t) = self.model(
+                hidden_in = ((h_node[:, mask_t], c_node[:, mask_t]), (h_edge[:, mask_t], c_edge[:, mask_t]))
+                delta_x, (h_node_out, h_edge_out) = self.model(
                     x=x_t,
                     edge_index=edge_index,
                     edge_attr=edge_attr,
                     batch=batch.batch[mask_t],
-                    hidden=(h[:, mask_t], c[:, mask_t]),
+                    hidden=hidden_in
                 )
-                h[:, mask_t] = h_t
-                c[:, mask_t] = c_t
+                h_node[:, mask_t] = h_node_out[0]
+                c_node[:, mask_t] = h_node_out[1]
+                h_edge[:, mask_t] = h_edge_out[0]
+                c_edge[:, mask_t] = h_edge_out[1]
 
             vel = delta_x[:, self.pos_index]
             pos = batch.x[mask_t, t][:, self.pos_index] + 0.1 * vel
@@ -956,28 +961,21 @@ class SequentialModule(pl.LightningModule):
                     edge_attr /= self.global_scale
 
             # Obtain normalised predicted delta dynamics
-            if h is None:
-                delta_x = self.model(
+            if self.rnn_type == "GRU":
+                delta_x, (h_node, h_edge) = self.model(
                     x=x_t,
                     edge_index=edge_index,
                     edge_attr=edge_attr,
                     batch=batch.batch,
+                    hidden=(h_node, h_edge),
                 )
-            elif self.rnn_type == "GRU":
-                delta_x, h = self.model(
+            else:
+                delta_x, ((h_node, c_node), (h_edge, c_edge)) = self.model(
                     x=x_t,
                     edge_index=edge_index,
                     edge_attr=edge_attr,
                     batch=batch.batch,
-                    hidden=h,
-                )
-            else:  # LSTM
-                delta_x, (h, c) = self.model(
-                    x=x_t,
-                    edge_index=edge_index,
-                    edge_attr=edge_attr,
-                    batch=batch.batch,
-                    hidden=(h, c),
+                    hidden=((h_node, c_node), (h_edge, c_edge)),
                 )
 
             vel = delta_x[:, self.pos_index]
