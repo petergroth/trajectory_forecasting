@@ -1,7 +1,7 @@
 import argparse
 import pytorch_lightning as pl
 from src.data.dataset_waymo import OneStepWaymoDataModule
-from src.models.train_waymo_model import *
+from src.models.train_waymo_model_reduced import *
 import yaml
 from pytorch_lightning.utilities.seed import seed_everything
 import torch

@@ -448,11 +448,14 @@ class node_rnn_simple(nn.Module):
     def forward(self, x, edge_index, edge_attr, u, batch, hidden):
         # x: [N, F_x], where N is the number of nodes.
         # batch: [N] with max entry B - 1.
-        row, col = edge_index
-        # Aggregate edge attributes
-        edge_attr = scatter_add(edge_attr, row, dim=0, dim_size=x.size(0))
-        # Concatenate
-        out = torch.cat([x, edge_attr], dim=1)
+        if edge_attr is not None:
+            row, col = edge_index
+            # Aggregate edge attributes
+            edge_attr = scatter_add(edge_attr, row, dim=0, dim_size=x.size(0))
+            # Concatenate
+            out = torch.cat([x, edge_attr], dim=1)
+        else:
+            out = x
         # Add extra dimension
         out = out.unsqueeze(1)
         out, hidden = self.node_rnn(out, hidden)
