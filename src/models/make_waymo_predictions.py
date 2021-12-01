@@ -341,10 +341,10 @@ def main():
             color="lightgrey",
         )
         axglob[1].quiver(
-            y_hat[0, agent, 0].detach().numpy(),
-            y_hat[0, agent, 1].detach().numpy(),
-            y_hat[0, agent, 2].detach().numpy(),
-            y_hat[0, agent, 3].detach().numpy(),
+            y_hat[10, agent, 0].detach().numpy(),
+            y_hat[10, agent, 1].detach().numpy(),
+            y_hat[10, agent, 2].detach().numpy(),
+            y_hat[10, agent, 3].detach().numpy(),
             width=0.003,
             headwidth=5,
             angles="xy",
@@ -353,10 +353,10 @@ def main():
             color="gray",
         )
         axglob[1].quiver(
-            y_hat[0, agent, 0].detach().numpy(),
-            y_hat[0, agent, 1].detach().numpy(),
-            y_hat[0, agent, 2].detach().numpy(),
-            y_hat[0, agent, 3].detach().numpy(),
+            y_hat[n_steps - 1, agent, 0].detach().numpy(),
+            y_hat[n_steps - 1, agent, 1].detach().numpy(),
+            y_hat[n_steps - 1, agent, 2].detach().numpy(),
+            y_hat[n_steps - 1, agent, 3].detach().numpy(),
             width=0.003,
             headwidth=5,
             angles="xy",

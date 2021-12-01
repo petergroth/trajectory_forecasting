@@ -7,4 +7,4 @@ rnn_edge_size: 8
 out_features: 4
 num_layers: 2
 rnn_type: LSTM
-latent_edge_features: 32
+heads: 4

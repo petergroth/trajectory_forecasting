@@ -101,4 +101,4 @@ todo.txt
 *.err
 *.out
 *.log
-/visualisations/predictions/
+/visualisations/
