@@ -305,7 +305,7 @@ class mpnn_forward_model(nn.Module):
 
 
 class rnn_message_passing(nn.Module):
-    # Forward model with edge update function
+    # Recurrent message-passing GNN
     def __init__(
             self,
             hidden_size: int = 64,
@@ -325,7 +325,7 @@ class rnn_message_passing(nn.Module):
         self.rnn_edge_size = rnn_edge_size
         self.dropout = dropout
 
-        # Encoding module. Encodes node and edge history separately.
+        # Node encoder
         self.node_history_encoder = node_rnn_simple(
             node_features=node_features,
             edge_features=0,
@@ -334,6 +334,7 @@ class rnn_message_passing(nn.Module):
             num_layers=num_layers,
             rnn_type=rnn_type
         )
+        # Edge encoder
         self.edge_history_encoder = edge_rnn_1(
             edge_features=edge_features,
             rnn_size=rnn_edge_size,
@@ -341,7 +342,7 @@ class rnn_message_passing(nn.Module):
             num_layers=num_layers,
             rnn_type=rnn_type
         )
-
+        # Message-passing GN block
         self.GN = GraphNetworkBlock(
             edge_model=edge_mlp_1(
                 node_features=rnn_size+rnn_edge_size,
@@ -359,34 +360,33 @@ class rnn_message_passing(nn.Module):
             ),
         )
 
-    def forward(self, x, edge_index, edge_attr, batch=None, u=None, hidden=None):
+    def forward(self, x, edge_index, edge_attr, hidden: tuple, batch=None, u=None):
         # Unpack hidden states
         h_node, h_edge = hidden
 
         # Perform edge dropout
         # edge_index, edge_attr = dropout_adj(edge_index=edge_index, edge_attr=edge_attr, p=self.dropout)
 
-        # Encode histories
+        # Aggregate and encode edge histories. Shape [n_nodes, rnn_edge_size]
         edge_attr_encoded, h_edge = self.edge_history_encoder(edge_attr=edge_attr, hidden=h_edge, edge_index=edge_index,
                                                               x_size=x.size(0))
-
+        # Encode node histories. Shape [n_nodes, rnn_size]
         x_encoded, h_node = self.node_history_encoder(x=x, edge_index=edge_index, edge_attr=None, u=None, batch=None,
                                                       hidden=h_node)
 
-        # Concatenate
+        # Concatenate. Shape [n_nodes, rnn_size+rnn_edge_size
         x_concat = torch.cat([x_encoded, edge_attr_encoded], dim=-1)
-        print(x_concat.shape)
 
-        out = self.GN(x=x_concat, edge_index=edge_index, edge_attr=edge_attr, u=None, batch=None, hidden=None)
+        # Perform message passing to obtain final outputs
+        out, _, _ = self.GN(x=x_concat, edge_index=edge_index, edge_attr=edge_attr, u=None, batch=None, hidden=None)
 
         return out, (h_node, h_edge)
 
 
 class rnn_gat(nn.Module):
-    # Forward model with edge update function
+    # Recurrent attention-based GNN
     def __init__(
             self,
-            hidden_size: int = 64,
             dropout: float = 0.0,
             node_features: int = 5,
             edge_features: int = 0,
@@ -431,21 +431,17 @@ class rnn_gat(nn.Module):
     def forward(self, x, edge_index, edge_attr, hidden, batch=None, u=None):
         # Unpack hidden states
         h_node, h_edge = hidden
-
-        # Encode histories
+        # Aggregate and encode edge histories. Shape [n_nodes, rnn_edge_size]
         edge_attr_encoded, h_edge = self.edge_history_encoder(edge_attr=edge_attr, hidden=h_edge, edge_index=edge_index,
                                                               x_size=x.size(0))
-
+        # Encode node histories. Shape [n_nodes, rnn_size]
         x_encoded, h_node = self.node_history_encoder(x=x, edge_index=edge_index, edge_attr=None, u=None, batch=None,
                                                       hidden=h_node)
 
-        # Perform edge dropout
-        edge_index, edge_attr_encoded = dropout_adj(edge_index=edge_index, edge_attr=edge_attr_encoded, p=self.dropout)
-
-        # Concatenate
+        # Concatenate. Shape [n_nodes, rnn_size+rnn_edge_size]
         out = torch.cat([x_encoded, edge_attr_encoded], dim=-1)
+        # Attention based mechanism to obtain outputs
         out = self.gat_out(out, edge_index=edge_index)
-
         return out, (h_node, h_edge)
 
 
@@ -487,8 +483,8 @@ class rnn_mp_gat(nn.Module):
         )
 
         self.gat_in = GATConv(
-            in_channels=hidden_size,
-            out_channels=out_features,
+            in_channels=rnn_size+rnn_edge_size,
+            out_channels=hidden_size,
             heads=heads,
             dropout=dropout,
             concat=False,
@@ -496,40 +492,41 @@ class rnn_mp_gat(nn.Module):
 
         self.GN = GraphNetworkBlock(
             edge_model=edge_mlp_1(
-                node_features=rnn_size*heads,
-                edge_features=rnn_edge_size,
+                node_features=hidden_size,
+                edge_features=edge_features,
                 hidden_size=hidden_size,
                 dropout=dropout,
                 latent_edge_features=latent_edge_features,
             ),
             node_model=node_mlp_out(
                 hidden_size=hidden_size,
-                node_features=rnn_size*heads,
+                node_features=hidden_size,
                 dropout=dropout,
                 edge_features=latent_edge_features,
                 out_features=out_features
             ),
         )
 
-    def forward(self, x, edge_index, edge_attr, hidden, batch=None, u=None):
+    def forward(self, x, edge_index, edge_attr, hidden: tuple, batch=None, u=None):
         # Unpack hidden states
         h_node, h_edge = hidden
-
-        # Encode histories
+        # Aggregate and encode edge histories. Shape [n_nodes, rnn_edge_size]
         edge_attr_encoded, h_edge = self.edge_history_encoder(edge_attr=edge_attr, hidden=h_edge, edge_index=edge_index,
                                                               x_size=x.size(0))
-
+        # Encode node histories. Shape [n_nodes, rnn_size]
         x_encoded, h_node = self.node_history_encoder(x=x, edge_index=edge_index, edge_attr=None, u=None, batch=None,
                                                       hidden=h_node)
 
-        # Perform edge dropout
-        edge_index, edge_attr = dropout_adj(edge_index=edge_index, edge_attr=edge_attr_encoded, p=self.dropout)
+        # Concatenate. Shape [n_nodes, rnn_size+rnn_edge_size]
+        x_encoded = torch.cat([x_encoded, edge_attr_encoded], dim=-1)
 
-        # Attention module
+        # Attention module. Shape [n_nodes, rnn_size+rnn_edge_size]
         x_encoded = self.gat_in(x=x_encoded, edge_index=edge_index)
 
         # Message passing
-        out = self.GN(x=x_encoded, edge_index=edge_index, edge_attr=edge_attr_encoded, u=None, batch=None, hidden=None)
+        out, _, _ = self.GN(x=x_encoded,
+                            edge_index=edge_index,
+                            edge_attr=edge_attr)
 
         return out, (h_node, h_edge)
 

@@ -39,6 +39,7 @@ class SequentialModule(pl.LightningModule):
         edge_features: int = 1,
         normalise: bool = True,
         training_horizon: int = 90,
+        edge_dropout: float = 0
     ):
         super().__init__()
         # Verify inputs
@@ -72,6 +73,7 @@ class SequentialModule(pl.LightningModule):
         self.training_horizon = training_horizon
         self.norm_index = [0, 1, 2, 3, 4, 5, 6]
         self.pos_index = [0, 1]
+        self.edge_dropout = edge_dropout
 
         # Model parameters
         self.rnn_type = model_dict["rnn_type"]
@@ -216,9 +218,11 @@ class SequentialModule(pl.LightningModule):
                 # Encode distance between nodes as edge_attr
                 row, col = edge_index
                 edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
-                # edge_attr = 1 / edge_attr
-                # edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
                 edge_attr = edge_attr.type_as(batch.x)
+
+            if self.edge_dropout > 0:
+                edge_index, edge_attr = dropout_adj(edge_index=edge_index, edge_attr=edge_attr, p=self.edge_dropout)
+
 
             #######################
             # Training 1/2        #
@@ -265,11 +269,9 @@ class SequentialModule(pl.LightningModule):
                 h_edge[:, mask_t] = h_edge_out[0]
                 c_edge[:, mask_t] = h_edge_out[1]
 
-
             vel = delta_x[:, [0, 1]]
             pos = batch.x[mask_t, t][:, self.pos_index] + 0.1 * vel
             x_t = torch.cat([pos, vel, static_features[mask_t]], dim=-1)
-
             x_t = x_t.type_as(batch.x)
 
             # Save deltas for loss computation
@@ -324,9 +326,10 @@ class SequentialModule(pl.LightningModule):
                 # Encode distance between nodes as edge_attr
                 row, col = edge_index
                 edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
-                # edge_attr = 1 / edge_attr
-                # edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
                 edge_attr = edge_attr.type_as(batch.x)
+
+            if self.edge_dropout > 0:
+                edge_index, edge_attr = dropout_adj(edge_index=edge_index, edge_attr=edge_attr, p=self.edge_dropout)
 
             #######################
             # Training 2/2        #
@@ -588,7 +591,6 @@ class SequentialModule(pl.LightningModule):
                 c_edge[:, mask_t] = h_edge_out[1]
 
             if t == 10:
-                print(delta_x.shape)
                 vel = delta_x[:, [0, 1]]
                 pos = batch.x[mask_t, t][:, self.pos_index] + 0.1 * vel
                 predicted_graph = torch.cat([pos, vel, static_features[mask_t]], dim=-1)
