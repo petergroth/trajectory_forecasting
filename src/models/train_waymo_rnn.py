@@ -727,7 +727,7 @@ class SequentialModule(pl.LightningModule):
         self.log("val_fde_loss", fde_loss, batch_size=fde_mask.sum().item())
         self.log("val_vel_loss", vel_loss, batch_size=val_mask.sum().item())
         # self.log("val_yaw_loss", yaw_loss, batch_size=val_mask.sum().item())
-        loss = ade_loss + fde_loss + vel_loss
+        loss = ade_loss # + fde_loss + vel_loss
         self.log("val_total_loss", loss, batch_size=val_mask.sum().item())
         self.log("val_fde_ttp_loss", fde_ttp_loss, batch_size=fde_ttp_mask.sum().item())
         self.log("val_ade_ttp_loss", ade_ttp_loss, batch_size=ade_ttp_mask.sum().item())
