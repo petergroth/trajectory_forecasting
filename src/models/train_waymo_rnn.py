@@ -39,7 +39,8 @@ class SequentialModule(pl.LightningModule):
         edge_features: int = 1,
         normalise: bool = True,
         training_horizon: int = 90,
-        edge_dropout: float = 0
+        edge_dropout: float = 0,
+        prediction_horizon: int = 91
     ):
         super().__init__()
         # Verify inputs
@@ -74,6 +75,7 @@ class SequentialModule(pl.LightningModule):
         self.norm_index = [0, 1, 2, 3, 4, 5, 6]
         self.pos_index = [0, 1]
         self.edge_dropout = edge_dropout
+        self.prediction_horizon = prediction_horizon
 
         # Model parameters
         self.rnn_type = model_dict["rnn_type"]
@@ -459,6 +461,9 @@ class SequentialModule(pl.LightningModule):
         batch.tracks_to_predict = batch.tracks_to_predict[type_mask]
         batch.type = batch.type[type_mask]
 
+        # Update input using prediction horizon
+        batch.x = batch.x[:, :self.prediction_horizon]
+
         # Reduction: Limit to x-y predictions
         batch.x = batch.x[:, :, self.node_indices]
 
@@ -467,9 +472,9 @@ class SequentialModule(pl.LightningModule):
 
         # Allocate target/prediction tensors
         n_nodes = batch.num_nodes
-        y_hat = torch.zeros((80, n_nodes, self.out_features))
+        y_hat = torch.zeros((self.prediction_horizon-11, n_nodes, self.out_features))
         y_hat = y_hat.type_as(batch.x)
-        y_target = torch.zeros((80, n_nodes, self.out_features))
+        y_target = torch.zeros((self.prediction_horizon-11, n_nodes, self.out_features))
         y_target = y_target.type_as(batch.x)
         batch.x = batch.x[:, :, :-1]
         # static_features = torch.cat(
@@ -604,7 +609,7 @@ class SequentialModule(pl.LightningModule):
         # Future             #
         ######################
 
-        for t in range(11, 90):
+        for t in range(11, self.prediction_horizon-1):
 
             ######################
             # Graph construction #
@@ -713,7 +718,7 @@ class SequentialModule(pl.LightningModule):
             y_hat[-1, fde_ttp_mask][:, [0, 1]], y_target[-1, fde_ttp_mask][:, [0, 1]]
         )
         ade_ttp_mask = torch.logical_and(
-            val_mask, batch.tracks_to_predict.expand((80, mask.size(0)))
+            val_mask, batch.tracks_to_predict.expand((self.prediction_horizon-11, mask.size(0)))
         )
         ade_ttp_loss = self.val_ade_loss(
             y_hat[:, :, [0, 1]][ade_ttp_mask], y_target[:, :, [0, 1]][ade_ttp_mask]
@@ -727,7 +732,7 @@ class SequentialModule(pl.LightningModule):
         self.log("val_fde_loss", fde_loss, batch_size=fde_mask.sum().item())
         self.log("val_vel_loss", vel_loss, batch_size=val_mask.sum().item())
         # self.log("val_yaw_loss", yaw_loss, batch_size=val_mask.sum().item())
-        loss = ade_loss + fde_loss + vel_loss
+        loss = ade_loss # + fde_loss + vel_loss
         self.log("val_total_loss", loss, batch_size=val_mask.sum().item())
         self.log("val_fde_ttp_loss", fde_ttp_loss, batch_size=fde_ttp_mask.sum().item())
         self.log("val_ade_ttp_loss", ade_ttp_loss, batch_size=ade_ttp_mask.sum().item())
