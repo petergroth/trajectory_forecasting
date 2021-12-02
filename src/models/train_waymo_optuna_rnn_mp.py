@@ -28,12 +28,12 @@ class Objective(object):
         # Suggest hyperparameters
 
         # Model
-        # hidden_size = trial.suggest_categorical("hidden_size", [16, 32, 64, 96, 128, 192, 256])
+        hidden_size = trial.suggest_categorical("hidden_size", [16, 32, 64, 96, 128, 192, 256])
         dropout = trial.suggest_float("dropout", low=0.0, high=0.7, step=0.1)
-        heads = trial.suggest_categorical("heads", [1, 2, 4, 6, 8, 16])
         rnn_size = trial.suggest_categorical("rnn_size", [8, 16, 32, 64])
         rnn_edge_size = trial.suggest_categorical("rnn_edge_size", [4, 8, 16, 32, 64])
         num_layers = trial.suggest_categorical("num_layers", [1, 2])
+        latent_edge_features = trial.suggest_categorical("latent_edge_features", [4, 8, 16, 32, 64])
 
         # Regressor
         weight_decay = trial.suggest_categorical("weight_decay", [1e-4, 5e-4, 1e-3, 5e-3, 1e-2, 1e-1, 0.0])
@@ -50,10 +50,11 @@ class Objective(object):
         # Pack regressor parameters together
         model_kwargs = {
             "dropout": dropout,
-            "heads": heads,
             "rnn_size": rnn_size,
             "rnn_edge_size": rnn_edge_size,
-            "num_layers": num_layers
+            "num_layers": num_layers,
+            "hidden_size": hidden_size,
+            "latent_edge_features": latent_edge_features
         }
         regressor_kwargs = {
             "weight_decay": weight_decay,
