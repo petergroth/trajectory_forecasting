@@ -117,6 +117,7 @@ class Objective(object):
         wandb_logger.log_metrics({"best_total_val_loss": val_total_loss})
         wandb_logger.finalize("0")
         wandb_logger.experiment.finish()
+        wandb.finish()
         del trainer
 
         return val_total_loss

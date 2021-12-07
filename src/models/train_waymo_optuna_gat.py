@@ -17,6 +17,7 @@ from typing import Union
 import math
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from optuna.integration import PyTorchLightningPruningCallback
+import wandb
 
 
 class Objective(object):
@@ -116,6 +117,7 @@ class Objective(object):
         wandb_logger.log_metrics({"best_total_val_loss": val_total_loss})
         wandb_logger.finalize("0")
         wandb_logger.experiment.finish()
+        wandb.finish()
         del trainer
 
         return val_total_loss
