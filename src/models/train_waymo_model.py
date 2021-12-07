@@ -1895,9 +1895,8 @@ class SequentialModule(pl.LightningModule):
 
 
 class ConstantPhysicalBaselineModule(pl.LightningModule):
-    def __init__(self, model=None, out_features: int = 6, **kwargs):
+    def __init__(self, out_features: int = 6, prediction_horizon: int = 91, **kwargs):
         super().__init__()
-        assert model is None
         self.val_ade_loss = torchmetrics.MeanSquaredError()
         self.val_fde_loss = torchmetrics.MeanSquaredError()
         self.val_yaw_loss = torchmetrics.MeanSquaredError()
@@ -1905,6 +1904,7 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
         self.val_fde_ttp_loss = torchmetrics.MeanSquaredError()
         self.val_ade_ttp_loss = torchmetrics.MeanSquaredError()
 
+        self.prediction_horizon = prediction_horizon
         self.out_features = out_features
         self.save_hyperparameters()
 
@@ -1929,73 +1929,74 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
         batch.batch = batch.batch[valid_mask]
         batch.tracks_to_predict = batch.tracks_to_predict[valid_mask]
         batch.type = batch.type[valid_mask]
+
+        # CARS
+        type_mask = batch.type[:, 1] == 1
+        batch.x = batch.x[type_mask]
+        batch.batch = batch.batch[type_mask]
+        batch.tracks_to_predict = batch.tracks_to_predict[type_mask]
+        batch.type = batch.type[type_mask]
+
+        # Update input using prediction horizon
+        batch.x = batch.x[:, :self.prediction_horizon]
+
+        # Limit to x, y, x_vel, y_vel
+        batch.x = batch.x[:, :, [0, 1, 3, 4, 10]]
+
         # Update mask
         mask = batch.x[:, :, -1].bool()
 
         # Allocate target/prediction tensors
         n_nodes = batch.num_nodes
-        y_hat = torch.zeros((80, n_nodes, self.out_features))
-        y_target = torch.zeros((80, n_nodes, self.out_features))
+        y_hat = torch.zeros((self.prediction_horizon-11, n_nodes, self.out_features))
+        y_target = torch.zeros((self.prediction_horizon-11, n_nodes, self.out_features))
         # Remove valid flag from features
         batch.x = batch.x[:, :, :-1]
-        # Extract static features
-        static_features = torch.cat(
-            [batch.x[:, 10, self.out_features :], batch.type], dim=1
-        )
         # Find valid agents at time t=11
         initial_mask = mask[:, 10]
         # Extract final dynamic states to use for predictions
-        last_pos = batch.x[initial_mask, 10, 0:2]
-        last_z = batch.x[initial_mask, 10, 2]
-        last_vel = batch.x[initial_mask, 10, 3:5]
-        last_yaw = batch.x[initial_mask, 10, 5:7]
+        last_pos = batch.x[initial_mask, 10][:, [0, 1]]
+        last_vel = batch.x[initial_mask, 10][:, [2, 3]]
         # Constant change in positions
         delta_pos = last_vel * 0.1
         # First updated position
         predicted_pos = last_pos + delta_pos
-        predicted_graph = torch.cat(
-            (predicted_pos, last_z.unsqueeze(1), last_vel, last_yaw, static_features),
-            dim=1,
-        )
+        predicted_graph = torch.cat([predicted_pos, last_vel], dim=1)
         # Save first prediction and target
         y_hat[0, :, :] = predicted_graph[:, : self.out_features]
         y_target[0, :, :] = batch.x[:, 11, : self.out_features]
 
-        for t in range(11, 90):
+        for t in range(11, self.prediction_horizon-1):
             predicted_pos += delta_pos
-            predicted_graph = torch.cat(
-                (predicted_pos, last_z.unsqueeze(1), last_vel, static_features), dim=1
-            )
+            predicted_graph = torch.cat([predicted_pos, last_vel], dim=1)
             y_hat[t - 10, :, :] = predicted_graph[:, : self.out_features]
             y_target[t - 10, :, :] = batch.x[:, t + 1, : self.out_features]
 
+        # Extract loss mask
         fde_mask = mask[:, -1]
         val_mask = mask[:, 11:].permute(1, 0)
 
         # Compute and log loss
         fde_loss = self.val_fde_loss(
-            y_hat[-1, fde_mask, :3], y_target[-1, fde_mask, :3]
+            y_hat[-1, fde_mask][:, [0, 1]], y_target[-1, fde_mask][:, [0, 1]]
         )
         ade_loss = self.val_ade_loss(
-            y_hat[:, :, 0:3][val_mask], y_target[:, :, 0:3][val_mask]
+            y_hat[:, :, [0, 1]][val_mask], y_target[:, :, [0, 1]][val_mask]
         )
         vel_loss = self.val_vel_loss(
-            y_hat[:, :, 3:5][val_mask], y_target[:, :, 3:5][val_mask]
-        )
-        yaw_loss = self.val_yaw_loss(
-            y_hat[:, :, 5:7][val_mask], y_target[:, :, 5:7][val_mask]
+            y_hat[:, :, [2, 3]][val_mask], y_target[:, :, [2, 3]][val_mask]
         )
 
         # Compute losses on "tracks_to_predict"
         fde_ttp_mask = torch.logical_and(fde_mask, batch.tracks_to_predict)
         fde_ttp_loss = self.val_fde_ttp_loss(
-            y_hat[-1, fde_ttp_mask, :3], y_target[-1, fde_ttp_mask, :3]
+            y_hat[-1, fde_ttp_mask][:, [0, 1]], y_target[-1, fde_ttp_mask][:, [0, 1]]
         )
         ade_ttp_mask = torch.logical_and(
-            val_mask, batch.tracks_to_predict.expand((80, mask.size(0)))
+            val_mask, batch.tracks_to_predict.expand((self.prediction_horizon - 11, mask.size(0)))
         )
         ade_ttp_loss = self.val_ade_loss(
-            y_hat[:, :, 0:3][ade_ttp_mask], y_target[:, :, 0:3][ade_ttp_mask]
+            y_hat[:, :, [0, 1]][ade_ttp_mask], y_target[:, :, [0, 1]][ade_ttp_mask]
         )
 
         ######################
@@ -2005,12 +2006,12 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
         self.log("val_ade_loss", ade_loss)
         self.log("val_fde_loss", fde_loss)
         self.log("val_vel_loss", vel_loss)
-        self.log("val_yaw_loss", yaw_loss)
-        self.log("val_total_loss", (ade_loss + vel_loss + yaw_loss) / 3)
+        loss = ade_loss
+        self.log("val_total_loss", loss)
         self.log("val_fde_ttp_loss", fde_ttp_loss)
         self.log("val_ade_ttp_loss", ade_ttp_loss)
 
-        return (ade_loss + vel_loss + yaw_loss) / 3
+        return loss
 
     def predict_step(self, batch, batch_idx=None):
 
@@ -2027,59 +2028,48 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
         batch.batch = batch.batch[valid_mask]
         batch.tracks_to_predict = batch.tracks_to_predict[valid_mask]
         batch.type = batch.type[valid_mask]
+
+        # CARS
+        type_mask = batch.type[:, 1] == 1
+        batch.x = batch.x[type_mask]
+        batch.batch = batch.batch[type_mask]
+        batch.tracks_to_predict = batch.tracks_to_predict[type_mask]
+        batch.type = batch.type[type_mask]
+
+        # Update input using prediction horizon
+        batch.x = batch.x[:, :self.prediction_horizon]
+
+        # Limit to x, y, x_vel, y_vel
+        batch.x = batch.x[:, :, [0, 1, 2, 3]]
+
         # Update mask
         mask = batch.x[:, :, -1].bool()
 
         # Allocate target/prediction tensors
         n_nodes = batch.num_nodes
-        y_hat = torch.zeros((90, n_nodes, 15))
-        y_target = torch.zeros((90, n_nodes, 15))
+        y_hat = torch.zeros((self.prediction_horizon-1, n_nodes, 4))
         # Remove valid flag from features
         batch.x = batch.x[:, :, :-1]
-        # Extract static features
-        static_features = torch.cat(
-            [batch.x[:, 10, self.out_features :], batch.type], dim=1
-        )
 
         # Fill in targets
-        for t in range(0, 90):
-            y_target[t, :, :] = torch.cat([batch.x[:, t + 1, :], batch.type], dim=1)
+        y_target = batch.x[:, 1:]
+        y_target = y_target.permute(1, 0, 2)
 
         for t in range(11):
             mask_t = mask[:, t]
 
             last_pos = batch.x[mask_t, t, 0:2]
-            last_z = batch.x[mask_t, t, 2]
             last_vel = batch.x[mask_t, t, 3:5]
-            last_yaw = batch.x[mask_t, t, 5:7]
 
             delta_pos = last_vel * 0.1
             predicted_pos = last_pos + delta_pos
-            predicted_graph = torch.cat(
-                (
-                    predicted_pos,
-                    last_z.unsqueeze(1),
-                    last_vel,
-                    last_yaw,
-                    static_features[mask_t],
-                ),
-                dim=1,
-            )
+            predicted_graph = torch.cat([predicted_pos, last_vel], dim=1)
             y_hat[t, mask_t, :] = predicted_graph
 
         for t in range(11, 90):
             last_pos = predicted_pos
             predicted_pos = last_pos + delta_pos
-            predicted_graph = torch.cat(
-                (
-                    predicted_pos,
-                    last_z.unsqueeze(1),
-                    last_vel,
-                    last_yaw,
-                    static_features,
-                ),
-                dim=1,
-            )
+            predicted_graph = torch.cat([predicted_pos, last_vel], dim=1)
             y_hat[t, :, :] = predicted_graph
 
         return y_hat, y_target, mask
@@ -2104,14 +2094,14 @@ def main(config):
     datamodule = eval(config["misc"]["dm_type"])(**config["datamodule"])
     # Define model
     if config["misc"]["model_type"] != "ConstantModel":
-        model_dict = config["model"]
+        model_dict = dict(config["model"])
         model_type = config["misc"]["model_type"]
     else:
         model_dict, model_type = None, None
 
     # Define LightningModule
     regressor = eval(config["misc"]["regressor_type"])(
-        model_type=model_type, model_dict=dict(model_dict), **config["regressor"]
+        model_type=model_type, model_dict=model_dict, **config["regressor"]
     )
 
     # Setup logging (using saved yaml file)

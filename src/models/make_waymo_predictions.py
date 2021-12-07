@@ -285,7 +285,7 @@ def main():
         # color = (np.random.random(), np.random.random(), np.random.random())
         x = y_target[:, agent, 0].detach().numpy()
         y = y_target[:, agent, 1].detach().numpy()
-        axglob[0].scatter(x=x, y=y, s=50, color=colors[agent], alpha=0.075, edgecolors="k")
+        axglob[0].scatter(x=x, y=y, s=50, color=colors[agent], alpha=0.075, edge_color="k")
         axglob[0].quiver(
             y_target[0, agent, 0].detach().numpy(),
             y_target[0, agent, 1].detach().numpy(),
@@ -325,7 +325,7 @@ def main():
 
         x = y_hat[:, agent, 0].detach().numpy()
         y = y_hat[:, agent, 1].detach().numpy()
-        axglob[1].scatter(x=x, y=y, s=30, color=colors[agent], alpha=0.075, edgecolors="k")
+        axglob[1].scatter(x=x, y=y, s=30, color=colors[agent], alpha=0.075, edge_color="k")
         axglob[1].quiver(
             y_hat[0, agent, 0].detach().numpy(),
             y_hat[0, agent, 1].detach().numpy(),
