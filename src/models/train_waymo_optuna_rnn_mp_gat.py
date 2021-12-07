@@ -17,7 +17,6 @@ from typing import Union
 import math
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from optuna.integration import PyTorchLightningPruningCallback
-import wandb
 
 
 class Objective(object):
@@ -29,18 +28,19 @@ class Objective(object):
         # Suggest hyperparameters
 
         # Model
-        # hidden_size = trial.suggest_categorical("hidden_size", [16, 32, 64, 96, 128, 192, 256])
+        hidden_size = trial.suggest_categorical("hidden_size", [16, 32, 64, 96, 128, 192, 256])
         dropout = trial.suggest_float("dropout", low=0.0, high=0.7, step=0.1)
-        heads = trial.suggest_categorical("heads", [1, 2, 4, 6, 8, 16])
         rnn_size = trial.suggest_categorical("rnn_size", [8, 16, 32, 64])
         rnn_edge_size = trial.suggest_categorical("rnn_edge_size", [4, 8, 16, 32, 64])
         num_layers = trial.suggest_categorical("num_layers", [1, 2])
+        latent_edge_features = trial.suggest_categorical("latent_edge_features", [4, 8, 16, 32, 64])
+        heads = trial.suggest_categorical("heads", [1, 2, 4, 6, 8, 16])
 
         # Regressor
         weight_decay = trial.suggest_categorical("weight_decay", [1e-4, 5e-4, 1e-3, 5e-3, 1e-2, 1e-1, 0.0])
-        training_horizon = trial.suggest_categorical("training_horizon", [15, 25, 30, 40, 50, 70, 90])
+        training_horizon = trial.suggest_categorical("training_horizon", [21, 31, 41, 51, 71, 90])
         teacher_forcing_ratio = trial.suggest_float("teacher_forcing_ratio", low=0.0, high=0.3, step=0.05)
-        min_dist = trial.suggest_float("min_dist", low=1.0, high=20.0, step=1.0)
+        min_dist = trial.suggest_float("min_dist", low=2.0, high=20.0, step=1.0)
         lr = trial.suggest_categorical("lr", [1e-5, 5e-5, 1e-4, 5e-4, 1e-3, 5e-3, 1e-2])
         edge_dropout = trial.suggest_float("edge_dropout", low=0.0, high=0.5, step=0.05)
         noise = trial.suggest_float("noise", low=0.0, high=0.01)
@@ -51,10 +51,12 @@ class Objective(object):
         # Pack regressor parameters together
         model_kwargs = {
             "dropout": dropout,
-            "heads": heads,
             "rnn_size": rnn_size,
             "rnn_edge_size": rnn_edge_size,
-            "num_layers": num_layers
+            "num_layers": num_layers,
+            "hidden_size": hidden_size,
+            "latent_edge_features": latent_edge_features,
+            "heads": heads
         }
         regressor_kwargs = {
             "weight_decay": weight_decay,
@@ -117,8 +119,7 @@ class Objective(object):
         wandb_logger.log_metrics({"best_total_val_loss": val_total_loss})
         wandb_logger.finalize("0")
         wandb_logger.experiment.finish()
-        wandb.finish()
-        del trainer
+        del trainer, wandb_logger
 
         return val_total_loss
 

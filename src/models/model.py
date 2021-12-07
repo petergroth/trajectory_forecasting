@@ -383,6 +383,130 @@ class rnn_message_passing(nn.Module):
         return out, (h_node, h_edge)
 
 
+class rnn_mp_hetero(nn.Module):
+    # Recurrent message-passing GNN
+    def __init__(
+            self,
+            hidden_size: int = 64,
+            dropout: float = 0.0,
+            node_features: int = 5,
+            edge_features: int = 0,
+            num_layers: int = 1,
+            rnn_size: int = 20,
+            rnn_edge_size: int = 8,
+            out_features: int = 4,
+            rnn_type: str = "LSTM",
+            latent_edge_features: int = 32
+    ):
+        super(rnn_mp_hetero, self).__init__()
+        self.num_layers = num_layers
+        self.rnn_size = rnn_size
+        self.rnn_edge_size = rnn_edge_size
+        self.dropout = dropout
+        self.out_features = out_features
+
+        # Node history encoder
+        self.node_history_encoder = node_rnn_simple(
+            node_features=node_features,
+            edge_features=0,
+            rnn_size=rnn_size,
+            dropout=dropout,
+            num_layers=num_layers,
+            rnn_type=rnn_type
+        )
+        # Edge history encoder
+        self.edge_history_encoder = edge_rnn_1(
+            edge_features=edge_features,
+            rnn_size=rnn_edge_size,
+            dropout=dropout,
+            num_layers=num_layers,
+            rnn_type=rnn_type
+        )
+        # Message-passing GN block
+        self.edge_encoding = GraphNetworkBlock(
+            edge_model=edge_mlp_1(
+                node_features=rnn_size+rnn_edge_size,
+                edge_features=edge_features,
+                hidden_size=hidden_size,
+                dropout=dropout,
+                latent_edge_features=latent_edge_features,
+            ),
+        )
+
+        node_in = rnn_size + rnn_edge_size + latent_edge_features
+
+        self.node_car_module = nn.Sequential(
+            nn.Linear(in_features=node_in, out_features=hidden_size),
+            nn.Dropout(p=dropout),
+            nn.LeakyReLU(),
+            nn.Linear(in_features=hidden_size, out_features=hidden_size),
+            nn.Dropout(p=dropout),
+            nn.LeakyReLU(),
+            nn.Linear(in_features=hidden_size, out_features=out_features),
+        )
+
+        self.node_pedestrian_module = nn.Sequential(
+            nn.Linear(in_features=node_in, out_features=hidden_size),
+            nn.Dropout(p=dropout),
+            nn.LeakyReLU(),
+            nn.Linear(in_features=hidden_size, out_features=hidden_size),
+            nn.Dropout(p=dropout),
+            nn.LeakyReLU(),
+            nn.Linear(in_features=hidden_size, out_features=out_features),
+        )
+
+        self.node_bike_module = nn.Sequential(
+            nn.Linear(in_features=node_in, out_features=hidden_size),
+            nn.Dropout(p=dropout),
+            nn.LeakyReLU(),
+            nn.Linear(in_features=hidden_size, out_features=hidden_size),
+            nn.Dropout(p=dropout),
+            nn.LeakyReLU(),
+            nn.Linear(in_features=hidden_size, out_features=out_features),
+        )
+
+    def forward(self, x, edge_index, edge_attr, hidden: tuple, type):
+        # Unpack hidden states
+        h_node, h_edge = hidden
+
+        # Aggregate and encode edge histories. Shape [n_nodes, rnn_edge_size]
+        edge_attr_encoded, h_edge = self.edge_history_encoder(edge_attr=edge_attr, hidden=h_edge, edge_index=edge_index,
+                                                              x_size=x.size(0))
+        # Encode node histories. Shape [n_nodes, rnn_size]
+        x_encoded, h_node = self.node_history_encoder(x=x, edge_index=edge_index, edge_attr=None, u=None, batch=None,
+                                                      hidden=h_node)
+
+        # Concatenate. Shape [n_nodes, rnn_size+rnn_edge_size
+        x_concat = torch.cat([x_encoded, edge_attr_encoded], dim=-1)
+
+        # Compute message for each edge
+        _, edge_attr, _ = self.edge_encoding(x=x_concat,
+                                             edge_index=edge_index,
+                                             edge_attr=edge_attr, u=None, batch=None, hidden=None)
+
+        # Aggregate messages per node
+        row, col = edge_index
+        edge_attr = scatter_add(edge_attr, row, dim=0, dim_size=x.size(0))
+        x_agg = torch.cat([x_concat, edge_attr], dim=1)
+
+        # Agent class indexing
+        car_idx = (type[:, 1] == 1) + (type[:, 0] == 1) + (type[:, 4] == 1)
+        pedestrian_idx = type[:, 2] == 1
+        bike_idx = type[:, 3] == 1
+
+        x_car = self.node_car_module(x_agg[car_idx])
+        x_pedestrian = self.node_car_module(x_agg[pedestrian_idx])
+        x_bike = self.node_car_module(x_agg[bike_idx])
+
+        out = torch.zeros((x.size(0), self.out_features))
+        out = out.type_as(x)
+        out[car_idx] = x_car
+        out[pedestrian_idx] = x_pedestrian
+        out[bike_idx] = x_bike
+
+        return out, (h_node, h_edge)
+
+
 class rnn_gat(nn.Module):
     # Recurrent attention-based GNN
     def __init__(
