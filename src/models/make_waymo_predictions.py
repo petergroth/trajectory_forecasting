@@ -1,7 +1,7 @@
 import argparse
 import pytorch_lightning as pl
 from src.data.dataset_waymo import OneStepWaymoDataModule
-from src.models.train_waymo_model_reduced import *
+from src.models.train_waymo_rnn_types import *
 import yaml
 from pytorch_lightning.utilities.seed import seed_everything
 import torch
@@ -28,9 +28,7 @@ def make_predictions(path, config, sequence_idx=0):
     if config["misc"]["model_type"] != "ConstantModel":
         regressor = eval(config["misc"]["regressor_type"]).load_from_checkpoint(path)
     else:
-        regressor = eval(config["misc"]["regressor_type"])(
-            None, None, **config["regressor"]
-        )
+        regressor = eval(config["misc"]["regressor_type"])(**config["regressor"])
     # Setup
     regressor.eval()
     datamodule.setup()
@@ -40,7 +38,7 @@ def make_predictions(path, config, sequence_idx=0):
     os.makedirs(dirpath, exist_ok=True)
     for i, batch in enumerate(loader):
         if i == sequence_idx:
-            y_hat, y_target, mask = regressor.predict_step(batch)
+            y_hat, y_target, mask = regressor.predict_step(batch, prediction_horizon=51)
             torch.save((y_hat, y_target, mask), dirpath + f"/sequence_{i:04}.pt")
             return
 
@@ -287,7 +285,7 @@ def main():
         # color = (np.random.random(), np.random.random(), np.random.random())
         x = y_target[:, agent, 0].detach().numpy()
         y = y_target[:, agent, 1].detach().numpy()
-        axglob[0].scatter(x=x, y=y, s=50, color=colors[agent], alpha=0.05)
+        axglob[0].scatter(x=x, y=y, s=50, color=colors[agent], alpha=0.075, edgecolors="k")
         axglob[0].quiver(
             y_target[0, agent, 0].detach().numpy(),
             y_target[0, agent, 1].detach().numpy(),
@@ -327,7 +325,7 @@ def main():
 
         x = y_hat[:, agent, 0].detach().numpy()
         y = y_hat[:, agent, 1].detach().numpy()
-        axglob[1].scatter(x=x, y=y, s=30, color=colors[agent], alpha=0.05)
+        axglob[1].scatter(x=x, y=y, s=30, color=colors[agent], alpha=0.075, edgecolors="k")
         axglob[1].quiver(
             y_hat[0, agent, 0].detach().numpy(),
             y_hat[0, agent, 1].detach().numpy(),
@@ -375,7 +373,7 @@ def main():
     axglob[1].set_title("Predicted trajectories")
 
     plt.show()
-    figglob.savefig(f"{args.output_path}/sequence_{args.sequence_idx:04}.png")
+    figglob.savefig(f"{args.output_path}/sequence_{args.sequence_idx:04}_51.png")
 
 
 if __name__ == "__main__":
