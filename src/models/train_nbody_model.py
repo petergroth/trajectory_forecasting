@@ -10,16 +10,31 @@ from torch_geometric.data import Batch, Data
 from src.models.model import *
 import yaml
 
+import argparse
+import os
+
+from torch_geometric.data import Batch
+from src.models.model import *
+import hydra
+from omegaconf import DictConfig, OmegaConf
+from typing import Union
+import math
+import random
+
+
 
 class OneStepModule(pl.LightningModule):
     def __init__(
         self,
-        model_type,
-        noise,
-        lr: float,
-        weight_decay: float,
-        log_norm: bool,
-        min_dist=None,
+        model_type: Union[None, str],
+        model_dict: Union[None, dict],
+        noise: Union[None, float] = None,
+        lr: float = 1e-4,
+        weight_decay: float = 0.0,
+        edge_type: str = "knn",
+        min_dist: int = 0,
+        n_neighbours: int = 30,
+        fully_connected: bool = True,
         edge_weight: bool = False,
         self_loop: bool = True,
         undirected: bool = False,
@@ -30,11 +45,21 @@ class OneStepModule(pl.LightningModule):
         normalise: bool = True,
     ):
         super().__init__()
+
+        # Instantiate model
+        self.model_type = model_type
+        self.model = eval(model_type)(**model_dict)
+
+        # Setup metrics
         self.train_pos_loss = torchmetrics.MeanSquaredError()
         self.train_vel_loss = torchmetrics.MeanSquaredError()
+        self.train_yaw_loss = torchmetrics.MeanSquaredError()
         self.val_ade_loss = torchmetrics.MeanSquaredError()
         self.val_fde_loss = torchmetrics.MeanSquaredError()
         self.val_vel_loss = torchmetrics.MeanSquaredError()
+        self.val_yaw_loss = torchmetrics.MeanSquaredError()
+
+
         self.model = model_type
         self.save_hyperparameters()
         self.noise = noise
@@ -601,65 +626,70 @@ class OneStepModule(pl.LightningModule):
 class SequentialModule(pl.LightningModule):
     def __init__(
         self,
-        model_type,
-        lr: float,
-        weight_decay: float,
-        log_norm: bool,
-        noise=None,
-        teacher_forcing: bool = False,
+        model_type: Union[None, str],
+        model_dict: Union[None, dict],
+        lr: float = 1e-4,
+        weight_decay: float = 0.0,
+        noise: Union[None, float] = None,
         teacher_forcing_ratio: float = 0.3,
-        min_dist=None,
+        min_dist: int = 0,
+        n_neighbours: int = 30,
+        fully_connected: bool = True,
         edge_weight: bool = False,
+        edge_type: str = "knn",
         self_loop: bool = True,
         undirected: bool = False,
-        rnn_type: str = "GRU",
+        out_features: int = 6,
+        node_features: int = 9,
+        edge_features: int = 1,
+        training_horizon: int = 90,
         grav_attraction: bool = False,
-        node_features: int = 5,
-        edge_features: int = 0,
-        out_features: int = 4,
     ):
         super().__init__()
+        
+        # Setup metrics
         self.train_ade_loss = torchmetrics.MeanSquaredError()
         self.train_fde_loss = torchmetrics.MeanSquaredError()
         self.train_vel_loss = torchmetrics.MeanSquaredError()
         self.val_ade_loss = torchmetrics.MeanSquaredError()
         self.val_fde_loss = torchmetrics.MeanSquaredError()
         self.val_vel_loss = torchmetrics.MeanSquaredError()
-        self.model = model_type
-        self.save_hyperparameters()
+
+        # Instantiate model
+        self.model_type = model_type
+        self.model = eval(model_type)(**model_dict)
+
+        # Learning parameters
         self.noise = noise
         self.lr = lr
         self.weight_decay = weight_decay
-        self.log_norm = log_norm
-        self.teacher_forcing = teacher_forcing
         self.teacher_forcing_ratio = teacher_forcing_ratio
+        self.training_horizon = training_horizon
+        
+        # Model parameters
+        self.rnn_type = (
+            model_dict["rnn_type"] if "rnn_type" in model_dict.keys() else None
+        )
+        self.out_features = out_features
+        self.edge_features = edge_features
+        self.node_features = node_features
+        
+        # Graph parameters    
         self.min_dist = min_dist
         self.edge_weight = edge_weight
         self.undirected = undirected
         self.self_loop = self_loop
-        self.rnn_type = rnn_type
         self.grav_attraction = grav_attraction
-        self.node_features = node_features
-        self.edge_features = edge_features
+        self.edge_type = edge_type
+        self.fully_connected = fully_connected
+        self.n_neighbours = n_neighbours
 
-        # Normalisation parameters
-        self.register_buffer("node_counter", torch.zeros(1))
-        self.register_buffer("node_in_sum", torch.zeros(node_features))
-        self.register_buffer("node_in_squaresum", torch.zeros(node_features))
-        self.register_buffer("node_in_std", torch.ones(node_features))
-        self.register_buffer("node_in_mean", torch.zeros(node_features))
-        # Output normalisation parameters
-        self.register_buffer("node_out_sum", torch.zeros(out_features))
-        self.register_buffer("node_out_squaresum", torch.zeros(out_features))
-        self.register_buffer("node_out_std", torch.ones(out_features))
-        self.register_buffer("node_out_mean", torch.zeros(out_features))
-        # Edge normalisation parameters
-        self.register_buffer("edge_counter", torch.zeros(1))
-        self.register_buffer("edge_in_sum", torch.zeros(edge_features))
-        self.register_buffer("edge_in_squaresum", torch.zeros(edge_features))
-        self.register_buffer("edge_in_std", torch.ones(edge_features))
-        self.register_buffer("edge_in_mean", torch.zeros(edge_features))
-        self.register_buffer("edge_in_mean", torch.zeros(edge_features))
+        if self.fully_connected:
+            self.edge_type = 'knn'
+            self.n_neighbours = 100
+
+        self.save_hyperparameters()
+
 
     def training_step(self, batch: Batch, batch_idx: int):
 
@@ -667,74 +697,95 @@ class SequentialModule(pl.LightningModule):
         # Initialisation     #
         ######################
 
-        # Extract dimensions
+        # Extract data from batch
         n_nodes = batch.num_nodes
-        y_predictions = torch.zeros((n_nodes, 90, 4))
-        edge_index = batch.edge_index
-        static_features = batch.x[:, 0, 4:]
-        x = batch.x
+        static_features = batch.x[:, 10, 4].unsqueeze(1)
         edge_attr = None
 
-        # Obtain target delta dynamic nodes
-        # Use torch.roll to compute differences between x_t and x_{t+1}.
-        # Ignore final difference (between t_0 and t_{-1})
-        y_target_abs = (torch.roll(x[:, :, :4], (0, -1, 0), (0, 1, 2)) - x[:, :, :4])[
-            :, :-1, :
-        ]
-        y_target_nrm = torch.zeros_like(y_target_abs)
+        # Ignore data after training horizon
+        batch.x = batch.x[:, : (self.training_horizon + 1)]
+
+        # Allocate prediction tensor
+        y_predictions = torch.zeros((n_nodes, self.training_horizon, self.out_features))
+        y_predictions = y_predictions.type_as(batch.x)
+        # Define target tensor
+        y_target = batch.x[:, 1: (self.training_horizon + 1), : self.out_features]
+        y_target = y_target.type_as(batch.x)
+
+        assert y_target.shape == y_predictions.shape
 
         # Initial hidden state
         if self.rnn_type == "GRU":
-            h = torch.zeros((self.model.num_layers, 1, self.model.rnn_size))
+            h_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
+            h_edge = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_edge_size))
+            h_node = h_node.type_as(batch.x)
+            h_edge = h_edge.type_as(batch.x)
+            c_node, c_edge = None, None
         elif self.rnn_type == "LSTM":
-            h = torch.zeros((self.model.num_layers, 1, self.model.rnn_size))
-            c = torch.zeros((self.model.num_layers, 1, self.model.rnn_size))
-            h = (h, c)
+            h_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
+            h_edge = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_edge_size))
+            h_node = h_node.type_as(batch.x)
+            h_edge = h_edge.type_as(batch.x)
+            c_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
+            c_edge = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_edge_size))
+            c_node = c_node.type_as(batch.x)
+            c_edge = c_edge.type_as(batch.x)
         else:
-            h = None
+            h_node, h_edge, c_node, c_edge = None, None, None, None
 
         ######################
         # History            #
         ######################
 
         for t in range(11):
-            # Extract current input and target
-            x_t = x[:, t, :]
-            y_t = y_target_abs[:, t, :]
+
+            # Extract current input
+            x_t = batch.x[:, t, :]
+            x_t = x_t.type_as(batch.x)
 
             # Add noise if specified
             if self.noise is not None:
-                # Add noise to dynamic states
-                x_t += self.noise * torch.randn_like(x_t)
+                x_t[:, : self.out_features] += self.noise * torch.randn_like(
+                    x_t[:, : self.out_features]
+                )
 
             ######################
             # Graph construction #
             ######################
 
-            # Determine whether to compute edge_index as a function of distances
-            if self.min_dist is not None:
+            # Construct edges
+            if self.edge_type == "knn":
+                # Neighbour-based graph
+                edge_index = torch_geometric.nn.knn_graph(
+                    x=x_t[:, :2],
+                    k=self.n_neighbours,
+                    batch=batch.batch,
+                    loop=self.self_loop,
+                )
+            else:
+                # Distance-based graph
                 edge_index = torch_geometric.nn.radius_graph(
                     x=x_t[:, :2],
                     r=self.min_dist,
                     batch=batch.batch,
                     loop=self.self_loop,
-                    max_num_neighbors=30,
+                    max_num_neighbors=self.n_neighbours,
                     flow="source_to_target",
                 )
-                # 1 nearest neighbour to ensure connected graphs
-                nn_edge_index = torch_geometric.nn.knn_graph(
-                    x=x_t[:, :2], k=1, batch=batch.batch
-                )
-                # Remove duplicates
-                edge_index = torch_geometric.utils.coalesce(
-                    torch.cat((edge_index, nn_edge_index), dim=1)
-                )
-                # self.log("average_num_edges", edge_index.shape[1] / batch.num_graphs)
 
+            if self.undirected:
+                edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
+
+            # Remove duplicates and sort
+            edge_index = torch_geometric.utils.coalesce(edge_index)
+
+            # Create edge_attr if specified
             if self.edge_weight:
                 # Encode distance between nodes as edge_attr
                 row, col = edge_index
                 edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
+                edge_attr = edge_attr.type_as(batch.x)
+
                 if self.grav_attraction:
                     # Compute gravitational attraction between all nodes
                     m1 = x_t[row, 4] * 1e10
@@ -743,98 +794,95 @@ class SequentialModule(pl.LightningModule):
                     edge_attr = torch.hstack([edge_attr, attraction.unsqueeze(1)])
                     # Replace inf values with 0
                     edge_attr = torch.nan_to_num(edge_attr, posinf=0)
-
-            if self.undirected:
-                edge_index, edge_attr = torch_geometric.utils.to_undirected(
-                    edge_index, edge_attr
-                )
 
             #######################
             # Training 1/2        #
             #######################
 
-            if edge_attr is None:
-                self.update_in_normalisation(x_t.detach().clone())
-            else:
-                self.update_in_normalisation(
-                    x_t.detach().clone(), edge_attr.detach().clone()
+            # Obtain predicted delta dynamics
+            if self.rnn_type == "GRU":
+                delta_x, (h_node, h_edge) = self.model(
+                    x=x_t,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    batch=batch.batch,
+                    hidden=(h_node, h_edge),
                 )
-            self.update_out_normalisation(y_t.detach().clone())
+            elif self.rnn_type == "LSTM":  # LSTM
+                delta_x, ((h_node, c_node), (h_edge, c_edge)) = self.model(
+                    x=x_t,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    batch=batch.batch,
+                    hidden=((h_node, c_node), (h_edge, c_edge))
+                )
+            else:
+                delta_x = self.model(
+                    x=x_t,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    batch=batch.batch,
+                )
 
-            # Obtain normalised input graph and normalised target nodes
-            x_t_nrm, edge_attr_nrm = self.in_normalise(x_t, edge_attr)
-            y_t_nrm = self.out_normalise(y_t)
+            # Compute updated positions
+            vel = delta_x[:, [0, 1]]
+            pos = batch.x[:, t][:, [0, 1]] + 0.1 * vel
+            x_t = torch.cat([pos, vel, static_features], dim=-1)
+            x_t = x_t.type_as(batch.x)
 
-            y_target_nrm[:, t, :] = y_t_nrm
-            # Obtain normalised predicted delta dynamics
-            y_pred_t, h = self.model(
-                x=x_t_nrm,
-                edge_index=edge_index,
-                edge_attr=edge_attr_nrm,
-                batch=batch.batch,
-                hidden=h,
-            )
             # Save deltas for loss computation
-            y_predictions[:, t, :] = y_pred_t
-            # Renormalise output dynamics
-            y_pred_abs = self.out_renormalise(y_pred_t)
-            # Add deltas to input graph
-            x_t = torch.cat((x[:, t, :4] + y_pred_abs, static_features), dim=-1)
+            y_predictions[:, t, :] = x_t[:, : self.out_features]
 
-        # If using teacher_forcing, draw sample and accept teach_forcing_ratio % of the time. Else, deny.
-        use_groundtruth = (
-            (
-                torch.distributions.uniform.Uniform(0, 1).sample()
-                < self.teacher_forcing_ratio
-            )
-            if self.teacher_forcing
-            else False
-        )
+        # If using teacher_forcing, draw sample and accept <teach_forcing_ratio*100> % of the time. Else, deny.
+        use_groundtruth = random.random() < self.teacher_forcing_ratio
 
         ######################
         # Future             #
         ######################
 
-        for t in range(11, 90):
+        for t in range(11, self.training_horizon):
             # Use groundtruth 'teacher_forcing_ratio' % of the time
             if use_groundtruth:
-                x_t = x[:, t, :]
-            x_prev = x_t
-            y_t = y_target_abs[:, t, :]
-
-            # Add noise if specified
-            if self.noise is not None:
-                # Add noise to dynamic states
-                x_t += self.noise * torch.randn_like(x_t)
+                x_t = batch.x[:, t, :].clone()
+            x_prev = x_t.clone()
 
             ######################
             # Graph construction #
             ######################
 
-            # Determine whether to compute edge_index as a function of distances
-            if self.min_dist is not None:
+            # Construct edges
+            if self.edge_type == "knn":
+                # Neighbour-based graph
+                edge_index = torch_geometric.nn.knn_graph(
+                    x=x_t[:, :2],
+                    k=self.n_neighbours,
+                    batch=batch.batch,
+                    loop=self.self_loop,
+                )
+            else:
+                # Distance-based graph
                 edge_index = torch_geometric.nn.radius_graph(
                     x=x_t[:, :2],
                     r=self.min_dist,
                     batch=batch.batch,
                     loop=self.self_loop,
-                    max_num_neighbors=30,
+                    max_num_neighbors=self.n_neighbours,
                     flow="source_to_target",
                 )
-                # 1 nearest neighbour to ensure connected graphs
-                nn_edge_index = torch_geometric.nn.knn_graph(
-                    x=x_t[:, :2], k=1, batch=batch.batch
-                )
-                # Remove duplicates
-                edge_index = torch_geometric.utils.coalesce(
-                    torch.cat((edge_index, nn_edge_index), dim=1)
-                )
-                self.log("average_num_edges", edge_index.shape[1] / batch.num_graphs)
 
+            if self.undirected:
+                edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
+
+            # Remove duplicates and sort
+            edge_index = torch_geometric.utils.coalesce(edge_index)
+
+            # Create edge_attr if specified
             if self.edge_weight:
                 # Encode distance between nodes as edge_attr
                 row, col = edge_index
                 edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
+                edge_attr = edge_attr.type_as(batch.x)
+
                 if self.grav_attraction:
                     # Compute gravitational attraction between all nodes
                     m1 = x_t[row, 4] * 1e10
@@ -844,57 +892,65 @@ class SequentialModule(pl.LightningModule):
                     # Replace inf values with 0
                     edge_attr = torch.nan_to_num(edge_attr, posinf=0)
 
-            if self.undirected:
-                edge_index, edge_attr = torch_geometric.utils.to_undirected(
-                    edge_index, edge_attr
-                )
-
             #######################
             # Training 2/2        #
             #######################
 
-            if edge_attr is None:
-                self.update_in_normalisation(x_t.detach().clone())
-            else:
-                self.update_in_normalisation(
-                    x_t.detach().clone(), edge_attr.detach().clone()
+            # Obtain predicted delta dynamics
+            if self.rnn_type == "GRU":
+                delta_x, (h_node, h_edge) = self.model(
+                    x=x_t,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    batch=batch.batch,
+                    hidden=(h_node, h_edge),
                 )
-            self.update_out_normalisation(y_t.detach().clone())
+            elif self.rnn_type == "LSTM":  # LSTM
+                delta_x, ((h_node, c_node), (h_edge, c_edge)) = self.model(
+                    x=x_t,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    batch=batch.batch,
+                    hidden=((h_node, c_node), (h_edge, c_edge))
+                )
+            else:
+                delta_x = self.model(
+                    x=x_t,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    batch=batch.batch,
+                )
 
-            # Obtain normalised input graph and normalised target nodes
-            x_t_nrm, edge_attr_nrm = self.in_normalise(x_t, edge_attr)
-            y_t_nrm = self.out_normalise(y_t)
-            y_target_nrm[:, t, :] = y_t_nrm
-            # Obtain normalised predicted delta dynamics
-            y_pred_t, h = self.model(
-                x=x_t_nrm,
-                edge_index=edge_index,
-                edge_attr=edge_attr_nrm,
-                batch=batch.batch,
-                hidden=h,
-            )
+            # Compute updated positions
+            vel = delta_x[:, [0, 1]]
+            pos = x_prev[:, [0, 1]] + 0.1 * vel
+            x_t = torch.cat([pos, vel, static_features], dim=-1)
+            x_t = x_t.type_as(batch.x)
+
             # Save deltas for loss computation
-            y_predictions[:, t, :] = y_pred_t
-            # Renormalise output dynamics
-            y_pred_abs = self.out_renormalise(y_pred_t)
-            # Add deltas to input graph. Input for next timestep
-            x_t = torch.cat((x_prev[:, :4] + y_pred_abs, static_features), dim=-1)
+            y_predictions[:, t, :] = x_t[:, : self.out_features]
+
 
         # Compute and log loss
         fde_loss = self.train_fde_loss(
-            y_predictions[:, -1, :2], y_target_nrm[:, -1, :2]
+            y_predictions[:, -1, :2], y_target[:, -1, :2]
         )
-        ade_loss = self.train_ade_loss(y_predictions[:, :, :2], y_target_nrm[:, :, :2])
-        vel_loss = self.train_vel_loss(y_predictions[:, :, 2:], y_target_nrm[:, :, 2:])
+        ade_loss = self.train_ade_loss(
+            y_predictions[:, :, :2], y_target[:, :, :2]
+        )
+        vel_loss = self.train_vel_loss(
+            y_predictions[:, :, [2, 3]], y_target[:, :, [2, 3]]
+        )
 
         self.log("train_fde_loss", fde_loss, on_step=True, on_epoch=True)
         self.log("train_ade_loss", ade_loss, on_step=True, on_epoch=True)
         self.log("train_vel_loss", vel_loss, on_step=True, on_epoch=True)
+        loss = ade_loss
         self.log(
-            "train_total_loss", (vel_loss + ade_loss) / 2, on_step=True, on_epoch=True
+            "train_total_loss", loss, on_step=True, on_epoch=True
         )
 
-        return ade_loss + vel_loss
+        return loss
 
     def validation_step(self, batch: Batch, batch_idx: int):
 
@@ -902,25 +958,41 @@ class SequentialModule(pl.LightningModule):
         # Initialisation     #
         ######################
 
-        # Validate on sequential dataset. First 11 observations are used to prime the model.
-        # Loss is computed on remaining 80 samples using rollout.
-
-        # Extract dimensions and allocate target/prediction tensors
+        # Extract data from batch
         n_nodes = batch.num_nodes
-        y_hat = torch.zeros((80, n_nodes, 4))
-        y_target = torch.zeros((80, n_nodes, 4))
-        edge_index = batch.edge_index
-        static_features = batch.x[:, 0, 4:]
+        static_features = batch.x[:, 10, 4].unsqueeze(1)
+        edge_attr = None
+
+        # Ignore data after training horizon
+        batch.x = batch.x[:, : (self.training_horizon + 1)]
+
+        # Allocate prediction tensor
+        y_predictions = torch.zeros((n_nodes, self.training_horizon, self.out_features))
+        y_predictions = y_predictions.type_as(batch.x)
+        # Define target tensor
+        y_target = batch.x[:, 1: (self.training_horizon + 1), : self.out_features]
+        y_target = y_target.type_as(batch.x)
+
+        assert y_target.shape == y_predictions.shape
+
         # Initial hidden state
         if self.rnn_type == "GRU":
-            h = torch.zeros((self.model.num_layers, 1, self.model.rnn_size))
+            h_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
+            h_edge = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_edge_size))
+            h_node = h_node.type_as(batch.x)
+            h_edge = h_edge.type_as(batch.x)
+            c_node, c_edge = None, None
         elif self.rnn_type == "LSTM":
-            h = torch.zeros((self.model.num_layers, 1, self.model.rnn_size))
-            c = torch.zeros((self.model.num_layers, 1, self.model.rnn_size))
-            h = (h, c)
+            h_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
+            h_edge = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_edge_size))
+            h_node = h_node.type_as(batch.x)
+            h_edge = h_edge.type_as(batch.x)
+            c_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
+            c_edge = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_edge_size))
+            c_node = c_node.type_as(batch.x)
+            c_edge = c_edge.type_as(batch.x)
         else:
-            h = None
-        edge_attr = None
+            h_node, h_edge, c_node, c_edge = None, None, None, None
 
         ######################
         # History            #
@@ -928,415 +1000,435 @@ class SequentialModule(pl.LightningModule):
 
         for t in range(11):
 
-            ######################
-            # Graph construction #
-            ######################
-
-            x = batch.x[:, t, :]
-
-            if self.min_dist is not None:
-                edge_index = torch_geometric.nn.radius_graph(
-                    x=x[:, :2],
-                    r=self.min_dist,
-                    batch=batch.batch,
-                    loop=self.self_loop,
-                    max_num_neighbors=30,
-                    flow="source_to_target",
-                )
-                # 1 nearest neighbour to ensure connected graphs
-                nn_edge_index = torch_geometric.nn.knn_graph(
-                    x=x[:, :2], k=1, batch=batch.batch
-                )
-                # Remove duplicates
-                edge_index = torch_geometric.utils.coalesce(
-                    torch.cat((edge_index, nn_edge_index), dim=1)
-                )
-                # self.log("average_num_edges", edge_index.shape[1] / batch.num_graphs)
-
-            if self.edge_weight:
-                # Encode distance between nodes as edge_attr
-                row, col = edge_index
-                edge_attr = (x[row, :2] - x[col, :2]).norm(dim=-1).unsqueeze(1)
-                if self.grav_attraction:
-                    # Compute gravitational attraction between all nodes
-                    m1 = x[row, 4] * 1e10
-                    m2 = x[col, 4] * 1e10
-                    attraction = m1 * m2 / (edge_attr.squeeze() ** 2) * 6.674e-11
-                    edge_attr = torch.hstack([edge_attr, attraction.unsqueeze(1)])
-                    # Replace inf values with 0
-                    edge_attr = torch.nan_to_num(edge_attr, posinf=0)
-
-            if self.undirected:
-                edge_index, edge_attr = torch_geometric.utils.to_undirected(
-                    edge_index, edge_attr
-                )
-
-            ######################
-            # Validation 1/2     #
-            ######################
-
-            # Normalise input graph
-            x, edge_attr = self.in_normalise(x, edge_attr)
-            # Obtain normalised predicted delta dynamics
-            x, h = self.model(
-                x=x,
-                edge_index=edge_index,
-                edge_attr=edge_attr,
-                batch=batch.batch,
-                hidden=h,
-            )
-            # Renormalise output dynamics
-            x = self.out_renormalise(x)  # [n_nodes, 4]
-            # Add deltas to input graph
-            predicted_graph = torch.cat(
-                (batch.x[:, t, :4] + x, static_features), dim=-1
-            )  # [n_nodes, n_features]
-
-        # Save first prediction and target
-        y_hat[0, :, :] = predicted_graph[:, :4]
-        y_target[0, :, :] = batch.x[:, 11, :4]
-
-        # Predict future values
-        for t in range(11, 90):
+            # Extract current input
+            x_t = batch.x[:, t, :]
+            x_t = x_t.type_as(batch.x)
 
             ######################
             # Graph construction #
             ######################
 
-            x = predicted_graph
-
-            if self.min_dist is not None:
+            # Construct edges
+            if self.edge_type == "knn":
+                # Neighbour-based graph
+                edge_index = torch_geometric.nn.knn_graph(
+                    x=x_t[:, :2],
+                    k=self.n_neighbours,
+                    batch=batch.batch,
+                    loop=self.self_loop,
+                )
+            else:
+                # Distance-based graph
                 edge_index = torch_geometric.nn.radius_graph(
-                    x=x[:, :2],
+                    x=x_t[:, :2],
                     r=self.min_dist,
                     batch=batch.batch,
                     loop=self.self_loop,
-                    max_num_neighbors=30,
+                    max_num_neighbors=self.n_neighbours,
                     flow="source_to_target",
                 )
-                # 1 nearest neighbour to ensure connected graphs
-                nn_edge_index = torch_geometric.nn.knn_graph(
-                    x=x[:, :2], k=1, batch=batch.batch
-                )
-                # Remove duplicates
-                edge_index = torch_geometric.utils.coalesce(
-                    torch.cat((edge_index, nn_edge_index), dim=1)
-                )
-                self.log("average_num_edges", edge_index.shape[1] / batch.num_graphs)
 
+            if self.undirected:
+                edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
+
+            # Remove duplicates and sort
+            edge_index = torch_geometric.utils.coalesce(edge_index)
+
+            # Create edge_attr if specified
             if self.edge_weight:
                 # Encode distance between nodes as edge_attr
                 row, col = edge_index
-                edge_attr = (x[row, :2] - x[col, :2]).norm(dim=-1).unsqueeze(1)
+                edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
+                edge_attr = edge_attr.type_as(batch.x)
+
                 if self.grav_attraction:
                     # Compute gravitational attraction between all nodes
-                    m1 = x[row, 4] * 1e10
-                    m2 = x[col, 4] * 1e10
+                    m1 = x_t[row, 4] * 1e10
+                    m2 = x_t[col, 4] * 1e10
                     attraction = m1 * m2 / (edge_attr.squeeze() ** 2) * 6.674e-11
                     edge_attr = torch.hstack([edge_attr, attraction.unsqueeze(1)])
                     # Replace inf values with 0
                     edge_attr = torch.nan_to_num(edge_attr, posinf=0)
 
-            if self.undirected:
-                edge_index, edge_attr = torch_geometric.utils.to_undirected(
-                    edge_index, edge_attr
-                )
+            #######################
+            # Training 1/2        #
+            #######################
 
-            ######################
-            # Validation 2/2     #
-            ######################
-
-            # Normalise input graph
-            x, edge_attr = self.in_normalise(x, edge_attr)
-            # Obtain normalised predicted delta dynamics
-            x, h = self.model(
-                x=x,
-                edge_index=edge_index,
-                edge_attr=edge_attr,
-                batch=batch.batch,
-                hidden=h,
-            )
-            # Renormalise deltas
-            x = self.out_renormalise(x)
-            # Add deltas to input graph
-            predicted_graph = torch.cat(
-                (predicted_graph[:, :4] + x, static_features), dim=-1
-            )  # [n_nodes, n_features]
-
-            # Save prediction alongside true value (next time step state)
-            y_hat[t - 10, :, :] = predicted_graph[:, :4]
-            y_target[t - 10, :, :] = batch.x[:, t + 1, :4]
-
-        # Compute and log loss
-        fde_loss = self.val_fde_loss(y_hat[-1, :, :2], y_target[-1, :, :2])
-        ade_loss = self.val_ade_loss(y_hat[:, :, :2], y_target[:, :, :2])
-        vel_loss = self.val_vel_loss(y_hat[:, :, 2:], y_target[:, :, 2:])
-
-        ######################
-        # Logging            #
-        ######################
-
-        self.log("val_ade_loss", ade_loss)
-        self.log("val_fde_loss", fde_loss)
-        self.log("val_vel_loss", vel_loss)
-        self.log("val_total_loss", (vel_loss + ade_loss) / 2)
-
-        return ade_loss + vel_loss
-
-    def predict_step(self, batch, batch_idx=None):
-
-        ######################
-        # Initialisation     #
-        ######################
-
-        # Extract dimensions and allocate target/prediction tensors
-        n_nodes = batch.num_nodes
-        n_features = 5
-        y_hat = torch.zeros((90, n_nodes, n_features))
-        y_target = torch.zeros((90, n_nodes, n_features))
-        edge_index = batch.edge_index
-        static_features = batch.x[:, 0, 4:]
-        # Initial hidden state
-        if self.rnn_type == "GRU":
-            h = torch.zeros((self.model.num_layers, 1, self.model.rnn_size))
-            # torch.zeros((self.model.num_layers, 1, self.model.rnn_size)))
-        else:
-            h = None
-        # h = torch.zeros_like(batch.x[:, 0, :])
-        edge_attr = None
-
-        ######################
-        # History            #
-        ######################
-
-        for t in range(11):
-
-            ######################
-            # Graph construction #
-            ######################
-
-            x = batch.x[:, t, :]
-
-            if self.min_dist is not None:
-                # Edge indices of close nodes
-                edge_index = torch_geometric.nn.radius_graph(
-                    x=x[:, :2],
-                    r=self.min_dist,
+            # Obtain predicted delta dynamics
+            if self.rnn_type == "GRU":
+                delta_x, (h_node, h_edge) = self.model(
+                    x=x_t,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
                     batch=batch.batch,
-                    loop=self.self_loop,
-                    max_num_neighbors=30,
-                    flow="source_to_target",
+                    hidden=(h_node, h_edge),
                 )
-                # 1 nearest neighbour to ensure connected graphs
-                nn_edge_index = torch_geometric.nn.knn_graph(
-                    x=x[:, :2], k=1, batch=batch.batch
+            elif self.rnn_type == "LSTM":  # LSTM
+                delta_x, ((h_node, c_node), (h_edge, c_edge)) = self.model(
+                    x=x_t,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    batch=batch.batch,
+                    hidden=((h_node, c_node), (h_edge, c_edge))
                 )
-                # Remove duplicates
-                edge_index = torch_geometric.utils.coalesce(
-                    torch.cat((edge_index, nn_edge_index), dim=1)
-                )
-
-            if self.edge_weight:
-                # Encode distance between nodes as edge_attr
-                row, col = edge_index
-                edge_attr = (x[row, :2] - x[col, :2]).norm(dim=-1).unsqueeze(1)
-                if self.grav_attraction:
-                    # Compute gravitational attraction between all nodes
-                    m1 = x[row, 4] * 1e10
-                    m2 = x[col, 4] * 1e10
-                    attraction = m1 * m2 / (edge_attr.squeeze() ** 2) * 6.674e-11
-                    edge_attr = torch.hstack([edge_attr, attraction.unsqueeze(1)])
-                    # Replace inf values with 0
-                    edge_attr = torch.nan_to_num(edge_attr, posinf=0)
-
-            if self.undirected:
-                edge_index, edge_attr = torch_geometric.utils.to_undirected(
-                    edge_index, edge_attr
+            else:
+                delta_x = self.model(
+                    x=x_t,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    batch=batch.batch,
                 )
 
-            ######################
-            # Predictions 1/2    #
-            ######################
+            # Compute updated positions
+            vel = delta_x[:, [0, 1]]
+            pos = batch.x[:, t][:, [0, 1]] + 0.1 * vel
+            x_t = torch.cat([pos, vel, static_features], dim=-1)
+            x_t = x_t.type_as(batch.x)
 
-            # Normalise input graph
-            x, edge_attr = self.model.NormBlock.in_normalise(x, edge_attr)
-            # Obtain normalised predicted delta dynamics
-            x, h = self.model(
-                x=x,
-                edge_index=edge_index,
-                edge_attr=edge_attr,
-                batch=batch.batch,
-                hidden=h,
-            )
-            # Renormalise output dynamics
-            x = self.model.NormBlock.out_renormalise(x)  # [n_nodes, 4]
-            # Add deltas to input graph
-            predicted_graph = torch.cat(
-                (batch.x[:, t, :4] + x, static_features), dim=-1
-            )  # [n_nodes, n_features]
-            # Save predictions and targets
-            y_hat[t, :, :] = predicted_graph[:, :]
-            y_target[t, :, :] = batch.x[:, t + 1, :]
+            # Save deltas for loss computation
+            y_predictions[:, t, :] = x_t[:, : self.out_features]
 
         ######################
         # Future             #
         ######################
 
-        for t in range(11, 90):
+        for t in range(11, self.training_horizon):
+
+            x_prev = x_t.clone()
 
             ######################
             # Graph construction #
             ######################
 
-            x = predicted_graph
-
-            if self.min_dist is not None:
-                # Edge indices of close nodes
+            # Construct edges
+            if self.edge_type == "knn":
+                # Neighbour-based graph
+                edge_index = torch_geometric.nn.knn_graph(
+                    x=x_t[:, :2],
+                    k=self.n_neighbours,
+                    batch=batch.batch,
+                    loop=self.self_loop,
+                )
+            else:
+                # Distance-based graph
                 edge_index = torch_geometric.nn.radius_graph(
-                    x=x[:, :2],
+                    x=x_t[:, :2],
                     r=self.min_dist,
                     batch=batch.batch,
                     loop=self.self_loop,
-                    max_num_neighbors=30,
+                    max_num_neighbors=self.n_neighbours,
                     flow="source_to_target",
                 )
-                # 1 nearest neighbour to ensure connected graphs
-                nn_edge_index = torch_geometric.nn.knn_graph(
-                    x=x[:, :2], k=1, batch=batch.batch
-                )
-                # Remove duplicates
-                edge_index = torch_geometric.utils.coalesce(
-                    torch.cat((edge_index, nn_edge_index), dim=1)
-                )
 
+            if self.undirected:
+                edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
+
+            # Remove duplicates and sort
+            edge_index = torch_geometric.utils.coalesce(edge_index)
+
+            # Create edge_attr if specified
             if self.edge_weight:
                 # Encode distance between nodes as edge_attr
                 row, col = edge_index
-                edge_attr = (x[row, :2] - x[col, :2]).norm(dim=-1).unsqueeze(1)
+                edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
+                edge_attr = edge_attr.type_as(batch.x)
+
                 if self.grav_attraction:
                     # Compute gravitational attraction between all nodes
-                    m1 = x[row, 4] * 1e10
-                    m2 = x[col, 4] * 1e10
+                    m1 = x_t[row, 4] * 1e10
+                    m2 = x_t[col, 4] * 1e10
                     attraction = m1 * m2 / (edge_attr.squeeze() ** 2) * 6.674e-11
                     edge_attr = torch.hstack([edge_attr, attraction.unsqueeze(1)])
                     # Replace inf values with 0
                     edge_attr = torch.nan_to_num(edge_attr, posinf=0)
 
-            if self.undirected:
-                edge_index, edge_attr = torch_geometric.utils.to_undirected(
-                    edge_index, edge_attr
+            #######################
+            # Training 2/2        #
+            #######################
+
+            # Obtain predicted delta dynamics
+            if self.rnn_type == "GRU":
+                delta_x, (h_node, h_edge) = self.model(
+                    x=x_t,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    batch=batch.batch,
+                    hidden=(h_node, h_edge),
+                )
+            elif self.rnn_type == "LSTM":  # LSTM
+                delta_x, ((h_node, c_node), (h_edge, c_edge)) = self.model(
+                    x=x_t,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    batch=batch.batch,
+                    hidden=((h_node, c_node), (h_edge, c_edge))
+                )
+            else:
+                delta_x = self.model(
+                    x=x_t,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    batch=batch.batch,
                 )
 
-            ######################
-            # Predictions 2/2    #
-            ######################
+            # Compute updated positions
+            vel = delta_x[:, [0, 1]]
+            pos = x_prev[:, [0, 1]] + 0.1 * vel
+            x_t = torch.cat([pos, vel, static_features], dim=-1)
+            x_t = x_t.type_as(batch.x)
 
-            # Normalise input graph
-            x, edge_attr = self.model.NormBlock.in_normalise(x, edge_attr)
-            # Obtain normalised predicted delta dynamics
-            x, h = self.model(
-                x=x,
-                edge_index=edge_index,
-                edge_attr=edge_attr,
-                batch=batch.batch,
-                hidden=h,
-            )
-            # Renormalise deltas
-            x = self.model.NormBlock.out_renormalise(x)
-            # Add deltas to input graph
-            predicted_graph = torch.cat(
-                (predicted_graph[:, :4] + x, static_features), dim=-1
-            )  # [n_nodes, n_features]
-
-            # Save prediction alongside true value (next time step state)
-            y_hat[t, :, :] = predicted_graph[:, :]
-            y_target[t, :, :] = batch.x[:, t + 1, :]
-
-        return y_hat, y_target
-
-    def configure_optimizers(self):
-        return torch.optim.Adam(
-            self.parameters(), lr=self.lr, weight_decay=self.weight_decay
-        )
-
-
-class ConstantBaselineModule(pl.LightningModule):
-    def __init__(self, model_type, noise, lr, weight_decay, log_norm):
-        super().__init__()
-        self.train_loss = torchmetrics.MeanSquaredError()
-        self.val_ade_loss = torchmetrics.MeanSquaredError()
-        self.val_fde_loss = torchmetrics.MeanSquaredError()
-        self.model = model_type
-        self.save_hyperparameters()
-        self.noise = noise
-        self.lr = lr
-        self.weight_decay = weight_decay
-        self.log_norm = log_norm
-
-    def training_step(self, batch: Batch, batch_idx: int):
-        pass
-
-    def validation_step(self, batch: Batch, batch_idx: int):
-        # Validate on sequential dataset. First 11 observations are used to prime the model.
-        # Loss is computed on remaining 80 samples using rollout.
-
-        # Extract dimensions and allocate target/prediction tensors
-        n_nodes = batch.num_nodes
-        y_hat = torch.zeros((80, n_nodes, 4))
-        y_target = torch.zeros((80, n_nodes, 4))
-
-        last_input = batch.x[:, 10, :4]
-        last_delta = batch.x[:, 10, :4] - batch.x[:, 9, :4]
-        predicted_graph = last_input + last_delta
-        # Save first prediction and target
-        y_hat[0, :, :] = predicted_graph
-        y_target[0, :, :] = batch.x[:, 11, :4]
-
-        # 1 prediction done, 79 remaining
-        for t in range(11, 90):
-            predicted_graph += last_delta
-            y_hat[t - 10, :, :] = predicted_graph
-            print(predicted_graph[0, :])
-            y_target[t - 10, :, :] = batch.x[:, t + 1, :4]
+            # Save deltas for loss computation
+            y_predictions[:, t, :] = x_t[:, : self.out_features]
 
         # Compute and log loss
-        fde_loss = self.val_fde_loss(y_hat[-1, :, :], y_target[-1, :, :])
-        ade_loss = self.val_ade_loss(y_hat, y_target)
+        fde_loss = self.val_fde_loss(
+            y_predictions[:, -1, :2], y_target[:, -1, :2]
+        )
+        ade_loss = self.val_ade_loss(
+            y_predictions[:, 11:, :2], y_target[:, 11:, :2]
+        )
+        vel_loss = self.val_vel_loss(
+            y_predictions[:, 11:, [2, 3]], y_target[:, 11:, [2, 3]]
+        )
 
-        self.log("val_ade_loss", ade_loss)
         self.log("val_fde_loss", fde_loss)
+        self.log("val_ade_loss", ade_loss)
+        self.log("val_vel_loss", vel_loss)
+        loss = ade_loss
 
-        return ade_loss
+        self.log("val_total_loss", loss)
 
-    def predict_step(self, batch, batch_idx=None):
-        # Extract dimensions and allocate target/prediction tensors
+        return loss
+
+    def predict_step(self, batch: Batch, batch_idx = None, prediction_horizon: int = 90):
+
+        ######################
+        # Initialisation     #
+        ######################
+
+        # Extract data from batch
         n_nodes = batch.num_nodes
-        n_features = 5
-        y_hat = torch.zeros((90, n_nodes, n_features))
-        y_target = torch.zeros((90, n_nodes, n_features))
+        static_features = batch.x[:, 10, 4].unsqueeze(1)
+        edge_attr = None
 
-        # Fill in targets
-        for t in range(0, 90):
-            y_target[t, :, :] = batch.x[:, t + 1, :]
+        # Ignore data after training horizon
+        batch.x = batch.x[:, : (self.training_horizon + 1)]
 
-        # First prediction is same as first input due to lack of history
-        y_hat[0, :, :] = batch.x[:, 0, :]
-        # Fill in next 10 values with previous inputs
-        for t in range(1, 11):
-            y_hat[t, :, :] = batch.x[:, t, :] + (
-                batch.x[:, t, :] - batch.x[:, t - 1, :]
-            )
+        # Allocate prediction tensor
+        y_predictions = torch.zeros((n_nodes, prediction_horizon, self.out_features))
+        y_predictions = y_predictions.type_as(batch.x)
+        # Define target tensor
+        y_target = batch.x[:, 1: (self.training_horizon + 1), : self.out_features]
+        y_target = y_target.type_as(batch.x)
 
-        # Constant change
-        constant_delta = batch.x[:, 10, :] - batch.x[:, 9, :]
-        predicted_graph = batch.x[:, 10, :] + constant_delta
-        y_hat[11, :, :] = predicted_graph
+        assert y_target.shape == y_predictions.shape
 
-        for t in range(12, 90):
-            predicted_graph += constant_delta
-            y_hat[t, :, :] = predicted_graph
+        # Initial hidden state
+        if self.rnn_type == "GRU":
+            h_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
+            h_edge = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_edge_size))
+            h_node = h_node.type_as(batch.x)
+            h_edge = h_edge.type_as(batch.x)
+            c_node, c_edge = None, None
+        elif self.rnn_type == "LSTM":
+            h_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
+            h_edge = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_edge_size))
+            h_node = h_node.type_as(batch.x)
+            h_edge = h_edge.type_as(batch.x)
+            c_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
+            c_edge = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_edge_size))
+            c_node = c_node.type_as(batch.x)
+            c_edge = c_edge.type_as(batch.x)
+        else:
+            h_node, h_edge, c_node, c_edge = None, None, None, None
 
-        return y_hat, y_target
+        ######################
+        # History            #
+        ######################
+
+        for t in range(11):
+
+            # Extract current input
+            x_t = batch.x[:, t, :]
+            x_t = x_t.type_as(batch.x)
+
+            ######################
+            # Graph construction #
+            ######################
+
+            # Construct edges
+            if self.edge_type == "knn":
+                # Neighbour-based graph
+                edge_index = torch_geometric.nn.knn_graph(
+                    x=x_t[:, :2],
+                    k=self.n_neighbours,
+                    batch=batch.batch,
+                    loop=self.self_loop,
+                )
+            else:
+                # Distance-based graph
+                edge_index = torch_geometric.nn.radius_graph(
+                    x=x_t[:, :2],
+                    r=self.min_dist,
+                    batch=batch.batch,
+                    loop=self.self_loop,
+                    max_num_neighbors=self.n_neighbours,
+                    flow="source_to_target",
+                )
+
+            if self.undirected:
+                edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
+
+            # Remove duplicates and sort
+            edge_index = torch_geometric.utils.coalesce(edge_index)
+
+            # Create edge_attr if specified
+            if self.edge_weight:
+                # Encode distance between nodes as edge_attr
+                row, col = edge_index
+                edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
+                edge_attr = edge_attr.type_as(batch.x)
+
+                if self.grav_attraction:
+                    # Compute gravitational attraction between all nodes
+                    m1 = x_t[row, 4] * 1e10
+                    m2 = x_t[col, 4] * 1e10
+                    attraction = m1 * m2 / (edge_attr.squeeze() ** 2) * 6.674e-11
+                    edge_attr = torch.hstack([edge_attr, attraction.unsqueeze(1)])
+                    # Replace inf values with 0
+                    edge_attr = torch.nan_to_num(edge_attr, posinf=0)
+
+            #######################
+            # Training 1/2        #
+            #######################
+
+            # Obtain predicted delta dynamics
+            if self.rnn_type == "GRU":
+                delta_x, (h_node, h_edge) = self.model(
+                    x=x_t,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    batch=batch.batch,
+                    hidden=(h_node, h_edge),
+                )
+            elif self.rnn_type == "LSTM":  # LSTM
+                delta_x, ((h_node, c_node), (h_edge, c_edge)) = self.model(
+                    x=x_t,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    batch=batch.batch,
+                    hidden=((h_node, c_node), (h_edge, c_edge))
+                )
+            else:
+                delta_x = self.model(
+                    x=x_t,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    batch=batch.batch,
+                )
+
+            # Compute updated positions
+            vel = delta_x[:, [0, 1]]
+            pos = batch.x[:, t][:, [0, 1]] + 0.1 * vel
+            x_t = torch.cat([pos, vel, static_features], dim=-1)
+            x_t = x_t.type_as(batch.x)
+
+            # Save deltas for loss computation
+            y_predictions[:, t, :] = x_t[:, : self.out_features]
+
+        ######################
+        # Future             #
+        ######################
+
+        for t in range(11, prediction_horizon):
+
+            x_prev = x_t.clone()
+
+            ######################
+            # Graph construction #
+            ######################
+
+            # Construct edges
+            if self.edge_type == "knn":
+                # Neighbour-based graph
+                edge_index = torch_geometric.nn.knn_graph(
+                    x=x_t[:, :2],
+                    k=self.n_neighbours,
+                    batch=batch.batch,
+                    loop=self.self_loop,
+                )
+            else:
+                # Distance-based graph
+                edge_index = torch_geometric.nn.radius_graph(
+                    x=x_t[:, :2],
+                    r=self.min_dist,
+                    batch=batch.batch,
+                    loop=self.self_loop,
+                    max_num_neighbors=self.n_neighbours,
+                    flow="source_to_target",
+                )
+
+            if self.undirected:
+                edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
+
+            # Remove duplicates and sort
+            edge_index = torch_geometric.utils.coalesce(edge_index)
+
+            # Create edge_attr if specified
+            if self.edge_weight:
+                # Encode distance between nodes as edge_attr
+                row, col = edge_index
+                edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
+                edge_attr = edge_attr.type_as(batch.x)
+
+                if self.grav_attraction:
+                    # Compute gravitational attraction between all nodes
+                    m1 = x_t[row, 4] * 1e10
+                    m2 = x_t[col, 4] * 1e10
+                    attraction = m1 * m2 / (edge_attr.squeeze() ** 2) * 6.674e-11
+                    edge_attr = torch.hstack([edge_attr, attraction.unsqueeze(1)])
+                    # Replace inf values with 0
+                    edge_attr = torch.nan_to_num(edge_attr, posinf=0)
+
+            #######################
+            # Training 2/2        #
+            #######################
+
+            # Obtain predicted delta dynamics
+            if self.rnn_type == "GRU":
+                delta_x, (h_node, h_edge) = self.model(
+                    x=x_t,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    batch=batch.batch,
+                    hidden=(h_node, h_edge),
+                )
+            elif self.rnn_type == "LSTM":  # LSTM
+                delta_x, ((h_node, c_node), (h_edge, c_edge)) = self.model(
+                    x=x_t,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    batch=batch.batch,
+                    hidden=((h_node, c_node), (h_edge, c_edge))
+                )
+            else:
+                delta_x = self.model(
+                    x=x_t,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    batch=batch.batch,
+                )
+
+            # Compute updated positions
+            vel = delta_x[:, [0, 1]]
+            pos = x_prev[:, [0, 1]] + 0.1 * vel
+            x_t = torch.cat([pos, vel, static_features], dim=-1)
+            x_t = x_t.type_as(batch.x)
+
+            # Save deltas for loss computation
+            y_predictions[:, t, :] = x_t[:, : self.out_features]
+
+        return y_predictions, y_target
 
     def configure_optimizers(self):
         return torch.optim.Adam(
@@ -1345,13 +1437,16 @@ class ConstantBaselineModule(pl.LightningModule):
 
 
 class ConstantPhysicalBaselineModule(pl.LightningModule):
-    def __init__(self, model, **kwargs):
+    def __init__(self, prediction_horizon: int = 90, out_features: int = 2, **kwargs):
         super().__init__()
-        assert model is None
-        self.train_loss = torchmetrics.MeanSquaredError()
+        # Setup metrics
         self.val_ade_loss = torchmetrics.MeanSquaredError()
         self.val_fde_loss = torchmetrics.MeanSquaredError()
         self.val_vel_loss = torchmetrics.MeanSquaredError()
+        self.val_total_loss = torchmetrics.MeanSquaredError()
+
+        self.prediction_horizon = prediction_horizon
+        self.out_features = out_features
         self.save_hyperparameters()
 
     def training_step(self, batch: Batch, batch_idx: int):
@@ -1363,70 +1458,72 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
 
         # Extract dimensions and allocate target/prediction tensors
         n_nodes = batch.num_nodes
-        y_hat = torch.zeros((80, n_nodes, 4))
-        y_target = torch.zeros((80, n_nodes, 4))
-        static_features = batch.x[:, 0, 4]
+
+        # Setup target and allocate prediction tensors
+        y_target = batch.x[:, 11: (self.prediction_horizon + 1), : self.out_features]
+        y_hat = torch.zeros_like(y_target)
+        static_features = batch.x[:, 0, 4].unsqueeze(1)
+
+        # Extract last observed positions/velocities
         last_pos = batch.x[:, 10, :2]
         last_vel = batch.x[:, 10, 2:4]
+        # Compute delta change
         delta_pos = last_vel * 0.1
+        # First predicted positions
         predicted_pos = last_pos + delta_pos
-        predicted_graph = torch.cat(
-            (predicted_pos, last_vel, static_features.unsqueeze(1)), dim=1
-        )
+        predicted_graph = torch.cat((predicted_pos, last_vel, static_features), dim=-1)
         # Save first prediction and target
-        y_hat[0, :, :] = predicted_graph[:, :4]
-        y_target[0, :, :] = batch.x[:, 11, :4]
+        y_hat[:, 0, :] = predicted_graph[:, :4]
 
         # 1 prediction done, 79 remaining
-        for t in range(11, 90):
+        for t in range(11, self.prediction_horizon):
             predicted_pos += delta_pos
             predicted_graph = torch.cat(
-                (predicted_pos, last_vel, static_features.unsqueeze(1)), dim=1
+                (predicted_pos, last_vel, static_features), dim=-1
             )
-            y_hat[t - 10, :, :] = predicted_graph[:, :4]
-            y_target[t - 10, :, :] = batch.x[:, t + 1, :4]
+            y_hat[:, t - 10, :] = predicted_graph[:, :4]
 
         # Compute and log loss
-        fde_loss = self.val_fde_loss(y_hat[-1, :, :2], y_target[-1, :, :2])
-        ade_loss = self.val_ade_loss(y_hat[:, :, :2], y_target[:, :, :2])
-        vel_loss = self.val_vel_loss(y_hat[:, :, 2:], y_target[:, :, 2:])
+        fde_loss = self.val_fde_loss(y_hat[:, -1, :2], y_target[:, -1, :2])
+        ade_loss = self.val_ade_loss(y_hat[:, 11:, :2], y_target[:, 11:, :2])
+        vel_loss = self.val_vel_loss(y_hat[:, 11:, 2:], y_target[:, 11:, 2:])
 
         self.log("val_ade_loss", ade_loss)
         self.log("val_fde_loss", fde_loss)
         self.log("val_vel_loss", vel_loss)
-        self.log("val_total_loss", (ade_loss + vel_loss) / 2)
+        self.log("val_total_loss", ade_loss)
 
-        return ade_loss + vel_loss
+        return ade_loss
 
     def predict_step(self, batch, batch_idx=None):
         # Extract dimensions and allocate target/prediction tensors
         n_nodes = batch.num_nodes
         n_features = 5
-        y_hat = torch.zeros((90, n_nodes, n_features))
-        y_target = torch.zeros((90, n_nodes, n_features))
+        y_hat = torch.zeros((self.prediction_horizon, n_nodes, n_features))
+        y_target = torch.zeros((self.prediction_horizon, n_nodes, n_features))
 
         # Fill in targets
-        for t in range(0, 90):
+        for t in range(0, self.prediction_horizon):
             y_target[t, :, :] = batch.x[:, t + 1, :]
 
-        static_features = batch.x[:, 0, 4]
+        static_features = batch.x[:, 0, 4].unsqueeze(1)
         for t in range(11):
             last_pos = batch.x[:, t, :2]
             last_vel = batch.x[:, t, 2:4]
             delta_pos = last_vel * 0.1
             predicted_pos = last_pos + delta_pos
             predicted_graph = torch.cat(
-                (predicted_pos, last_vel, static_features.unsqueeze(1)), dim=1
+                (predicted_pos, last_vel, static_features), dim=1
             )
             y_hat[t, :, :] = predicted_graph
 
-        for t in range(11, 90):
+        for t in range(11, self.prediction_horizon):
             last_pos = predicted_pos
             # velocity no longer changing
-            # delta_pos no longer chaning
+            # delta_pos no longer changing
             predicted_pos = last_pos + delta_pos
             predicted_graph = torch.cat(
-                (predicted_pos, last_vel, static_features.unsqueeze(1)), dim=1
+                (predicted_pos, last_vel, static_features), dim=1
             )
             y_hat[t, :, :] = predicted_graph
 
@@ -1436,67 +1533,57 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
         return torch.optim.Adam(self.parameters(), lr=1e-4)
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("config_file")
-    args = parser.parse_args()
-    # torch.autograd.set_detect_anomaly(True)
-    with open(args.config_file, "r") as file:
-        config = yaml.safe_load(file)
+@hydra.main(config_path="../../configs/nbody/", config_name="config")
+def main(config):
+    # Print configuration for online monitoring
+    print(OmegaConf.to_yaml(config))
+    # Save complete yaml file for logging and reproducibility
+    log_dir = f"logs/nbody/{config.logger.project}/{config.logger.version}"
+    os.makedirs(log_dir, exist_ok=True)
+    yaml_path = f"{log_dir}/{config.logger.version}.yaml"
+    OmegaConf.save(config, f=yaml_path)
 
     # Seed for reproducibility
     seed_everything(config["misc"]["seed"], workers=True)
     # Load data, model, and regressor
     datamodule = eval(config["misc"]["dm_type"])(**config["datamodule"])
-
     # Define model
     if config["misc"]["model_type"] != "ConstantModel":
-        # model = AbstractGNN(node_model=config["misc"]["model_type"], **config["model"])
-        model = eval(config["misc"]["model_type"])(**config["model"])
+        model_dict = dict(config["model"])
+        model_type = config["misc"]["model_type"]
     else:
-        model = None
+        model_dict, model_type = None, None
+        config["misc"]["regressor_type"] = "ConstantPhysicalBaselineModule"
+        config["misc"]["train"] = False
 
     # Define LightningModule
-    regressor = eval(config["misc"]["regressor_type"])(model, **config["regressor"])
+    regressor = eval(config["misc"]["regressor_type"])(
+        model_type=model_type, model_dict=model_dict, **config["regressor"]
+    )
 
-    # Setup logging
-    wandb_logger = WandbLogger(entity="petergroth", config=config, **config["logger"])
-    wandb_logger.watch(regressor, log_freq=100)
+    # Setup logging (using saved yaml file)
+    wandb_logger = WandbLogger(
+        entity="petergroth",
+        config=OmegaConf.to_container(config, resolve=True),
+        **config["logger"],
+    )
+    wandb_logger.watch(regressor, log_freq=config["misc"]["log_freq"], log_graph=False)
     # Add default dir for logs
-    config["trainer"]["default_root_dir"] = "logs"
 
-    # Setup trainer
-    if config["misc"]["checkpoint"]:
-        # Setup callbacks
-        checkpoint_callback = pl.callbacks.ModelCheckpoint(
-            monitor="val_ade_loss",
-            dirpath="checkpoints",
-            filename=config["logger"]["version"] + "-{epoch}-{val_ade_loss:.2f}",
-        )
-        # Create trainer, fit, and validate
-        trainer = pl.Trainer(
-            logger=wandb_logger, **config["trainer"], callbacks=[checkpoint_callback]
-        )
-    else:
-        # Create trainer, fit, and validate
-        trainer = pl.Trainer(logger=wandb_logger, **config["trainer"])
+    # Setup callbacks
+    checkpoint_callback = pl.callbacks.ModelCheckpoint(
+        filename=config["logger"]["version"], monitor="val_total_loss", save_last=True
+    )
+    # Create trainer, fit, and validate
+    trainer = pl.Trainer(
+        logger=wandb_logger, **config["trainer"], callbacks=[checkpoint_callback]
+    )
 
-    if config["misc"]["continue_training"] is not None:
-        # Setup callbacks
-        checkpoint_callback = pl.callbacks.ModelCheckpoint(
-            monitor="val_ade_loss",
-            dirpath="checkpoints",
-            filename=config["logger"]["version"] + "-{epoch}-{val_ade_loss:.2f}",
-        )
-        trainer = pl.Trainer(
-            logger=wandb_logger,
-            **config["trainer"],
-            resume_from_checkpoint=config["misc"]["continue_training"],
-            callbacks=[checkpoint_callback],
-        )
-        trainer.fit(model=regressor, datamodule=datamodule)
-
-    elif config["misc"]["train"]:
+    if config["misc"]["train"]:
         trainer.fit(model=regressor, datamodule=datamodule)
 
     trainer.validate(regressor, datamodule=datamodule)
+
+
+if __name__ == "__main__":
+    main()

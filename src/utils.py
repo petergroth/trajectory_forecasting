@@ -193,24 +193,24 @@ def parse_sequence(data):
     return tf.io.parse_single_example(data, features_description)
 
 
-def run_simulation(n_particles=10, T=30, dt=0.5):
+def run_simulation(T=30, dt=0.5):
+    n_particles = np.random.random_integers(6, 10)
+
     # Define parameters for simulation
     n_dim = 2
-    pos_lim = [-50, 50]  # min/max values in x/y
-    v_scale = 5  # Scale of velocity
-    m_loc = 2e10  # Mass mean
-    m_scale = 1e9  # Mass scale
+    pos_lim = [-80, 80]  # min/max values in x/y
+    v_scale = 15  # Scale of velocity
+    m_loc = 3e10  # Mass mean
+    m_scale = 5e9  # Mass scale
 
     # Initial conditions
     x0 = np.random.uniform(pos_lim[0], pos_lim[1], (n_particles, n_dim))
+    x0 -= x0.mean(0)
     v0 = np.random.normal(loc=0, scale=v_scale, size=(n_particles, n_dim))
     v0 = v0 - np.mean(v0)  # Recenter
     w0 = np.zeros((n_particles, 1))
     m = np.abs(np.random.normal(m_loc, m_scale, (n_particles, 1)))
-    if n_particles == 10:
-        q = np.random.normal(0, 1e-1, (n_particles, 1))
-    else:
-        q = np.random.normal(0, 1e-2, (n_particles, 1))
+    q = np.random.normal(0, 1e-3, (n_particles, 1))
     # q = np.zeros((n_particles, 1))
     r = m / m_loc * 2
 
@@ -234,19 +234,16 @@ def run_n_simulations(output_path, n_particles=10, n_sim=1, n_steps=91):
     dt = 0.1
 
     for idx in range(n_sim):
+        positions, velocities, sizes = run_simulation(T=T, dt=dt)
         # Allocate array
-        full_arr = np.zeros((int(T / dt), n_particles, 5))
-        positions, velocities, sizes = run_simulation(
-            n_particles=n_particles, T=T, dt=dt
-        )
-        full_arr[:, :, :2] = positions
-        full_arr[:, :, 2:4] = velocities
+        full_arr = np.zeros((n_steps, positions.shape[1], 5))
+        full_arr[:, :, :2] = positions[:n_steps]
+        full_arr[:, :, 2:4] = velocities[:n_steps]
         full_arr[:, :, 4] = sizes.squeeze()
-        full_arr = full_arr[:n_steps, :, :]
 
         if output_path.endswith(".npy"):
             output_path = output_path[:-4]
-        np.save(output_path + f"_sim{idx:04}" + ".npy", full_arr)
+        np.save(f"{output_path}_sim{idx:04}.npy", full_arr)
 
 
 @gif.frame

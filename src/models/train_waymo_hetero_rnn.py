@@ -16,6 +16,7 @@ from typing import Union
 from pytorch_lightning.callbacks import RichProgressBar
 import math
 import random
+import numpy as np
 
 
 class SequentialModule(pl.LightningModule):
@@ -111,13 +112,6 @@ class SequentialModule(pl.LightningModule):
         batch.tracks_to_predict = batch.tracks_to_predict[valid_mask]
         batch.type = batch.type[valid_mask]
 
-        # CARS
-        type_mask = batch.type[:, 1] == 1
-        batch.x = batch.x[type_mask]
-        batch.batch = batch.batch[type_mask]
-        batch.tracks_to_predict = batch.tracks_to_predict[type_mask]
-        batch.type = batch.type[type_mask]
-
         # Reduction: Limit to x-y predictions
         batch.x = batch.x[:, :, self.node_indices]
 
@@ -189,31 +183,70 @@ class SequentialModule(pl.LightningModule):
             # Graph construction #
             ######################
 
-            # Construct edges
-            if self.edge_type == "knn":
-                # Neighbour-based graph
-                edge_index = torch_geometric.nn.knn_graph(
-                    x=x_t[:, :2],
-                    k=self.n_neighbours,
-                    batch=batch.batch[mask_t],
-                    loop=self.self_loop,
-                )
-            else:
-                # Distance-based graph
-                edge_index = torch_geometric.nn.radius_graph(
-                    x=x_t[:, :2],
-                    r=self.min_dist,
-                    batch=batch.batch[mask_t],
-                    loop=self.self_loop,
-                    max_num_neighbors=self.n_neighbours,
-                    flow="source_to_target",
-                )
+            ped_idx = batch.type[mask_t][:, 2].bool()
+            bike_idx = batch.type[mask_t][:, 3].bool()
+            car_idx = batch.type[mask_t][:, 0].bool() + \
+                          batch.type[mask_t][:, 1].bool() + \
+                          batch.type[mask_t][:, 4].bool()
 
-            if self.undirected:
-                edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
+            car_dist = 20
+            car_neighbours = 7
+            ped_dist = 4
+            ped_neighbours = 4
+            bike_dist = 10
+            bike_neighbours = 3
+
+            # Source tensor
+            source_tensor = x_t.clone()
+            source_tensor[ped_idx] = np.nan
+            source_tensor[bike_idx] = np.nan
+            
+            # Draw edges from cars
+            car_edges = torch_geometric.nn.radius(
+                x=x_t,
+                y=source_tensor,
+                batch_x=batch.batch[mask_t],
+                batch_y=batch.batch[mask_t],
+                r=car_dist,
+                max_num_neighbors=car_neighbours
+            )
+
+            # Source tensor
+            source_tensor = x_t.clone()
+            source_tensor[car_idx] = np.nan
+            source_tensor[bike_idx] = np.nan
+
+            # Draw edges from cars
+            ped_edges = torch_geometric.nn.radius(
+                x=x_t,
+                y=source_tensor,
+                batch_x=batch.batch[mask_t],
+                batch_y=batch.batch[mask_t],
+                r=ped_dist,
+                max_num_neighbors=ped_neighbours
+            )
+
+            # Source tensor
+            source_tensor = x_t.clone()
+            source_tensor[car_idx] = np.nan
+            source_tensor[ped_idx] = np.nan
+
+            # Draw edges from cars
+            bike_edges = torch_geometric.nn.radius(
+                x=x_t,
+                y=source_tensor,
+                batch_x=batch.batch[mask_t],
+                batch_y=batch.batch[mask_t],
+                r=bike_dist,
+                max_num_neighbors=bike_neighbours
+            )
+
+            edge_index = torch.hstack([car_edges, ped_edges, bike_edges])
+            edge_index, _ = torch_geometric.utils.remove_self_loops(edge_index)
 
             # Remove duplicates and sort
-            edge_index = torch_geometric.utils.coalesce(edge_index)
+            edge_index = torch_geometric.utils.coalesce(edge_index, num_nodes=mask_t.sum())
+
 
             # Create edge_attr if specified
             if self.edge_weight:
@@ -321,7 +354,7 @@ class SequentialModule(pl.LightningModule):
                 edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
 
             # Remove duplicates and sort
-            edge_index = torch_geometric.utils.coalesce(edge_index)
+            edge_index = torch_geometric.utils.coalesce(edge_index, num_nodes=x_t.shape[0])
 
             # Create edge_attr if specified
             if self.edge_weight:
@@ -540,7 +573,7 @@ class SequentialModule(pl.LightningModule):
                 edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
 
             # Remove duplicates and sort
-            edge_index = torch_geometric.utils.coalesce(edge_index)
+            edge_index = torch_geometric.utils.coalesce(edge_index, num_nodes=x_t.shape[0])
 
             # Create edge_attr if specified
             if self.edge_weight:
@@ -642,7 +675,7 @@ class SequentialModule(pl.LightningModule):
                 edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
 
             # Remove duplicates and sort
-            edge_index = torch_geometric.utils.coalesce(edge_index)
+            edge_index = torch_geometric.utils.coalesce(edge_index, num_nodes=x_t.shape[0])
 
             # Create edge_attr if specified
             if self.edge_weight:
@@ -839,7 +872,7 @@ class SequentialModule(pl.LightningModule):
                 edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
 
             # Remove duplicates and sort
-            edge_index = torch_geometric.utils.coalesce(edge_index)
+            edge_index = torch_geometric.utils.coalesce(edge_index, num_nodes=x_t.shape[0])
 
             # Create edge_attr if specified
             if self.edge_weight:
@@ -942,7 +975,7 @@ class SequentialModule(pl.LightningModule):
                 edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
 
             # Remove duplicates and sort
-            edge_index = torch_geometric.utils.coalesce(edge_index)
+            edge_index = torch_geometric.utils.coalesce(edge_index, num_nodes=x_t.shape[0])
 
             # Create edge_attr if specified
             if self.edge_weight:
