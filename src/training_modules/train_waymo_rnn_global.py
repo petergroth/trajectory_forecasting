@@ -52,17 +52,18 @@ class SequentialModule(pl.LightningModule):
         self.train_ade_loss = torchmetrics.MeanSquaredError()
         self.train_fde_loss = torchmetrics.MeanSquaredError()
         self.train_vel_loss = torchmetrics.MeanSquaredError()
-        # self.train_yaw_loss = torchmetrics.MeanSquaredError()
         self.val_ade_loss = torchmetrics.MeanSquaredError()
         self.val_fde_loss = torchmetrics.MeanSquaredError()
         self.val_vel_loss = torchmetrics.MeanSquaredError()
-        # self.val_yaw_loss = torchmetrics.MeanSquaredError()
         self.val_fde_ttp_loss = torchmetrics.MeanSquaredError()
         self.val_ade_ttp_loss = torchmetrics.MeanSquaredError()
 
         # Instantiate model
         self.model_type = model_type
         self.model = eval(model_type)(**model_dict)
+
+        # Instantiate map encoder
+        self.map_encoder = road_encoder(width=300, hidden_size=model_dict["map_encoding_size"])
 
         # Learning parameters
         self.normalise = normalise
@@ -166,7 +167,8 @@ class SequentialModule(pl.LightningModule):
             c_node = c_node.type_as(batch.x)
             c_edge = c_edge.type_as(batch.x)
 
-
+        # Encode map features
+        map_encoding = self.map_encoder(batch.u)
 
         ######################
         # History            #
@@ -191,24 +193,14 @@ class SequentialModule(pl.LightningModule):
             ######################
 
             # Construct edges
-            if self.edge_type == "knn":
-                # Neighbour-based graph
-                edge_index = torch_geometric.nn.knn_graph(
-                    x=x_t[:, :2],
-                    k=self.n_neighbours,
-                    batch=batch.batch[mask_t],
-                    loop=self.self_loop,
-                )
-            else:
-                # Distance-based graph
-                edge_index = torch_geometric.nn.radius_graph(
-                    x=x_t[:, :2],
-                    r=self.min_dist,
-                    batch=batch.batch[mask_t],
-                    loop=self.self_loop,
-                    max_num_neighbors=self.n_neighbours,
-                    flow="source_to_target",
-                )
+            edge_index = torch_geometric.nn.radius_graph(
+                x=x_t[:, :2],
+                r=self.min_dist,
+                batch=batch.batch[mask_t],
+                loop=self.self_loop,
+                max_num_neighbors=self.n_neighbours,
+                flow="source_to_target",
+            )
 
             if self.undirected:
                 edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
@@ -225,7 +217,6 @@ class SequentialModule(pl.LightningModule):
 
             if self.edge_dropout > 0:
                 edge_index, edge_attr = dropout_adj(edge_index=edge_index, edge_attr=edge_attr, p=self.edge_dropout)
-
 
             #######################
             # Training 1/2        #
@@ -252,6 +243,7 @@ class SequentialModule(pl.LightningModule):
                     edge_attr=edge_attr,
                     batch=batch.batch[mask_t],
                     hidden=hidden_in,
+                    u=map_encoding
                 )
                 # Update hidden states
                 h_node[:, mask_t] = h_t[0]
@@ -265,7 +257,8 @@ class SequentialModule(pl.LightningModule):
                     edge_index=edge_index,
                     edge_attr=edge_attr,
                     batch=batch.batch[mask_t],
-                    hidden=hidden_in
+                    hidden=hidden_in,
+                    u=map_encoding
                 )
                 h_node[:, mask_t] = h_node_out[0]
                 c_node[:, mask_t] = h_node_out[1]
@@ -299,24 +292,14 @@ class SequentialModule(pl.LightningModule):
             ######################
 
             # Construct edges
-            if self.edge_type == "knn":
-                # Neighbour-based graph
-                edge_index = torch_geometric.nn.knn_graph(
-                    x=x_t[:, :2],
-                    k=self.n_neighbours,
-                    batch=batch.batch,
-                    loop=self.self_loop,
-                )
-            else:
-                # Distance-based graph
-                edge_index = torch_geometric.nn.radius_graph(
-                    x=x_t[:, :2],
-                    r=self.min_dist,
-                    batch=batch.batch,
-                    loop=self.self_loop,
-                    max_num_neighbors=self.n_neighbours,
-                    flow="source_to_target",
-                )
+            edge_index = torch_geometric.nn.radius_graph(
+                x=x_t[:, :2],
+                r=self.min_dist,
+                batch=batch.batch,
+                loop=self.self_loop,
+                max_num_neighbors=self.n_neighbours,
+                flow="source_to_target",
+            )
 
             if self.undirected:
                 edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
@@ -356,6 +339,7 @@ class SequentialModule(pl.LightningModule):
                     edge_attr=edge_attr,
                     batch=batch.batch,
                     hidden=(h_node, h_edge),
+                    u=map_encoding
                 )
             else:
                 delta_x, ((h_node, c_node), (h_edge, c_edge)) = self.model(
@@ -364,6 +348,7 @@ class SequentialModule(pl.LightningModule):
                     edge_attr=edge_attr,
                     batch=batch.batch,
                     hidden=((h_node, c_node), (h_edge, c_edge)),
+                    u=map_encoding
                 )
 
             vel = delta_x[:, [0, 1]]
@@ -502,6 +487,9 @@ class SequentialModule(pl.LightningModule):
             c_node = c_node.type_as(batch.x)
             c_edge = c_edge.type_as(batch.x)
 
+        # Encode map features
+        map_encoding = self.map_encoder(batch.u)
+
         ######################
         # History            #
         ######################
@@ -518,24 +506,14 @@ class SequentialModule(pl.LightningModule):
             x_t = x_t.type_as(batch.x)
 
             # Construct edges
-            if self.edge_type == "knn":
-                # Neighbour-based graph
-                edge_index = torch_geometric.nn.knn_graph(
-                    x=x_t[:, :2],
-                    k=self.n_neighbours,
-                    batch=batch.batch[mask_t],
-                    loop=self.self_loop,
-                )
-            else:
-                # Distance-based graph
-                edge_index = torch_geometric.nn.radius_graph(
-                    x=x_t[:, :2],
-                    r=self.min_dist,
-                    batch=batch.batch[mask_t],
-                    loop=self.self_loop,
-                    max_num_neighbors=self.n_neighbours,
-                    flow="source_to_target",
-                )
+            edge_index = torch_geometric.nn.radius_graph(
+                x=x_t[:, :2],
+                r=self.min_dist,
+                batch=batch.batch[mask_t],
+                loop=self.self_loop,
+                max_num_neighbors=self.n_neighbours,
+                flow="source_to_target",
+            )
 
             if self.undirected:
                 edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
@@ -548,9 +526,7 @@ class SequentialModule(pl.LightningModule):
                 # Encode distance between nodes as edge_attr
                 row, col = edge_index
                 edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
-                # edge_attr = 1 / edge_attr
                 edge_attr = edge_attr.type_as(batch.x)
-                # edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
 
             ######################
             # Validation 1/2     #
@@ -577,6 +553,7 @@ class SequentialModule(pl.LightningModule):
                     edge_attr=edge_attr,
                     batch=batch.batch[mask_t],
                     hidden=hidden_in,
+                    u=map_encoding
                 )
                 # Update hidden states
                 h_node[:, mask_t] = h_t[0]
@@ -589,7 +566,8 @@ class SequentialModule(pl.LightningModule):
                     edge_index=edge_index,
                     edge_attr=edge_attr,
                     batch=batch.batch[mask_t],
-                    hidden=hidden_in
+                    hidden=hidden_in,
+                    u=map_encoding
                 )
                 h_node[:, mask_t] = h_node_out[0]
                 c_node[:, mask_t] = h_node_out[1]
@@ -620,24 +598,14 @@ class SequentialModule(pl.LightningModule):
             x_t = predicted_graph.clone()
 
             # Construct edges
-            if self.edge_type == "knn":
-                # Neighbour-based graph
-                edge_index = torch_geometric.nn.knn_graph(
-                    x=x_t[:, :2],
-                    k=self.n_neighbours,
-                    batch=batch.batch,
-                    loop=self.self_loop,
-                )
-            else:
-                # Distance-based graph
-                edge_index = torch_geometric.nn.radius_graph(
-                    x=x_t[:, :2],
-                    r=self.min_dist,
-                    batch=batch.batch,
-                    loop=self.self_loop,
-                    max_num_neighbors=self.n_neighbours,
-                    flow="source_to_target",
-                )
+            edge_index = torch_geometric.nn.radius_graph(
+                x=x_t[:, :2],
+                r=self.min_dist,
+                batch=batch.batch,
+                loop=self.self_loop,
+                max_num_neighbors=self.n_neighbours,
+                flow="source_to_target",
+            )
 
             if self.undirected:
                 edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
@@ -650,8 +618,6 @@ class SequentialModule(pl.LightningModule):
                 # Encode distance between nodes as edge_attr
                 row, col = edge_index
                 edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
-                # edge_attr = 1 / edge_attr
-                # edge_attr = torch.nan_to_num(edge_attr, nan=0, posinf=0, neginf=0)
                 edge_attr = edge_attr.type_as(batch.x)
 
             ######################
@@ -676,6 +642,7 @@ class SequentialModule(pl.LightningModule):
                     edge_attr=edge_attr,
                     batch=batch.batch,
                     hidden=(h_node, h_edge),
+                    u=map_encoding
                 )
             else:
                 delta_x, ((h_node, c_node), (h_edge, c_edge)) = self.model(
@@ -684,6 +651,7 @@ class SequentialModule(pl.LightningModule):
                     edge_attr=edge_attr,
                     batch=batch.batch,
                     hidden=((h_node, c_node), (h_edge, c_edge)),
+                    u=map_encoding
                 )
 
             vel = delta_x[:, [0, 1]]
@@ -709,9 +677,6 @@ class SequentialModule(pl.LightningModule):
         vel_loss = self.val_vel_loss(
             y_hat[:, :, [2, 3]][val_mask], y_target[:, :, [2, 3]][val_mask]
         )
-        # yaw_loss = self.val_yaw_loss(
-        #     y_hat[:, :, 5:7][val_mask], y_target[:, :, 5:7][val_mask]
-        # )
 
         # Compute losses on "tracks_to_predict"
         fde_ttp_mask = torch.logical_and(fde_mask, batch.tracks_to_predict)
@@ -732,8 +697,7 @@ class SequentialModule(pl.LightningModule):
         self.log("val_ade_loss", ade_loss, batch_size=val_mask.sum().item())
         self.log("val_fde_loss", fde_loss, batch_size=fde_mask.sum().item())
         self.log("val_vel_loss", vel_loss, batch_size=val_mask.sum().item())
-        # self.log("val_yaw_loss", yaw_loss, batch_size=val_mask.sum().item())
-        loss = ade_loss # + fde_loss + vel_loss
+        loss = ade_loss
         self.log("val_total_loss", loss, batch_size=val_mask.sum().item())
         self.log("val_fde_ttp_loss", fde_ttp_loss, batch_size=fde_ttp_mask.sum().item())
         self.log("val_ade_ttp_loss", ade_ttp_loss, batch_size=ade_ttp_mask.sum().item())
@@ -803,6 +767,9 @@ class SequentialModule(pl.LightningModule):
             c_node = c_node.type_as(batch.x)
             c_edge = c_edge.type_as(batch.x)
 
+        # Encode map features
+        map_encoding = self.map_encoder(batch.u)
+
         ######################
         # History            #
         ######################
@@ -819,24 +786,14 @@ class SequentialModule(pl.LightningModule):
             batch_t = batch.batch[mask_t]
 
             # Construct edges
-            if self.edge_type == "knn":
-                # Neighbour-based graph
-                edge_index = torch_geometric.nn.knn_graph(
-                    x=x_t[:, :2],
-                    k=self.n_neighbours,
-                    batch=batch_t,
-                    loop=self.self_loop,
-                )
-            else:
-                # Distance-based graph
-                edge_index = torch_geometric.nn.radius_graph(
-                    x=x_t[:, :2],
-                    r=self.min_dist,
-                    batch=batch_t,
-                    loop=self.self_loop,
-                    max_num_neighbors=self.n_neighbours,
-                    flow="source_to_target",
-                )
+            edge_index = torch_geometric.nn.radius_graph(
+                x=x_t[:, :2],
+                r=self.min_dist,
+                batch=batch_t,
+                loop=self.self_loop,
+                max_num_neighbors=self.n_neighbours,
+                flow="source_to_target",
+            )
 
             if self.undirected:
                 edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
@@ -880,6 +837,7 @@ class SequentialModule(pl.LightningModule):
                     edge_attr=edge_attr,
                     batch=batch.batch[mask_t],
                     hidden=hidden_in,
+                    u=map_encoding
                 )
                 # Update hidden states
                 h_node[:, mask_t] = h_t[0]
@@ -892,7 +850,8 @@ class SequentialModule(pl.LightningModule):
                     edge_index=edge_index,
                     edge_attr=edge_attr,
                     batch=batch.batch[mask_t],
-                    hidden=hidden_in
+                    hidden=hidden_in,
+                    u=map_encoding
                 )
                 h_node[:, mask_t] = h_node_out[0]
                 c_node[:, mask_t] = h_node_out[1]
@@ -924,24 +883,14 @@ class SequentialModule(pl.LightningModule):
             x_t = predicted_graph.clone()
 
             # Construct edges
-            if self.edge_type == "knn":
-                # Neighbour-based graph
-                edge_index = torch_geometric.nn.knn_graph(
-                    x=x_t[:, :2],
-                    k=self.n_neighbours,
-                    batch=batch.batch,
-                    loop=self.self_loop,
-                )
-            else:
-                # Distance-based graph
-                edge_index = torch_geometric.nn.radius_graph(
-                    x=x_t[:, :2],
-                    r=self.min_dist,
-                    batch=batch.batch,
-                    loop=self.self_loop,
-                    max_num_neighbors=self.n_neighbours,
-                    flow="source_to_target",
-                )
+            edge_index = torch_geometric.nn.radius_graph(
+                x=x_t[:, :2],
+                r=self.min_dist,
+                batch=batch.batch,
+                loop=self.self_loop,
+                max_num_neighbors=self.n_neighbours,
+                flow="source_to_target",
+            )
 
             if self.undirected:
                 edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
@@ -982,6 +931,7 @@ class SequentialModule(pl.LightningModule):
                     edge_attr=edge_attr,
                     batch=batch.batch,
                     hidden=(h_node, h_edge),
+                    u=map_encoding
                 )
             else:
                 delta_x, ((h_node, c_node), (h_edge, c_edge)) = self.model(
@@ -990,6 +940,7 @@ class SequentialModule(pl.LightningModule):
                     edge_attr=edge_attr,
                     batch=batch.batch,
                     hidden=((h_node, c_node), (h_edge, c_edge)),
+                    u=map_encoding
                 )
 
             vel = delta_x[:, self.pos_index]

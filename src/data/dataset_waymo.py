@@ -1,15 +1,17 @@
+import matplotlib.pyplot as plt
+import numpy as np
 import math
 import os
 import os.path as osp
 import torch
 from torch.nn.functional import one_hot
 
-# from src.utils import parse_sequence
+from src.utils import parse_sequence
 from torch_geometric.data import Data, Dataset, InMemoryDataset
 from torch_geometric.loader import DataLoader
 import pytorch_lightning as pl
 
-# import tensorflow as tf
+import tensorflow as tf
 from typing import Optional
 
 
@@ -194,9 +196,6 @@ class SequentialWaymoTrainDataset(InMemoryDataset):
         n_features = len(key_values)
         n_steps = 91
 
-        # Allocate tensor for full value array
-        feature_matrix = torch.zeros((n_nodes, n_steps, n_features))
-
         # Move through raw files
         for i, raw_path in enumerate(self.raw_file_names):
             # Load file
@@ -207,23 +206,48 @@ class SequentialWaymoTrainDataset(InMemoryDataset):
                 # Parse sequence
                 parsed = parse_sequence(data)
 
+                # Allocate tensor for full value array
+                feature_matrix = np.zeros((n_nodes, n_steps, n_features))
+
                 # Fill in all values
                 for j, key in enumerate(key_values):
                     # Encode history
-                    feature_matrix[:, :10, j] = torch.Tensor(
-                        parsed["state/past/" + key].numpy()
-                    )
-                    feature_matrix[:, 10, j] = torch.Tensor(
-                        parsed["state/current/" + key].numpy()
-                    ).squeeze()
-                    feature_matrix[:, 11:, j] = torch.Tensor(
-                        parsed["state/future/" + key].numpy()
-                    )
+                    feature_matrix[:, :10, j] = parsed["state/past/" + key].numpy()
+                    feature_matrix[:, 10, j] = parsed["state/current/" + key].numpy().squeeze()
+                    feature_matrix[:, 11:, j] = parsed["state/future/" + key].numpy()
 
-                if torch.any(feature_matrix[0, :, [0, 1]] > 8000) and torch.any(
-                    feature_matrix[0, :, [0, 1]] < 9000
-                ):
-                    pass
+                roadgraph = parsed["roadgraph_samples/xyz"].numpy()
+                roadgraph_mask = np.array(parsed["roadgraph_samples/valid"].numpy().squeeze(), dtype=bool)
+                roadgraph = roadgraph[roadgraph_mask][:, :2]
+
+                # Compute span of area
+                all_x = feature_matrix[:, :11, 0][feature_matrix[:, :11, -1].astype(bool)]
+                all_y = feature_matrix[:, :11, 1][feature_matrix[:, :11, -1].astype(bool)]
+                center_x, center_y = np.mean(all_x), np.mean(all_y)
+                width = 150
+                # Histogram of roadgraph
+                u, _, _ = np.histogram2d(x=roadgraph[:, 0],
+                                         y=roadgraph[:, 1],
+                                         range=[[center_x-width/2, center_x+width/2],
+                                                [center_y-width/2, center_y+width/2]],
+                                         bins=[width*2, width*2])
+                u = u.T
+                # Binarise
+                u[u > 0] = 1
+
+                # plt.pcolor(u)
+                # plt.show()
+                # plt.hist2d(x=roadgraph[:, 0], y=roadgraph[:, 1],
+                #            range=[[center_x - width / 2, center_x + width / 2],
+                #                   [center_y - width / 2, center_y + width / 2]],
+                #            bins=[width * 2, width * 2])
+                #
+                # plt.scatter(x=all_x, y=all_y, s=10, marker='x', color='k')
+                #
+                #
+                # plt.show()
+
+                feature_matrix = torch.Tensor(feature_matrix)
                 # Process yaw-values into [-pi, pi]
                 x_yaws = feature_matrix[:, :, 5:7]
                 x_yaws[x_yaws > 0] = (
@@ -257,12 +281,13 @@ class SequentialWaymoTrainDataset(InMemoryDataset):
                 data["type"] = one_hot(type[mask], num_classes=5)
                 data["loc"] = loc.unsqueeze(0)
                 data["std"] = std.unsqueeze(0)
+                data["u"] = torch.Tensor(u).unsqueeze(0)
 
                 data_list.append(data)
 
         # Collate and save
         data, slices = self.collate(data_list)
-        # torch.save((data, slices), self.processed_paths[0])
+        torch.save((data, slices), self.processed_paths[0])
 
 
 class SequentialWaymoValDataset(InMemoryDataset):
@@ -312,8 +337,6 @@ class SequentialWaymoValDataset(InMemoryDataset):
         n_nodes = 128
         n_features = len(key_values)
         n_steps = 91
-        # Allocate tensor for full value array
-        feature_matrix = torch.zeros((n_nodes, n_steps, n_features))
 
         # Move through raw files
         for i, raw_path in enumerate(self.raw_file_names):
@@ -325,28 +348,57 @@ class SequentialWaymoValDataset(InMemoryDataset):
                 # Parse sequence
                 parsed = parse_sequence(data)
 
+                # Allocate tensor for full value array
+                feature_matrix = np.zeros((n_nodes, n_steps, n_features))
+
                 # Fill in all values
                 for j, key in enumerate(key_values):
                     # Encode history
-                    feature_matrix[:, :10, j] = torch.Tensor(
-                        parsed["state/past/" + key].numpy()
-                    )
-                    feature_matrix[:, 10, j] = torch.Tensor(
-                        parsed["state/current/" + key].numpy()
-                    ).squeeze()
-                    feature_matrix[:, 11:, j] = torch.Tensor(
-                        parsed["state/future/" + key].numpy()
-                    )
+                    feature_matrix[:, :10, j] = parsed["state/past/" + key].numpy()
+                    feature_matrix[:, 10, j] = parsed["state/current/" + key].numpy().squeeze()
+                    feature_matrix[:, 11:, j] = parsed["state/future/" + key].numpy()
 
+                roadgraph = parsed["roadgraph_samples/xyz"].numpy()
+                roadgraph_mask = np.array(parsed["roadgraph_samples/valid"].numpy().squeeze(), dtype=bool)
+                roadgraph = roadgraph[roadgraph_mask][:, :2]
+
+                # Compute span of area
+                all_x = feature_matrix[:, :11, 0][feature_matrix[:, :11, -1].astype(bool)]
+                all_y = feature_matrix[:, :11, 1][feature_matrix[:, :11, -1].astype(bool)]
+                center_x, center_y = np.mean(all_x), np.mean(all_y)
+                width = 150
+                # Histogram of roadgraph
+                u, _, _ = np.histogram2d(x=roadgraph[:, 0],
+                                         y=roadgraph[:, 1],
+                                         range=[[center_x - width / 2, center_x + width / 2],
+                                                [center_y - width / 2, center_y + width / 2]],
+                                         bins=[width * 2, width * 2])
+                u = u.T
+                # Binarise
+                u[u > 0] = 1
+
+                # plt.pcolor(u)
+                # plt.show()
+                # plt.hist2d(x=roadgraph[:, 0], y=roadgraph[:, 1],
+                #            range=[[center_x - width / 2, center_x + width / 2],
+                #                   [center_y - width / 2, center_y + width / 2]],
+                #            bins=[width * 2, width * 2])
+                #
+                # plt.scatter(x=all_x, y=all_y, s=10, marker='x', color='k')
+                #
+                #
+                # plt.show()
+
+                feature_matrix = torch.Tensor(feature_matrix)
                 # Process yaw-values into [-pi, pi]
                 x_yaws = feature_matrix[:, :, 5:7]
                 x_yaws[x_yaws > 0] = (
-                    torch.fmod(x_yaws[x_yaws > 0] + math.pi, torch.tensor(2 * math.pi))
-                    - math.pi
+                        torch.fmod(x_yaws[x_yaws > 0] + math.pi, torch.tensor(2 * math.pi))
+                        - math.pi
                 )
                 x_yaws[x_yaws < 0] = (
-                    torch.fmod(x_yaws[x_yaws < 0] - math.pi, torch.tensor(2 * math.pi))
-                    + math.pi
+                        torch.fmod(x_yaws[x_yaws < 0] - math.pi, torch.tensor(2 * math.pi))
+                        + math.pi
                 )
                 feature_matrix[:, :, 5:7] = x_yaws
 
@@ -360,16 +412,19 @@ class SequentialWaymoValDataset(InMemoryDataset):
                 type = torch.Tensor(parsed["state/type"].numpy()).type(torch.LongTensor)
                 # Mask of valid agents for full sequence
                 mask = torch.where(type > -0.5, True, False)
-                # Create data object
+
                 data = Data(x=feature_matrix[mask], edge_index=None)
                 data["tracks_to_predict"] = torch.where(
                     torch.Tensor(parsed["state/tracks_to_predict"].numpy())[mask] > 0,
                     True,
                     False,
                 )
+                # Add agent type as one-hot encoded
                 data["type"] = one_hot(type[mask], num_classes=5)
                 data["loc"] = loc.unsqueeze(0)
                 data["std"] = std.unsqueeze(0)
+                data["u"] = torch.Tensor(u).unsqueeze(0)
+
                 data_list.append(data)
 
         # Collate and save
