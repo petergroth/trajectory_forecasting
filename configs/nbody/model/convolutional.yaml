@@ -1,0 +1,6 @@
+hidden_size: 128
+edge_features: 2
+skip: True
+dropout: 0.5
+node_features: 5
+out_features: 2

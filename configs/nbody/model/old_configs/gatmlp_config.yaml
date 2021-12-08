@@ -1,0 +1,32 @@
+datamodule:
+  batch_size: 64
+  shuffle: True
+
+model:
+  hidden_size: 128
+  heads: 8
+  normalise: True
+  dropout: 0.5
+
+regressor:
+  noise: null
+  lr: 3.0e-4
+  weight_decay: 0.001
+  log_norm: False
+
+trainer:
+  check_val_every_n_epoch: 1
+  max_epochs: 10
+  deterministic: True
+
+logger:
+  offline: False
+  version: "gatmlp_v6_04"
+
+misc:
+  seed: 1
+  model_type: GATMLP6
+  dm_type: OneStepNBodyDataModule
+  regressor_type: OneStepModule
+  checkpoint: False
+  train: True

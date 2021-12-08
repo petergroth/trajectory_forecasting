@@ -1,0 +1,40 @@
+datamodule:
+  batch_size: 64
+  shuffle: True
+  val_batch_size: 50
+
+model:
+  hidden_size: 128
+  normalise: True
+  dropout: 0.5
+  skip: True
+
+regressor:
+  noise: null
+  lr: 1.0e-4
+  weight_decay: 0.0
+  log_norm: False
+  min_dist: null
+  edge_weight: False
+  grav_attraction: False
+  self_loop: False
+  undirected: False
+
+trainer:
+  check_val_every_n_epoch: 1
+  max_epochs: 25
+  deterministic: True
+
+logger:
+  offline: False
+  version: mlp_baseline_02
+  project: trajectory_forecasting_mlp_baseline
+
+misc:
+  seed: 1
+  model_type: mlp_baseline
+  dm_type: OneStepNBodyDataModule
+  regressor_type: OneStepModule
+  checkpoint: False
+  train: True
+  continue_training: null

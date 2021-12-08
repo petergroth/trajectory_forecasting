@@ -1,0 +1,16 @@
+noise: null
+lr: 1.0e-4
+weight_decay: 0.01
+min_dist: 30
+n_neighbours: 6
+edge_weight: True
+grav_attraction: False
+self_loop: False
+undirected: False
+edge_type: distance
+teacher_forcing_ratio: 0.3
+node_features: 5
+edge_features: 1
+out_features: 4
+training_horizon: 90
+fully_connected: False

@@ -1,0 +1,38 @@
+datamodule:
+  batch_size: 64
+  shuffle: True
+  val_batch_size: 50
+
+model:
+  hidden_size: 256
+  normalise: True
+  dropout: 0.5
+  latent_edge_features: 32
+  edge_model: MPNN_edge_model
+
+regressor:
+  noise: null
+  lr: 1.0e-4
+  weight_decay: 0.0
+  log_norm: False
+  min_dist: 20
+  edge_weight: True
+
+trainer:
+  check_val_every_n_epoch: 1
+  max_epochs: 20
+  deterministic: True
+
+logger:
+  offline: False
+  version: mlp_gnn_mpnn_01
+  project: trajectory_forecasting_mlpgnn
+
+misc:
+  seed: 1
+  model_type: MLPGNN
+  dm_type: OneStepNBodyDataModule
+  regressor_type: OneStepModule
+  checkpoint: True
+  train: True
+  continue_training: null
