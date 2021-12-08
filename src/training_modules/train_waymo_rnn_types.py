@@ -749,8 +749,8 @@ class SequentialModule(pl.LightningModule):
 
         # Allocate target/prediction tensors
         n_nodes = batch.num_nodes
-        y_hat = torch.zeros((prediction_horizon-1, n_nodes, self.node_features))
-        y_target = torch.zeros((prediction_horizon-1, n_nodes, self.node_features))
+        y_hat = torch.zeros((prediction_horizon-1, n_nodes, self.node_features+5))
+        y_target = torch.zeros((prediction_horizon-1, n_nodes, self.node_features+5))
         # Ensure device placement
         y_hat = y_hat.type_as(batch.x)
         y_target = y_target.type_as(batch.x)
