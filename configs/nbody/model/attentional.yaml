@@ -1,0 +1,7 @@
+hidden_size: 128
+heads: 8
+node_features: 5
+middle_gat: True
+out_features: 2
+edge_features: 2
+dropout: 0.5
