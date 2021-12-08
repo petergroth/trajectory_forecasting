@@ -465,7 +465,10 @@ class rnn_mp_hetero(nn.Module):
             nn.Linear(in_features=hidden_size, out_features=out_features),
         )
 
-    def forward(self, x, edge_index, edge_attr, hidden: tuple, type):
+    def forward(self, x, edge_index, edge_attr, hidden: tuple, u=None, batch=None):
+        types = x[:, -5:].bool()
+        x = x[:, :-5]
+
         # Unpack hidden states
         h_node, h_edge = hidden
 
@@ -490,9 +493,9 @@ class rnn_mp_hetero(nn.Module):
         x_agg = torch.cat([x_concat, edge_attr], dim=1)
 
         # Agent class indexing
-        car_idx = (type[:, 1] == 1) + (type[:, 0] == 1) + (type[:, 4] == 1)
-        pedestrian_idx = type[:, 2] == 1
-        bike_idx = type[:, 3] == 1
+        car_idx = (types[:, 1] == 1) + (types[:, 0] == 1) + (types[:, 4] == 1)
+        pedestrian_idx = types[:, 2] == 1
+        bike_idx = types[:, 3] == 1
 
         x_car = self.node_car_module(x_agg[car_idx])
         x_pedestrian = self.node_car_module(x_agg[pedestrian_idx])
