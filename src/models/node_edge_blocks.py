@@ -106,6 +106,47 @@ class node_mlp_out(nn.Module):
         return out
 
 
+class node_mlp_out_global(nn.Module):
+    def __init__(
+        self,
+        hidden_size: int = 64,
+        node_features: int = 5,
+        dropout: float = 0.0,
+        edge_features: int = 0,
+        out_features: int = 4,
+        map_encoding_size: int = 128
+    ):
+        super(node_mlp_out_global, self).__init__()
+        self.out_features = out_features
+
+        self.node_mlp_1 = nn.Sequential(
+            nn.Linear(
+                in_features=node_features + edge_features + map_encoding_size, out_features=hidden_size
+            ),
+            nn.Dropout(p=dropout),
+            nn.LeakyReLU(),
+            nn.Linear(in_features=hidden_size, out_features=hidden_size),
+            nn.Dropout(p=dropout),
+            nn.LeakyReLU(),
+            nn.Linear(in_features=hidden_size, out_features=self.out_features),
+        )
+
+    def forward(self, x, edge_index, edge_attr, u, batch):
+        # x: [N, F_x], where N is the number of nodes.
+        # batch: [N] with max entry B - 1.
+        row, col = edge_index
+        # Aggregate edge attributes
+        edge_attr = scatter_add(edge_attr, row, dim=0, dim_size=x.size(0))
+
+        # Concatenate node features with agg. edge attributes and global features
+        out = torch.cat([x, edge_attr, u[batch]], dim=1)
+
+        # Update dynamic node attributes
+        out = self.node_mlp_1(out)
+        # Return delta dynamics
+        return out
+
+
 class edge_mlp_1(nn.Module):
     # Input edge update function
     def __init__(
