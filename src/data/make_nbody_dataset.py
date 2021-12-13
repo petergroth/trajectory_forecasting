@@ -1,4 +1,5 @@
-from data.dataset_nbody import OneStepNBodyDataModule, SequentialNBodyDataModule
+from data.dataset_nbody import (OneStepNBodyDataModule,
+                                SequentialNBodyDataModule)
 
 
 def main():

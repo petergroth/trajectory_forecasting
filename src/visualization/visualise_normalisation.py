@@ -1,17 +1,18 @@
 import argparse
+import os
+
+import hydra
+import matplotlib.pyplot as plt
+import numpy as np
 import pytorch_lightning as pl
+import torch
+import yaml
+from matplotlib.patches import Circle, Rectangle
+from omegaconf import DictConfig, OmegaConf
+from pytorch_lightning.utilities.seed import seed_everything
+
 from src.data.dataset_waymo import OneStepWaymoDataModule
 from src.models.train_waymo_model import *
-import yaml
-from pytorch_lightning.utilities.seed import seed_everything
-import torch
-import os
-import matplotlib.pyplot as plt
-from matplotlib.patches import Rectangle
-import numpy as np
-import hydra
-from omegaconf import DictConfig, OmegaConf
-from matplotlib.patches import Circle
 
 
 def main():

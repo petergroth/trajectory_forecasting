@@ -1,21 +1,21 @@
-from src.utils import load_simulations
 import matplotlib.pyplot as plt
-from matplotlib.patches import Circle
 import numpy as np
-
 from matplotlib import rc
+from matplotlib.patches import Circle
 
-rc('text', usetex=True)
-rc('font', **{'family': 'serif', 'serif': ['Computer Modern Roman']})
+from src.utils import load_simulations
+
+rc("text", usetex=True)
+rc("font", **{"family": "serif", "serif": ["Computer Modern Roman"]})
 
 ticksize = 20
 titlesize = 25
-plt.rcParams['axes.labelsize'] = titlesize
-plt.rcParams['axes.titlesize'] = titlesize
-plt.rcParams['xtick.labelsize'] = ticksize
-plt.rcParams['ytick.labelsize'] = ticksize
+plt.rcParams["axes.labelsize"] = titlesize
+plt.rcParams["axes.titlesize"] = titlesize
+plt.rcParams["xtick.labelsize"] = ticksize
+plt.rcParams["ytick.labelsize"] = ticksize
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     path = "data/raw/nbody/nbody_10_particles_sim0003.npy"
     full_arr = load_simulations(path=path)
     positions = full_arr[:, :, :2]
@@ -41,21 +41,28 @@ if __name__ == '__main__':
         "darkred",
         "orangered",
         "orange",
-        "peru"
+        "peru",
     ]
 
     for t in range(n_steps):
         for i in range(n_particles):
             ax.add_patch(
                 Circle(
-                    positions[t, i, :], sizes[0, i], facecolor=colors[i], alpha=alphas[t]
+                    positions[t, i, :],
+                    sizes[0, i],
+                    facecolor=colors[i],
+                    alpha=alphas[t],
                 )
             )
 
     for i in range(n_particles):
         ax.add_patch(
             Circle(
-                positions[-1, i, :], sizes[0, i], edgecolor='k', facecolor=colors[i], alpha=alphas[t]
+                positions[-1, i, :],
+                sizes[0, i],
+                edgecolor="k",
+                facecolor=colors[i],
+                alpha=alphas[t],
             )
         )
 
@@ -83,7 +90,7 @@ if __name__ == '__main__':
         angles="xy",
         scale_units="xy",
         scale=1.0,
-        color='k',
+        color="k",
         alpha=1,
         zorder=2,
     )
@@ -99,9 +106,7 @@ if __name__ == '__main__':
     # ax.yaxis.set_label_coords(-.1, 0)
     # ax.xaxis.set_label_coords(0, -.1)
 
-
     plt.tight_layout()
     plt.savefig(f"../../thesis/graphics/synthetic/nbody_example.pdf")
     # plt.show()
     print("finished")
-

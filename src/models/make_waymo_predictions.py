@@ -1,19 +1,19 @@
 import argparse
+import os
+
+import hydra
+import matplotlib.pyplot as plt
+import numpy as np
 import pytorch_lightning as pl
+import torch
+import yaml
+# from models import ConstantModel
+from matplotlib.patches import Circle, Rectangle
+from omegaconf import DictConfig, OmegaConf
+from pytorch_lightning.utilities.seed import seed_everything
+
 from src.data.dataset_waymo import OneStepWaymoDataModule
 from src.training_modules.train_waymo_rnn_global import *
-import yaml
-from pytorch_lightning.utilities.seed import seed_everything
-import torch
-import os
-import matplotlib.pyplot as plt
-from matplotlib.patches import Rectangle
-import numpy as np
-import hydra
-from omegaconf import DictConfig, OmegaConf
-
-# from models import ConstantModel
-from matplotlib.patches import Circle
 
 
 def make_predictions(path, config, n_steps=51, sequence_idx=0):
@@ -33,23 +33,30 @@ def make_predictions(path, config, n_steps=51, sequence_idx=0):
     # Setup
     regressor.eval()
     datamodule.setup()
-    loader = datamodule.val_dataloader()
-    # Define output path
-    dirpath = "src/predictions/raw_preds/waymo/" + config["logger"]["version"]
-    os.makedirs(dirpath, exist_ok=True)
-    for i, batch in enumerate(loader):
-        if i == sequence_idx:
-            y_hat, y_target, mask = regressor.predict_step(batch, prediction_horizon=n_steps)
-            # torch.save((y_hat, y_target, mask), dirpath + f"/sequence_{i:04}.pt")
-            return y_hat.detach(), y_target, mask, batch
+    dataset = datamodule.val_dataset
+    batch = dataset.__getitem__(sequence_idx)
+
+    # agent = [0, 1, 2, 3]
+    # batch.x = batch.x[agent]
+    batch.batch = torch.zeros(batch.x.size(0)).type(torch.int64)
+    # batch.batch = batch.batch[agent]
+    # batch.tracks_to_predict = batch.tracks_to_predict[agent]
+    # batch.type = batch.type[agent]
+    y_hat, y_target, mask = regressor.predict_step(batch, prediction_horizon=n_steps)
+    # torch.save((y_hat, y_target, mask), dirpath + f"/sequence_{i:04}.pt")
+    return y_hat.detach(), y_target, mask, batch
 
 
 def plot_time_step(ax, t, states, alpha, colors, n_steps):
     # Scatter plot of all agent positions
-    ax.scatter(x=states[t, :, 0].numpy(),
-               y=states[t, :, 1].numpy(),
-               s=50, color=colors, alpha=alpha,
-               edgecolors='k' if t == n_steps - 1 else None)
+    ax.scatter(
+        x=states[t, :, 0].numpy(),
+        y=states[t, :, 1].numpy(),
+        s=50,
+        color=colors,
+        alpha=alpha,
+        edgecolors="k" if t == n_steps - 1 else None,
+    )
     # Draw velocity arrows at first and final future predictions
     if t == 10 or t == n_steps - 2:
         ax.quiver(
@@ -63,6 +70,71 @@ def plot_time_step(ax, t, states, alpha, colors, n_steps):
             scale_units="xy",
             scale=1.0,
             color="lightgrey" if t == 10 else "k",
+        )
+
+    return ax
+
+
+def plot_edges_single_agent(ax, t, states, agent, mask, dist, n_neighbours):
+    if mask[agent, t]:
+
+        edge_index = torch_geometric.nn.radius_graph(
+            x=states[t, :, :2],
+            r=dist,
+            loop=False,
+            max_num_neighbors=n_neighbours,
+            flow="source_to_target",
+        )
+
+        edge_index = edge_index[:, edge_index[0] == agent]
+
+        sources = states[t, edge_index[0], :2].numpy()
+        targets = states[t, edge_index[1], :2].numpy()
+
+        xs = sources[:, 0]
+        ys = sources[:, 1]
+        xt = targets[:, 0]
+        yt = targets[:, 1]
+        xx = np.hstack((xs, xt))
+        yy = np.hstack((ys, yt))
+
+        for i in range(edge_index.size(1)):
+            ax.plot(
+                xx[[i, i + edge_index.size(1)]],
+                yy[[i, i + edge_index.size(1)]],
+                color="k",
+                alpha=0.2,
+            )
+
+    return ax
+
+
+def plot_edges_all_agents(ax, t, states, dist, n_neighbours):
+    # Create graph
+    edge_index = torch_geometric.nn.radius_graph(
+        x=states[t, :, :2],
+        r=dist,
+        loop=False,
+        max_num_neighbors=n_neighbours,
+        flow="source_to_target",
+    )
+
+    sources = states[t, edge_index[0], :2].numpy()
+    targets = states[t, edge_index[1], :2].numpy()
+
+    xs = sources[:, 0]
+    ys = sources[:, 1]
+    xt = targets[:, 0]
+    yt = targets[:, 1]
+    xx = np.hstack((xs, xt))
+    yy = np.hstack((ys, yt))
+
+    for i in range(edge_index.size(1)):
+        ax.plot(
+            xx[[i, i + edge_index.size(1)]],
+            yy[[i, i + edge_index.size(1)]],
+            color="k",
+            alpha=0.2,
         )
 
     return ax
@@ -278,15 +350,21 @@ def main():
         path=args.ckpt_path,
         config=config,
         sequence_idx=args.sequence_idx,
-        n_steps=args.n_steps
+        n_steps=args.n_steps,
     )
     n_steps = args.n_steps
     _, n_agents, n_features = y_hat.shape
-    roadgraph = batch.u.squeeze().numpy()/2
+    roadgraph = batch.u.squeeze().numpy() / 2
     loc_x = batch.loc[:, 0].squeeze().numpy()
     loc_y = batch.loc[:, 1].squeeze().numpy()
     width = 150
-    extent = (loc_x-width/2, loc_x+width/2, loc_y-width/2, loc_y+width/2)
+    extent = (
+        loc_x - width / 2,
+        loc_x + width / 2,
+        loc_y - width / 2,
+        loc_y + width / 2,
+    )
+
     x_min, x_max, y_min, y_max = extent
     os.makedirs(args.output_path, exist_ok=True)
 
@@ -300,21 +378,67 @@ def main():
     # )
 
     fig, ax = plt.subplots(1, 2, figsize=(20, 10))
+    #
+    # ax[0].imshow(roadgraph, aspect="equal", cmap="Greys", extent=extent, origin='lower', vmin=0, vmax=1,
+    #                  alpha=0.5)
+    # point = np.array([-28540, 41810])
+    # ax[0].plot(point[0], point[1], color='k', marker='x')
+    # ax[0].plot(x_span, y_span)
+    #
+    # plt.show()
 
-    ax[0].imshow(roadgraph, aspect="equal", cmap="Greys", extent=extent, origin='lower', vmin=0, vmax=1,
-                     alpha=0.5)
-    ax[1].imshow(roadgraph, aspect="equal", cmap="Greys", extent=extent, origin='lower', vmin=0, vmax=1,
-                     alpha=0.5)
+    ax[0].imshow(
+        roadgraph,
+        aspect="equal",
+        cmap="Greys",
+        extent=extent,
+        origin="lower",
+        vmin=0,
+        vmax=1,
+        alpha=0.5,
+    )
+    ax[1].imshow(
+        roadgraph,
+        aspect="equal",
+        cmap="Greys",
+        extent=extent,
+        origin="lower",
+        vmin=0,
+        vmax=1,
+        alpha=0.5,
+    )
+
 
     colors = [
         (np.random.random(), np.random.random(), np.random.random())
         for _ in range(n_agents)
     ]
+
+
     alphas = np.linspace(0.1, 1, n_steps)
-    for t in range(n_steps-1):
+    for t in range(n_steps - 1):
         # Plot groundtruth
-        ax[0] = plot_time_step(ax=ax[0], t=t, states=y_target, alpha=alphas[t], colors=colors, n_steps=n_steps)
-        ax[1] = plot_time_step(ax=ax[1], t=t, states=y_hat, alpha=alphas[t], colors=colors, n_steps=n_steps)
+        ax[0] = plot_time_step(
+            ax=ax[0],
+            t=t,
+            states=y_target,
+            alpha=alphas[t],
+            colors=colors,
+            n_steps=n_steps,
+        )
+        ax[1] = plot_time_step(
+            ax=ax[1], t=t, states=y_hat, alpha=alphas[t], colors=colors, n_steps=n_steps
+        )
+
+        # ax[1] = plot_edges_single_agent(ax=ax[1], t=t, states=y_hat, alpha=alphas[t], agent=3, mask=mask)
+        ax[1] = plot_edges_all_agents(
+            ax=ax[1],
+            t=t,
+            states=y_hat,
+            dist=config["regressor"]["min_dist"],
+            n_neighbours=config["regressor"]["n_neighbours"],
+        )
+        # ax[1] = plot_edges_single_agent(ax=ax[1], t=t, states=y_hat, alpha=alphas[t], agent=0, mask=mask)
 
     ax[0].axis("equal")
     ax[0].set_xlim((x_min, x_max))

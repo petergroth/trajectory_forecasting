@@ -1,8 +1,8 @@
+import gif
+import matplotlib.pyplot as plt
+import nbody as nb
 import numpy as np
 import tensorflow as tf
-import nbody as nb
-import matplotlib.pyplot as plt
-import gif
 from matplotlib.patches import Circle
 
 

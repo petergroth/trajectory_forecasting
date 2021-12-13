@@ -1,21 +1,23 @@
 import argparse
+import math
 import os
+import random
+from typing import Union
 
+import hydra
 import pytorch_lightning as pl
 import torch
 import torch_geometric.nn
+import torchmetrics
+from omegaconf import DictConfig, OmegaConf
+from pytorch_lightning.callbacks import RichProgressBar
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.utilities.seed import seed_everything
-from src.data.dataset_waymo import OneStepWaymoDataModule, SequentialWaymoDataModule
-import torchmetrics
 from torch_geometric.data import Batch
+
+from src.data.dataset_waymo import (OneStepWaymoDataModule,
+                                    SequentialWaymoDataModule)
 from src.models.model import *
-import hydra
-from omegaconf import DictConfig, OmegaConf
-from typing import Union
-from pytorch_lightning.callbacks import RichProgressBar
-import math
-import random
 
 
 class SequentialModule(pl.LightningModule):
@@ -40,7 +42,7 @@ class SequentialModule(pl.LightningModule):
         normalise: bool = True,
         training_horizon: int = 90,
         edge_dropout: float = 0,
-        prediction_horizon: int = 91
+        prediction_horizon: int = 91,
     ):
         super().__init__()
         # Verify inputs
@@ -152,21 +154,25 @@ class SequentialModule(pl.LightningModule):
         # Initial hidden state
         if self.rnn_type == "GRU":
             h_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
-            h_edge = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_edge_size))
+            h_edge = torch.zeros(
+                (self.model.num_layers, n_nodes, self.model.rnn_edge_size)
+            )
             h_node = h_node.type_as(batch.x)
             h_edge = h_edge.type_as(batch.x)
             c_node, c_edge = None, None
         else:
             h_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
-            h_edge = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_edge_size))
+            h_edge = torch.zeros(
+                (self.model.num_layers, n_nodes, self.model.rnn_edge_size)
+            )
             h_node = h_node.type_as(batch.x)
             h_edge = h_edge.type_as(batch.x)
             c_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
-            c_edge = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_edge_size))
+            c_edge = torch.zeros(
+                (self.model.num_layers, n_nodes, self.model.rnn_edge_size)
+            )
             c_node = c_node.type_as(batch.x)
             c_edge = c_edge.type_as(batch.x)
-
-
 
         ######################
         # History            #
@@ -214,7 +220,9 @@ class SequentialModule(pl.LightningModule):
                 edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
 
             # Remove duplicates and sort
-            edge_index = torch_geometric.utils.coalesce(edge_index, num_nodes=x_t.shape[0])
+            edge_index = torch_geometric.utils.coalesce(
+                edge_index, num_nodes=x_t.shape[0]
+            )
 
             # Create edge_attr if specified
             if self.edge_weight:
@@ -224,8 +232,9 @@ class SequentialModule(pl.LightningModule):
                 edge_attr = edge_attr.type_as(batch.x)
 
             if self.edge_dropout > 0:
-                edge_index, edge_attr = dropout_adj(edge_index=edge_index, edge_attr=edge_attr, p=self.edge_dropout)
-
+                edge_index, edge_attr = dropout_adj(
+                    edge_index=edge_index, edge_attr=edge_attr, p=self.edge_dropout
+                )
 
             #######################
             # Training 1/2        #
@@ -258,14 +267,17 @@ class SequentialModule(pl.LightningModule):
                 h_edge[:, mask_t] = h_t[1]
 
             else:  # LSTM
-                hidden_in = ((h_node[:, mask_t], c_node[:, mask_t]), (h_edge[:, mask_t], c_edge[:, mask_t]))
+                hidden_in = (
+                    (h_node[:, mask_t], c_node[:, mask_t]),
+                    (h_edge[:, mask_t], c_edge[:, mask_t]),
+                )
 
                 delta_x, (h_node_out, h_edge_out) = self.model(
                     x=x_t,
                     edge_index=edge_index,
                     edge_attr=edge_attr,
                     batch=batch.batch[mask_t],
-                    hidden=hidden_in
+                    hidden=hidden_in,
                 )
                 h_node[:, mask_t] = h_node_out[0]
                 c_node[:, mask_t] = h_node_out[1]
@@ -322,7 +334,9 @@ class SequentialModule(pl.LightningModule):
                 edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
 
             # Remove duplicates and sort
-            edge_index = torch_geometric.utils.coalesce(edge_index, num_nodes=x_t.shape[0])
+            edge_index = torch_geometric.utils.coalesce(
+                edge_index, num_nodes=x_t.shape[0]
+            )
 
             # Create edge_attr if specified
             if self.edge_weight:
@@ -332,7 +346,9 @@ class SequentialModule(pl.LightningModule):
                 edge_attr = edge_attr.type_as(batch.x)
 
             if self.edge_dropout > 0:
-                edge_index, edge_attr = dropout_adj(edge_index=edge_index, edge_attr=edge_attr, p=self.edge_dropout)
+                edge_index, edge_attr = dropout_adj(
+                    edge_index=edge_index, edge_attr=edge_attr, p=self.edge_dropout
+                )
 
             #######################
             # Training 2/2        #
@@ -424,7 +440,7 @@ class SequentialModule(pl.LightningModule):
             batch_size=loss_mask.sum().item(),
         )
         # self.log("train_yaw_loss", yaw_loss, on_step=True, on_epoch=True, batch_size=loss_mask.sum().item())
-        loss = ade_loss #+ vel_loss
+        loss = ade_loss  # + vel_loss
 
         self.log(
             "train_total_loss",
@@ -463,7 +479,7 @@ class SequentialModule(pl.LightningModule):
         batch.type = batch.type[type_mask]
 
         # Update input using prediction horizon
-        batch.x = batch.x[:, :self.prediction_horizon]
+        batch.x = batch.x[:, : self.prediction_horizon]
 
         # Reduction: Limit to x-y predictions
         batch.x = batch.x[:, :, self.node_indices]
@@ -473,9 +489,11 @@ class SequentialModule(pl.LightningModule):
 
         # Allocate target/prediction tensors
         n_nodes = batch.num_nodes
-        y_hat = torch.zeros((self.prediction_horizon-11, n_nodes, self.out_features))
+        y_hat = torch.zeros((self.prediction_horizon - 11, n_nodes, self.out_features))
         y_hat = y_hat.type_as(batch.x)
-        y_target = torch.zeros((self.prediction_horizon-11, n_nodes, self.out_features))
+        y_target = torch.zeros(
+            (self.prediction_horizon - 11, n_nodes, self.out_features)
+        )
         y_target = y_target.type_as(batch.x)
         batch.x = batch.x[:, :, :-1]
         # static_features = torch.cat(
@@ -488,17 +506,23 @@ class SequentialModule(pl.LightningModule):
         # Initial hidden state
         if self.rnn_type == "GRU":
             h_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
-            h_edge = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_edge_size))
+            h_edge = torch.zeros(
+                (self.model.num_layers, n_nodes, self.model.rnn_edge_size)
+            )
             h_node = h_node.type_as(batch.x)
             h_edge = h_edge.type_as(batch.x)
             c_node, c_edge = None, None
         else:
             h_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
-            h_edge = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_edge_size))
+            h_edge = torch.zeros(
+                (self.model.num_layers, n_nodes, self.model.rnn_edge_size)
+            )
             h_node = h_node.type_as(batch.x)
             h_edge = h_edge.type_as(batch.x)
             c_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
-            c_edge = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_edge_size))
+            c_edge = torch.zeros(
+                (self.model.num_layers, n_nodes, self.model.rnn_edge_size)
+            )
             c_node = c_node.type_as(batch.x)
             c_edge = c_edge.type_as(batch.x)
 
@@ -541,7 +565,9 @@ class SequentialModule(pl.LightningModule):
                 edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
 
             # Remove duplicates and sort
-            edge_index = torch_geometric.utils.coalesce(edge_index, num_nodes=x_t.shape[0])
+            edge_index = torch_geometric.utils.coalesce(
+                edge_index, num_nodes=x_t.shape[0]
+            )
 
             # Create edge_attr if specified
             if self.edge_weight:
@@ -583,13 +609,16 @@ class SequentialModule(pl.LightningModule):
                 h_edge[:, mask_t] = h_t[1]
 
             else:  # LSTM
-                hidden_in = ((h_node[:, mask_t], c_node[:, mask_t]), (h_edge[:, mask_t], c_edge[:, mask_t]))
+                hidden_in = (
+                    (h_node[:, mask_t], c_node[:, mask_t]),
+                    (h_edge[:, mask_t], c_edge[:, mask_t]),
+                )
                 delta_x, (h_node_out, h_edge_out) = self.model(
                     x=x_t,
                     edge_index=edge_index,
                     edge_attr=edge_attr,
                     batch=batch.batch[mask_t],
-                    hidden=hidden_in
+                    hidden=hidden_in,
                 )
                 h_node[:, mask_t] = h_node_out[0]
                 c_node[:, mask_t] = h_node_out[1]
@@ -610,7 +639,7 @@ class SequentialModule(pl.LightningModule):
         # Future             #
         ######################
 
-        for t in range(11, self.prediction_horizon-1):
+        for t in range(11, self.prediction_horizon - 1):
 
             ######################
             # Graph construction #
@@ -643,7 +672,9 @@ class SequentialModule(pl.LightningModule):
                 edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
 
             # Remove duplicates and sort
-            edge_index = torch_geometric.utils.coalesce(edge_index, num_nodes=x_t.shape[0])
+            edge_index = torch_geometric.utils.coalesce(
+                edge_index, num_nodes=x_t.shape[0]
+            )
 
             # Create edge_attr if specified
             if self.edge_weight:
@@ -717,7 +748,10 @@ class SequentialModule(pl.LightningModule):
             y_hat[-1, fde_ttp_mask][:, [0, 1]], y_target[-1, fde_ttp_mask][:, [0, 1]]
         )
         ade_ttp_mask = torch.logical_and(
-            val_mask, batch.tracks_to_predict.expand((self.prediction_horizon-11, mask.size(0)))
+            val_mask,
+            batch.tracks_to_predict.expand(
+                (self.prediction_horizon - 11, mask.size(0))
+            ),
         )
         ade_ttp_loss = self.val_ade_loss(
             y_hat[:, :, [0, 1]][ade_ttp_mask], y_target[:, :, [0, 1]][ade_ttp_mask]
@@ -731,7 +765,7 @@ class SequentialModule(pl.LightningModule):
         self.log("val_fde_loss", fde_loss, batch_size=fde_mask.sum().item())
         self.log("val_vel_loss", vel_loss, batch_size=val_mask.sum().item())
         # self.log("val_yaw_loss", yaw_loss, batch_size=val_mask.sum().item())
-        loss = ade_loss # + fde_loss + vel_loss
+        loss = ade_loss  # + fde_loss + vel_loss
         self.log("val_total_loss", loss, batch_size=val_mask.sum().item())
         self.log("val_fde_ttp_loss", fde_ttp_loss, batch_size=fde_ttp_mask.sum().item())
         self.log("val_ade_ttp_loss", ade_ttp_loss, batch_size=ade_ttp_mask.sum().item())
@@ -771,8 +805,8 @@ class SequentialModule(pl.LightningModule):
 
         # Allocate target/prediction tensors
         n_nodes = batch.num_nodes
-        y_hat = torch.zeros((prediction_horizon-1, n_nodes, self.node_features))
-        y_target = torch.zeros((prediction_horizon-1, n_nodes, self.node_features))
+        y_hat = torch.zeros((prediction_horizon - 1, n_nodes, self.node_features))
+        y_target = torch.zeros((prediction_horizon - 1, n_nodes, self.node_features))
         # Ensure device placement
         y_hat = y_hat.type_as(batch.x)
         y_target = y_target.type_as(batch.x)
@@ -787,17 +821,23 @@ class SequentialModule(pl.LightningModule):
         # Initial hidden state
         if self.rnn_type == "GRU":
             h_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
-            h_edge = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_edge_size))
+            h_edge = torch.zeros(
+                (self.model.num_layers, n_nodes, self.model.rnn_edge_size)
+            )
             h_node = h_node.type_as(batch.x)
             h_edge = h_edge.type_as(batch.x)
             c_node, c_edge = None, None
         else:
             h_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
-            h_edge = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_edge_size))
+            h_edge = torch.zeros(
+                (self.model.num_layers, n_nodes, self.model.rnn_edge_size)
+            )
             h_node = h_node.type_as(batch.x)
             h_edge = h_edge.type_as(batch.x)
             c_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
-            c_edge = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_edge_size))
+            c_edge = torch.zeros(
+                (self.model.num_layers, n_nodes, self.model.rnn_edge_size)
+            )
             c_node = c_node.type_as(batch.x)
             c_edge = c_edge.type_as(batch.x)
 
@@ -840,7 +880,9 @@ class SequentialModule(pl.LightningModule):
                 edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
 
             # Remove duplicates and sort
-            edge_index = torch_geometric.utils.coalesce(edge_index, num_nodes=x_t.shape[0])
+            edge_index = torch_geometric.utils.coalesce(
+                edge_index, num_nodes=x_t.shape[0]
+            )
 
             # Create edge_attr if specified
             if self.edge_weight:
@@ -884,13 +926,16 @@ class SequentialModule(pl.LightningModule):
                 h_edge[:, mask_t] = h_t[1]
 
             else:  # LSTM
-                hidden_in = ((h_node[:, mask_t], c_node[:, mask_t]), (h_edge[:, mask_t], c_edge[:, mask_t]))
+                hidden_in = (
+                    (h_node[:, mask_t], c_node[:, mask_t]),
+                    (h_edge[:, mask_t], c_edge[:, mask_t]),
+                )
                 delta_x, (h_node_out, h_edge_out) = self.model(
                     x=x_t,
                     edge_index=edge_index,
                     edge_attr=edge_attr,
                     batch=batch.batch[mask_t],
-                    hidden=hidden_in
+                    hidden=hidden_in,
                 )
                 h_node[:, mask_t] = h_node_out[0]
                 c_node[:, mask_t] = h_node_out[1]
@@ -913,7 +958,7 @@ class SequentialModule(pl.LightningModule):
         # Future             #
         ######################
 
-        for t in range(11, (prediction_horizon-1)):
+        for t in range(11, (prediction_horizon - 1)):
 
             ######################
             # Graph construction #
@@ -945,7 +990,9 @@ class SequentialModule(pl.LightningModule):
                 edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
 
             # Remove duplicates and sort
-            edge_index = torch_geometric.utils.coalesce(edge_index, num_nodes=x_t.shape[0])
+            edge_index = torch_geometric.utils.coalesce(
+                edge_index, num_nodes=x_t.shape[0]
+            )
 
             # Create edge_attr if specified
             if self.edge_weight:
@@ -1008,7 +1055,6 @@ class SequentialModule(pl.LightningModule):
         )
 
 
-
 class ConstantPhysicalBaselineModule(pl.LightningModule):
     def __init__(self, out_features: int = 6, prediction_horizon: int = 91, **kwargs):
         super().__init__()
@@ -1053,7 +1099,7 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
         batch.type = batch.type[type_mask]
 
         # Update input using prediction horizon
-        batch.x = batch.x[:, :self.prediction_horizon]
+        batch.x = batch.x[:, : self.prediction_horizon]
 
         # Limit to x, y, x_vel, y_vel
         batch.x = batch.x[:, :, [0, 1, 3, 4, 10]]
@@ -1063,8 +1109,10 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
 
         # Allocate target/prediction tensors
         n_nodes = batch.num_nodes
-        y_hat = torch.zeros((self.prediction_horizon-11, n_nodes, self.out_features))
-        y_target = torch.zeros((self.prediction_horizon-11, n_nodes, self.out_features))
+        y_hat = torch.zeros((self.prediction_horizon - 11, n_nodes, self.out_features))
+        y_target = torch.zeros(
+            (self.prediction_horizon - 11, n_nodes, self.out_features)
+        )
         # Remove valid flag from features
         batch.x = batch.x[:, :, :-1]
         # Find valid agents at time t=11
@@ -1081,7 +1129,7 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
         y_hat[0, :, :] = predicted_graph[:, : self.out_features]
         y_target[0, :, :] = batch.x[:, 11, : self.out_features]
 
-        for t in range(11, self.prediction_horizon-1):
+        for t in range(11, self.prediction_horizon - 1):
             predicted_pos += delta_pos
             predicted_graph = torch.cat([predicted_pos, last_vel], dim=1)
             y_hat[t - 10, :, :] = predicted_graph[:, : self.out_features]
@@ -1108,7 +1156,10 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
             y_hat[-1, fde_ttp_mask][:, [0, 1]], y_target[-1, fde_ttp_mask][:, [0, 1]]
         )
         ade_ttp_mask = torch.logical_and(
-            val_mask, batch.tracks_to_predict.expand((self.prediction_horizon - 11, mask.size(0)))
+            val_mask,
+            batch.tracks_to_predict.expand(
+                (self.prediction_horizon - 11, mask.size(0))
+            ),
         )
         ade_ttp_loss = self.val_ade_loss(
             y_hat[:, :, [0, 1]][ade_ttp_mask], y_target[:, :, [0, 1]][ade_ttp_mask]
@@ -1152,7 +1203,7 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
         batch.type = batch.type[type_mask]
 
         # Update input using prediction horizon
-        batch.x = batch.x[:, :self.prediction_horizon]
+        batch.x = batch.x[:, : self.prediction_horizon]
 
         # Limit to x, y, x_vel, y_vel
         batch.x = batch.x[:, :, [0, 1, 3, 4, 10]]
@@ -1162,7 +1213,7 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
 
         # Allocate target/prediction tensors
         n_nodes = batch.num_nodes
-        y_hat = torch.zeros((self.prediction_horizon-1, n_nodes, 4))
+        y_hat = torch.zeros((self.prediction_horizon - 1, n_nodes, 4))
         # Remove valid flag from features
         batch.x = batch.x[:, :, :-1]
 

@@ -1,21 +1,25 @@
 import argparse
+import math
 import os
+import random
+from typing import Union
 
+import hydra
+import numpy as np
 import pytorch_lightning as pl
 import torch
 import torch_geometric.nn
+import torchmetrics
+from omegaconf import DictConfig, OmegaConf
+from pytorch_lightning.callbacks import RichProgressBar
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.utilities.seed import seed_everything
-from src.data.dataset_waymo import OneStepWaymoDataModule, SequentialWaymoDataModule
-import torchmetrics
 from torch_geometric.data import Batch
+
+from src.data.dataset_waymo import (OneStepWaymoDataModule,
+                                    SequentialWaymoDataModule)
 from src.models.model import *
-import hydra
-from omegaconf import DictConfig, OmegaConf
-from typing import Union
-from pytorch_lightning.callbacks import RichProgressBar
-import math
-import random
+from src.training_modules import *
 
 
 class SequentialModule(pl.LightningModule):
@@ -40,7 +44,8 @@ class SequentialModule(pl.LightningModule):
         normalise: bool = True,
         training_horizon: int = 90,
         edge_dropout: float = 0,
-        prediction_horizon: int = 91
+        prediction_horizon: int = 91,
+        local_map_resolution: int = 40,
     ):
         super().__init__()
         # Verify inputs
@@ -58,14 +63,16 @@ class SequentialModule(pl.LightningModule):
         self.val_fde_ttp_loss = torchmetrics.MeanSquaredError()
         self.val_ade_ttp_loss = torchmetrics.MeanSquaredError()
 
-        # Instantiate model
+        # Instantiate models
         self.model_type = model_type
         self.model = eval(model_type)(**model_dict)
 
         # Instantiate map encoder
-
-        self.map_encoder = road_encoder(width=300, hidden_size=model_dict["map_encoding_size"]) \
-            if "map_encoding_size" in model_dict else None
+        self.map_encoder = road_encoder(
+            width=local_map_resolution + 1, hidden_size=model_dict["map_encoding_size"]
+        )
+        self.local_map_resolution = local_map_resolution
+        self.local_map_resolution_half = int(local_map_resolution / 2)
 
         # Learning parameters
         self.normalise = normalise
@@ -155,22 +162,63 @@ class SequentialModule(pl.LightningModule):
         # Initial hidden state
         if self.rnn_type == "GRU":
             h_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
-            h_edge = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_edge_size))
+            h_edge = torch.zeros(
+                (self.model.num_layers, n_nodes, self.model.rnn_edge_size)
+            )
             h_node = h_node.type_as(batch.x)
             h_edge = h_edge.type_as(batch.x)
             c_node, c_edge = None, None
         else:
             h_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
-            h_edge = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_edge_size))
+            h_edge = torch.zeros(
+                (self.model.num_layers, n_nodes, self.model.rnn_edge_size)
+            )
             h_node = h_node.type_as(batch.x)
             h_edge = h_edge.type_as(batch.x)
             c_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
-            c_edge = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_edge_size))
+            c_edge = torch.zeros(
+                (self.model.num_layers, n_nodes, self.model.rnn_edge_size)
+            )
             c_node = c_node.type_as(batch.x)
             c_edge = c_edge.type_as(batch.x)
 
-        # Encode map features
-        map_encoding = self.map_encoder(batch.u) if self.map_encoder is not None else None
+        ######################
+        # Map preparation    #
+        ######################
+
+        # Zero pad each map for edge-cases
+        batch.u = nn.functional.pad(
+            batch.u,
+            (
+                self.local_map_resolution,
+                self.local_map_resolution,
+                self.local_map_resolution,
+                self.local_map_resolution,
+            ),
+        )
+        # Extract centre locations of each scene
+        center_values = batch.loc[:, :2]
+        # Compute x/y-ranges
+        map_ranges = torch.vstack(
+            [
+                center_values[:, 0] - 150 / 2,
+                center_values[:, 0] + 150 / 2,
+                center_values[:, 1] - 150 / 2,
+                center_values[:, 1] + 150 / 2,
+            ]
+        ).T
+        # Allocate and compute all values in x/y-ranges for localisation
+        interval_x = torch.zeros((batch.num_graphs, 150 * 2 + 1))
+        interval_y = torch.zeros((batch.num_graphs, 150 * 2 + 1))
+        interval_x = interval_x.type_as(batch.x)
+        interval_y = interval_y.type_as(batch.x)
+        for i in range(batch.num_graphs):
+            interval_x[i] = torch.linspace(
+                map_ranges[i, 0], map_ranges[i, 1], 150 * 2 + 1
+            )
+            interval_y[i] = torch.linspace(
+                map_ranges[i, 2], map_ranges[i, 3], 150 * 2 + 1
+            )
 
         ######################
         # History            #
@@ -210,7 +258,9 @@ class SequentialModule(pl.LightningModule):
                 edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
 
             # Remove duplicates and sort
-            edge_index = torch_geometric.utils.coalesce(edge_index, num_nodes=x_t.shape[0])
+            edge_index = torch_geometric.utils.coalesce(
+                edge_index, num_nodes=x_t.shape[0]
+            )
 
             # Create edge_attr if specified
             if self.edge_weight:
@@ -220,7 +270,70 @@ class SequentialModule(pl.LightningModule):
                 edge_attr = edge_attr.type_as(batch.x)
 
             if self.edge_dropout > 0:
-                edge_index, edge_attr = dropout_adj(edge_index=edge_index, edge_attr=edge_attr, p=self.edge_dropout)
+                edge_index, edge_attr = dropout_adj(
+                    edge_index=edge_index, edge_attr=edge_attr, p=self.edge_dropout
+                )
+
+            #######################
+            # Map encoding 1/2    #
+            #######################
+
+            # Allocate local maps
+            u_local = torch.zeros(
+                (
+                    x_t.size(0),
+                    self.local_map_resolution + 1,
+                    self.local_map_resolution + 1,
+                )
+            )
+
+            # Find closest pixels in x and y directions
+            center_pixel_x = (
+                torch.argmax(
+                    (interval_x[batch.batch[mask_t]] > x_t[:, 0].unsqueeze(-1)).float(),
+                    dim=1,
+                ).type(torch.LongTensor)
+                - 1
+            )
+            center_pixel_y = (
+                torch.argmax(
+                    (interval_y[batch.batch[mask_t]] > x_t[:, 1].unsqueeze(-1)).float(),
+                    dim=1,
+                ).type(torch.LongTensor)
+                - 2
+            )
+
+            # Compute pixel boundaries
+            idx_x_low = center_pixel_y + self.local_map_resolution_half
+            idx_x_high = (
+                center_pixel_y
+                + self.local_map_resolution_half
+                + self.local_map_resolution
+                + 1
+            )
+            idx_y_low = center_pixel_x + self.local_map_resolution_half
+            idx_y_high = (
+                center_pixel_x
+                + self.local_map_resolution_half
+                + self.local_map_resolution
+                + 1
+            )
+
+            # Extract local maps for all agents in current time-step
+            for node_idx, graph_idx in enumerate(batch.batch[mask_t]):
+                if center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2:
+                    u_local[node_idx] = torch.zeros(
+                        (self.local_map_resolution + 1, self.local_map_resolution + 1)
+                    )
+                else:
+                    u_local[node_idx] = batch.u[
+                        graph_idx,
+                        idx_x_low[node_idx] : idx_x_high[node_idx],
+                        idx_y_low[node_idx] : idx_y_high[node_idx],
+                    ]
+
+            # Perform map encoding
+            u = self.map_encoder(u_local)
 
             #######################
             # Training 1/2        #
@@ -247,14 +360,17 @@ class SequentialModule(pl.LightningModule):
                     edge_attr=edge_attr,
                     batch=batch.batch[mask_t],
                     hidden=hidden_in,
-                    u=map_encoding
+                    u=u,
                 )
                 # Update hidden states
                 h_node[:, mask_t] = h_t[0]
                 h_edge[:, mask_t] = h_t[1]
 
             else:  # LSTM
-                hidden_in = ((h_node[:, mask_t], c_node[:, mask_t]), (h_edge[:, mask_t], c_edge[:, mask_t]))
+                hidden_in = (
+                    (h_node[:, mask_t], c_node[:, mask_t]),
+                    (h_edge[:, mask_t], c_edge[:, mask_t]),
+                )
 
                 delta_x, (h_node_out, h_edge_out) = self.model(
                     x=x_t,
@@ -262,7 +378,7 @@ class SequentialModule(pl.LightningModule):
                     edge_attr=edge_attr,
                     batch=batch.batch[mask_t],
                     hidden=hidden_in,
-                    u=map_encoding
+                    u=u,
                 )
                 h_node[:, mask_t] = h_node_out[0]
                 c_node[:, mask_t] = h_node_out[1]
@@ -311,7 +427,9 @@ class SequentialModule(pl.LightningModule):
                 edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
 
             # Remove duplicates and sort
-            edge_index = torch_geometric.utils.coalesce(edge_index, num_nodes=x_t.shape[0])
+            edge_index = torch_geometric.utils.coalesce(
+                edge_index, num_nodes=x_t.shape[0]
+            )
 
             # Create edge_attr if specified
             if self.edge_weight:
@@ -321,7 +439,68 @@ class SequentialModule(pl.LightningModule):
                 edge_attr = edge_attr.type_as(batch.x)
 
             if self.edge_dropout > 0:
-                edge_index, edge_attr = dropout_adj(edge_index=edge_index, edge_attr=edge_attr, p=self.edge_dropout)
+                edge_index, edge_attr = dropout_adj(
+                    edge_index=edge_index, edge_attr=edge_attr, p=self.edge_dropout
+                )
+
+            #######################
+            # Map encoding 2/2    #
+            #######################
+
+            # Allocate local maps
+            u_local = torch.zeros(
+                (
+                    x_t.size(0),
+                    self.local_map_resolution + 1,
+                    self.local_map_resolution + 1,
+                )
+            )
+
+            # Find closest pixels in x and y directions
+            center_pixel_x = (
+                torch.argmax(
+                    (interval_x[batch.batch] > x_t[:, 0].unsqueeze(-1)).float(), dim=1
+                ).type(torch.LongTensor)
+                - 1
+            )
+            center_pixel_y = (
+                torch.argmax(
+                    (interval_y[batch.batch] > x_t[:, 1].unsqueeze(-1)).float(), dim=1
+                ).type(torch.LongTensor)
+                - 2
+            )
+
+            # Compute pixel boundaries
+            idx_x_low = center_pixel_y + self.local_map_resolution_half
+            idx_x_high = (
+                center_pixel_y
+                + self.local_map_resolution_half
+                + self.local_map_resolution
+                + 1
+            )
+            idx_y_low = center_pixel_x + self.local_map_resolution_half
+            idx_y_high = (
+                center_pixel_x
+                + self.local_map_resolution_half
+                + self.local_map_resolution
+                + 1
+            )
+
+            # Extract local maps for all agents in current time-step
+            for node_idx, graph_idx in enumerate(batch.batch):
+                if center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2:
+                    u_local[node_idx] = torch.zeros(
+                        (self.local_map_resolution + 1, self.local_map_resolution + 1)
+                    )
+                else:
+                    u_local[node_idx] = batch.u[
+                        graph_idx,
+                        idx_x_low[node_idx] : idx_x_high[node_idx],
+                        idx_y_low[node_idx] : idx_y_high[node_idx],
+                    ]
+
+            # Perform map encoding
+            u = self.map_encoder(u_local)
 
             #######################
             # Training 2/2        #
@@ -345,7 +524,7 @@ class SequentialModule(pl.LightningModule):
                     edge_attr=edge_attr,
                     batch=batch.batch,
                     hidden=(h_node, h_edge),
-                    u=map_encoding
+                    u=u,
                 )
             else:
                 delta_x, ((h_node, c_node), (h_edge, c_edge)) = self.model(
@@ -354,7 +533,7 @@ class SequentialModule(pl.LightningModule):
                     edge_attr=edge_attr,
                     batch=batch.batch,
                     hidden=((h_node, c_node), (h_edge, c_edge)),
-                    u=map_encoding
+                    u=u,
                 )
 
             vel = delta_x[:, [0, 1]]
@@ -388,10 +567,6 @@ class SequentialModule(pl.LightningModule):
         vel_loss = self.train_vel_loss(
             y_predictions[:, :, [2, 3]][loss_mask], y_target[:, :, [2, 3]][loss_mask]
         )
-        # yaw_loss = self.train_yaw_loss(
-        #     y_predictions[:, :self.training_horizon, [5, 6, 7, 8]][loss_mask],
-        #     y_target[:, :self.training_horizon, [5, 6, 7, 8]][loss_mask]
-        # )
 
         self.log(
             "train_fde_loss",
@@ -414,8 +589,8 @@ class SequentialModule(pl.LightningModule):
             on_epoch=True,
             batch_size=loss_mask.sum().item(),
         )
-        # self.log("train_yaw_loss", yaw_loss, on_step=True, on_epoch=True, batch_size=loss_mask.sum().item())
-        loss = ade_loss #+ vel_loss
+
+        loss = ade_loss
 
         self.log(
             "train_total_loss",
@@ -454,7 +629,7 @@ class SequentialModule(pl.LightningModule):
         batch.type = batch.type[type_mask]
 
         # Update input using prediction horizon
-        batch.x = batch.x[:, :self.prediction_horizon]
+        batch.x = batch.x[:, : self.prediction_horizon]
 
         # Reduction: Limit to x-y predictions
         batch.x = batch.x[:, :, self.node_indices]
@@ -464,9 +639,11 @@ class SequentialModule(pl.LightningModule):
 
         # Allocate target/prediction tensors
         n_nodes = batch.num_nodes
-        y_hat = torch.zeros((self.prediction_horizon-11, n_nodes, self.out_features))
+        y_hat = torch.zeros((self.prediction_horizon - 11, n_nodes, self.out_features))
         y_hat = y_hat.type_as(batch.x)
-        y_target = torch.zeros((self.prediction_horizon-11, n_nodes, self.out_features))
+        y_target = torch.zeros(
+            (self.prediction_horizon - 11, n_nodes, self.out_features)
+        )
         y_target = y_target.type_as(batch.x)
         batch.x = batch.x[:, :, :-1]
         # static_features = torch.cat(
@@ -479,22 +656,63 @@ class SequentialModule(pl.LightningModule):
         # Initial hidden state
         if self.rnn_type == "GRU":
             h_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
-            h_edge = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_edge_size))
+            h_edge = torch.zeros(
+                (self.model.num_layers, n_nodes, self.model.rnn_edge_size)
+            )
             h_node = h_node.type_as(batch.x)
             h_edge = h_edge.type_as(batch.x)
             c_node, c_edge = None, None
         else:
             h_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
-            h_edge = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_edge_size))
+            h_edge = torch.zeros(
+                (self.model.num_layers, n_nodes, self.model.rnn_edge_size)
+            )
             h_node = h_node.type_as(batch.x)
             h_edge = h_edge.type_as(batch.x)
             c_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
-            c_edge = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_edge_size))
+            c_edge = torch.zeros(
+                (self.model.num_layers, n_nodes, self.model.rnn_edge_size)
+            )
             c_node = c_node.type_as(batch.x)
             c_edge = c_edge.type_as(batch.x)
 
-        # Encode map features
-        map_encoding = self.map_encoder(batch.u) if self.map_encoder is not None else None
+        ######################
+        # Map preparation    #
+        ######################
+
+        # Zero pad each map for edge-cases
+        batch.u = nn.functional.pad(
+            batch.u,
+            (
+                self.local_map_resolution,
+                self.local_map_resolution,
+                self.local_map_resolution,
+                self.local_map_resolution,
+            ),
+        )
+        # Extract centre locations of each scene
+        center_values = batch.loc[:, :2]
+        # Compute x/y-ranges
+        map_ranges = torch.vstack(
+            [
+                center_values[:, 0] - 150 / 2,
+                center_values[:, 0] + 150 / 2,
+                center_values[:, 1] - 150 / 2,
+                center_values[:, 1] + 150 / 2,
+            ]
+        ).T
+        # Allocate and compute all values in x/y-ranges for localisation
+        interval_x = torch.zeros((batch.num_graphs, 150 * 2 + 1))
+        interval_y = torch.zeros((batch.num_graphs, 150 * 2 + 1))
+        interval_x = interval_x.type_as(batch.x)
+        interval_y = interval_y.type_as(batch.x)
+        for i in range(batch.num_graphs):
+            interval_x[i] = torch.linspace(
+                map_ranges[i, 0], map_ranges[i, 1], 150 * 2 + 1
+            )
+            interval_y[i] = torch.linspace(
+                map_ranges[i, 2], map_ranges[i, 3], 150 * 2 + 1
+            )
 
         ######################
         # History            #
@@ -527,7 +745,9 @@ class SequentialModule(pl.LightningModule):
                 edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
 
             # Remove duplicates and sort
-            edge_index = torch_geometric.utils.coalesce(edge_index, num_nodes=x_t.shape[0])
+            edge_index = torch_geometric.utils.coalesce(
+                edge_index, num_nodes=x_t.shape[0]
+            )
 
             # Create edge_attr if specified
             if self.edge_weight:
@@ -535,6 +755,67 @@ class SequentialModule(pl.LightningModule):
                 row, col = edge_index
                 edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
                 edge_attr = edge_attr.type_as(batch.x)
+
+            #######################
+            # Map encoding 1/2    #
+            #######################
+
+            # Allocate local maps
+            u_local = torch.zeros(
+                (
+                    x_t.size(0),
+                    self.local_map_resolution + 1,
+                    self.local_map_resolution + 1,
+                )
+            )
+
+            # Find closest pixels in x and y directions
+            center_pixel_x = (
+                torch.argmax(
+                    (interval_x[batch.batch[mask_t]] > x_t[:, 0].unsqueeze(-1)).float(),
+                    dim=1,
+                ).type(torch.LongTensor)
+                - 1
+            )
+            center_pixel_y = (
+                torch.argmax(
+                    (interval_y[batch.batch[mask_t]] > x_t[:, 1].unsqueeze(-1)).float(),
+                    dim=1,
+                ).type(torch.LongTensor)
+                - 2
+            )
+
+            # Compute pixel boundaries
+            idx_x_low = center_pixel_y + self.local_map_resolution_half
+            idx_x_high = (
+                center_pixel_y
+                + self.local_map_resolution_half
+                + self.local_map_resolution
+                + 1
+            )
+            idx_y_low = center_pixel_x + self.local_map_resolution_half
+            idx_y_high = (
+                center_pixel_x
+                + self.local_map_resolution_half
+                + self.local_map_resolution
+                + 1
+            )
+
+            # Extract local maps for all agents in current time-step
+            for node_idx, graph_idx in enumerate(batch.batch[mask_t]):
+                if center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2:
+                    u_local[node_idx] = torch.zeros(
+                        (self.local_map_resolution + 1, self.local_map_resolution + 1)
+                    )
+                else:
+                    u_local[node_idx] = batch.u[
+                        graph_idx,
+                        idx_x_low[node_idx] : idx_x_high[node_idx],
+                        idx_y_low[node_idx] : idx_y_high[node_idx],
+                    ]
+
+            # Perform map encoding
+            u = self.map_encoder(u_local)
 
             ######################
             # Validation 1/2     #
@@ -561,21 +842,24 @@ class SequentialModule(pl.LightningModule):
                     edge_attr=edge_attr,
                     batch=batch.batch[mask_t],
                     hidden=hidden_in,
-                    u=map_encoding
+                    u=u,
                 )
                 # Update hidden states
                 h_node[:, mask_t] = h_t[0]
                 h_edge[:, mask_t] = h_t[1]
 
             else:  # LSTM
-                hidden_in = ((h_node[:, mask_t], c_node[:, mask_t]), (h_edge[:, mask_t], c_edge[:, mask_t]))
+                hidden_in = (
+                    (h_node[:, mask_t], c_node[:, mask_t]),
+                    (h_edge[:, mask_t], c_edge[:, mask_t]),
+                )
                 delta_x, (h_node_out, h_edge_out) = self.model(
                     x=x_t,
                     edge_index=edge_index,
                     edge_attr=edge_attr,
                     batch=batch.batch[mask_t],
                     hidden=hidden_in,
-                    u=map_encoding
+                    u=u,
                 )
                 h_node[:, mask_t] = h_node_out[0]
                 c_node[:, mask_t] = h_node_out[1]
@@ -596,7 +880,7 @@ class SequentialModule(pl.LightningModule):
         # Future             #
         ######################
 
-        for t in range(11, self.prediction_horizon-1):
+        for t in range(11, self.prediction_horizon - 1):
 
             ######################
             # Graph construction #
@@ -621,7 +905,9 @@ class SequentialModule(pl.LightningModule):
                 edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
 
             # Remove duplicates and sort
-            edge_index = torch_geometric.utils.coalesce(edge_index, num_nodes=x_t.shape[0])
+            edge_index = torch_geometric.utils.coalesce(
+                edge_index, num_nodes=x_t.shape[0]
+            )
 
             # Create edge_attr if specified
             if self.edge_weight:
@@ -629,6 +915,65 @@ class SequentialModule(pl.LightningModule):
                 row, col = edge_index
                 edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
                 edge_attr = edge_attr.type_as(batch.x)
+
+            #######################
+            # Map encoding 2/2    #
+            #######################
+
+            # Allocate local maps
+            u_local = torch.zeros(
+                (
+                    x_t.size(0),
+                    self.local_map_resolution + 1,
+                    self.local_map_resolution + 1,
+                )
+            )
+
+            # Find closest pixels in x and y directions
+            center_pixel_x = (
+                torch.argmax(
+                    (interval_x[batch.batch] > x_t[:, 0].unsqueeze(-1)).float(), dim=1
+                ).type(torch.LongTensor)
+                - 1
+            )
+            center_pixel_y = (
+                torch.argmax(
+                    (interval_y[batch.batch] > x_t[:, 1].unsqueeze(-1)).float(), dim=1
+                ).type(torch.LongTensor)
+                - 2
+            )
+
+            # Compute pixel boundaries
+            idx_x_low = center_pixel_y + self.local_map_resolution_half
+            idx_x_high = (
+                center_pixel_y
+                + self.local_map_resolution_half
+                + self.local_map_resolution
+                + 1
+            )
+            idx_y_low = center_pixel_x + self.local_map_resolution_half
+            idx_y_high = (
+                center_pixel_x
+                + self.local_map_resolution_half
+                + self.local_map_resolution
+                + 1
+            )
+
+            # Extract local maps for all agents in current time-step
+            for node_idx, graph_idx in enumerate(batch.batch):
+                if center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2:
+                    u_local[node_idx] = torch.zeros(
+                        (self.local_map_resolution + 1, self.local_map_resolution + 1)
+                    )
+                else:
+                    u_local[node_idx] = batch.u[
+                        graph_idx,
+                        idx_x_low[node_idx] : idx_x_high[node_idx],
+                        idx_y_low[node_idx] : idx_y_high[node_idx],
+                    ]
+
+            # Perform map encoding
+            u = self.map_encoder(u_local)
 
             ######################
             # Validation 2/2     #
@@ -652,7 +997,7 @@ class SequentialModule(pl.LightningModule):
                     edge_attr=edge_attr,
                     batch=batch.batch,
                     hidden=(h_node, h_edge),
-                    u=map_encoding
+                    u=u,
                 )
             else:
                 delta_x, ((h_node, c_node), (h_edge, c_edge)) = self.model(
@@ -661,7 +1006,7 @@ class SequentialModule(pl.LightningModule):
                     edge_attr=edge_attr,
                     batch=batch.batch,
                     hidden=((h_node, c_node), (h_edge, c_edge)),
-                    u=map_encoding
+                    u=u,
                 )
 
             vel = delta_x[:, [0, 1]]
@@ -694,7 +1039,10 @@ class SequentialModule(pl.LightningModule):
             y_hat[-1, fde_ttp_mask][:, [0, 1]], y_target[-1, fde_ttp_mask][:, [0, 1]]
         )
         ade_ttp_mask = torch.logical_and(
-            val_mask, batch.tracks_to_predict.expand((self.prediction_horizon-11, mask.size(0)))
+            val_mask,
+            batch.tracks_to_predict.expand(
+                (self.prediction_horizon - 11, mask.size(0))
+            ),
         )
         ade_ttp_loss = self.val_ade_loss(
             y_hat[:, :, [0, 1]][ade_ttp_mask], y_target[:, :, [0, 1]][ade_ttp_mask]
@@ -747,8 +1095,8 @@ class SequentialModule(pl.LightningModule):
 
         # Allocate target/prediction tensors
         n_nodes = batch.num_nodes
-        y_hat = torch.zeros((prediction_horizon-1, n_nodes, self.node_features))
-        y_target = torch.zeros((prediction_horizon-1, n_nodes, self.node_features))
+        y_hat = torch.zeros((prediction_horizon - 1, n_nodes, self.node_features))
+        y_target = torch.zeros((prediction_horizon - 1, n_nodes, self.node_features))
         # Ensure device placement
         y_hat = y_hat.type_as(batch.x)
         y_target = y_target.type_as(batch.x)
@@ -763,22 +1111,63 @@ class SequentialModule(pl.LightningModule):
         # Initial hidden state
         if self.rnn_type == "GRU":
             h_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
-            h_edge = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_edge_size))
+            h_edge = torch.zeros(
+                (self.model.num_layers, n_nodes, self.model.rnn_edge_size)
+            )
             h_node = h_node.type_as(batch.x)
             h_edge = h_edge.type_as(batch.x)
             c_node, c_edge = None, None
         else:
             h_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
-            h_edge = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_edge_size))
+            h_edge = torch.zeros(
+                (self.model.num_layers, n_nodes, self.model.rnn_edge_size)
+            )
             h_node = h_node.type_as(batch.x)
             h_edge = h_edge.type_as(batch.x)
             c_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
-            c_edge = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_edge_size))
+            c_edge = torch.zeros(
+                (self.model.num_layers, n_nodes, self.model.rnn_edge_size)
+            )
             c_node = c_node.type_as(batch.x)
             c_edge = c_edge.type_as(batch.x)
 
-        # Encode map features
-        map_encoding = self.map_encoder(batch.u) if self.map_encoder is not None else None
+        ######################
+        # Map preparation    #
+        ######################
+
+        # Zero pad each map for edge-cases
+        batch.u = nn.functional.pad(
+            batch.u,
+            (
+                self.local_map_resolution,
+                self.local_map_resolution,
+                self.local_map_resolution,
+                self.local_map_resolution,
+            ),
+        )
+        # Extract centre locations of each scene
+        center_values = batch.loc[:, :2]
+        # Compute x/y-ranges
+        map_ranges = torch.vstack(
+            [
+                center_values[:, 0] - 150 / 2,
+                center_values[:, 0] + 150 / 2,
+                center_values[:, 1] - 150 / 2,
+                center_values[:, 1] + 150 / 2,
+            ]
+        ).T
+        # Allocate and compute all values in x/y-ranges for localisation
+        interval_x = torch.zeros((batch.num_graphs, 150 * 2 + 1))
+        interval_y = torch.zeros((batch.num_graphs, 150 * 2 + 1))
+        interval_x = interval_x.type_as(batch.x)
+        interval_y = interval_y.type_as(batch.x)
+        for i in range(batch.num_graphs):
+            interval_x[i] = torch.linspace(
+                map_ranges[i, 0], map_ranges[i, 1], 150 * 2 + 1
+            )
+            interval_y[i] = torch.linspace(
+                map_ranges[i, 2], map_ranges[i, 3], 150 * 2 + 1
+            )
 
         ######################
         # History            #
@@ -793,13 +1182,12 @@ class SequentialModule(pl.LightningModule):
             mask_t = mask[:, t]
             # x_t = torch.cat([batch.x[mask_t, t, :], batch.type[mask_t]], dim=1)
             x_t = batch.x[mask_t, t, :]
-            batch_t = batch.batch[mask_t]
 
             # Construct edges
             edge_index = torch_geometric.nn.radius_graph(
                 x=x_t[:, :2],
                 r=self.min_dist,
-                batch=batch_t,
+                batch=batch.batch[mask_t],
                 loop=self.self_loop,
                 max_num_neighbors=self.n_neighbours,
                 flow="source_to_target",
@@ -811,7 +1199,9 @@ class SequentialModule(pl.LightningModule):
                 edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
 
             # Remove duplicates and sort
-            edge_index = torch_geometric.utils.coalesce(edge_index, num_nodes=x_t.shape[0])
+            edge_index = torch_geometric.utils.coalesce(
+                edge_index, num_nodes=x_t.shape[0]
+            )
 
             # Create edge_attr if specified
             if self.edge_weight:
@@ -820,9 +1210,66 @@ class SequentialModule(pl.LightningModule):
                 edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
                 edge_attr = edge_attr.type_as(batch.x)
 
-            # if self.edge_dropout > 0:
-            #     edge_index, edge_attr = dropout_adj(edge_index=edge_index, edge_attr=edge_attr, p=self.edge_dropout,
-            #                                         training=True)
+            #######################
+            # Map encoding 1/2    #
+            #######################
+
+            # Allocate local maps
+            u_local = torch.zeros(
+                (
+                    x_t.size(0),
+                    self.local_map_resolution + 1,
+                    self.local_map_resolution + 1,
+                )
+            )
+
+            # Find closest pixels in x and y directions
+            center_pixel_x = (
+                torch.argmax(
+                    (interval_x[batch.batch[mask_t]] > x_t[:, 0].unsqueeze(-1)).float(),
+                    dim=1,
+                ).type(torch.LongTensor)
+                - 1
+            )
+            center_pixel_y = (
+                torch.argmax(
+                    (interval_y[batch.batch[mask_t]] > x_t[:, 1].unsqueeze(-1)).float(),
+                    dim=1,
+                ).type(torch.LongTensor)
+                - 2
+            )
+
+            # Compute pixel boundaries
+            idx_x_low = center_pixel_y + self.local_map_resolution_half
+            idx_x_high = (
+                center_pixel_y
+                + self.local_map_resolution_half
+                + self.local_map_resolution
+                + 1
+            )
+            idx_y_low = center_pixel_x + self.local_map_resolution_half
+            idx_y_high = (
+                center_pixel_x
+                + self.local_map_resolution_half
+                + self.local_map_resolution
+                + 1
+            )
+
+            # Extract local maps for all agents in current time-step
+            for node_idx, graph_idx in enumerate(batch.batch[mask_t]):
+                if center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2:
+                    u_local[node_idx] = torch.zeros(
+                        (self.local_map_resolution + 1, self.local_map_resolution + 1)
+                    )
+                else:
+                    u_local[node_idx] = batch.u[
+                        graph_idx,
+                        idx_x_low[node_idx] : idx_x_high[node_idx],
+                        idx_y_low[node_idx] : idx_y_high[node_idx],
+                    ]
+
+            # Perform map encoding
+            u = self.map_encoder(u_local)
 
             ######################
             # Predictions 1/2    #
@@ -849,21 +1296,24 @@ class SequentialModule(pl.LightningModule):
                     edge_attr=edge_attr,
                     batch=batch.batch[mask_t],
                     hidden=hidden_in,
-                    u=map_encoding
+                    u=u,
                 )
                 # Update hidden states
                 h_node[:, mask_t] = h_t[0]
                 h_edge[:, mask_t] = h_t[1]
 
             else:  # LSTM
-                hidden_in = ((h_node[:, mask_t], c_node[:, mask_t]), (h_edge[:, mask_t], c_edge[:, mask_t]))
+                hidden_in = (
+                    (h_node[:, mask_t], c_node[:, mask_t]),
+                    (h_edge[:, mask_t], c_edge[:, mask_t]),
+                )
                 delta_x, (h_node_out, h_edge_out) = self.model(
                     x=x_t,
                     edge_index=edge_index,
                     edge_attr=edge_attr,
                     batch=batch.batch[mask_t],
                     hidden=hidden_in,
-                    u=map_encoding
+                    u=u,
                 )
                 h_node[:, mask_t] = h_node_out[0]
                 c_node[:, mask_t] = h_node_out[1]
@@ -886,7 +1336,7 @@ class SequentialModule(pl.LightningModule):
         # Future             #
         ######################
 
-        for t in range(11, (prediction_horizon-1)):
+        for t in range(11, (prediction_horizon - 1)):
 
             ######################
             # Graph construction #
@@ -910,7 +1360,9 @@ class SequentialModule(pl.LightningModule):
                 edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
 
             # Remove duplicates and sort
-            edge_index = torch_geometric.utils.coalesce(edge_index, num_nodes=x_t.shape[0])
+            edge_index = torch_geometric.utils.coalesce(
+                edge_index, num_nodes=x_t.shape[0]
+            )
 
             # Create edge_attr if specified
             if self.edge_weight:
@@ -919,9 +1371,64 @@ class SequentialModule(pl.LightningModule):
                 edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
                 edge_attr = edge_attr.type_as(batch.x)
 
-            # if self.edge_dropout > 0:
-            #     edge_index, edge_attr = dropout_adj(edge_index=edge_index, edge_attr=edge_attr, p=self.edge_dropout,
-            #                                         training=True)
+            #######################
+            # Map encoding 2/2    #
+            #######################
+
+            # Allocate local maps
+            u_local = torch.zeros(
+                (
+                    x_t.size(0),
+                    self.local_map_resolution + 1,
+                    self.local_map_resolution + 1,
+                )
+            )
+
+            # Find closest pixels in x and y directions
+            center_pixel_x = (
+                torch.argmax(
+                    (interval_x[batch.batch] > x_t[:, 0].unsqueeze(-1)).float(), dim=1
+                ).type(torch.LongTensor)
+                - 1
+            )
+            center_pixel_y = (
+                torch.argmax(
+                    (interval_y[batch.batch] > x_t[:, 1].unsqueeze(-1)).float(), dim=1
+                ).type(torch.LongTensor)
+                - 2
+            )
+
+            # Compute pixel boundaries
+            idx_x_low = center_pixel_y + self.local_map_resolution_half
+            idx_x_high = (
+                center_pixel_y
+                + self.local_map_resolution_half
+                + self.local_map_resolution
+                + 1
+            )
+            idx_y_low = center_pixel_x + self.local_map_resolution_half
+            idx_y_high = (
+                center_pixel_x
+                + self.local_map_resolution_half
+                + self.local_map_resolution
+                + 1
+            )
+
+            # Extract local maps for all agents in current time-step
+            for node_idx, graph_idx in enumerate(batch.batch):
+                if center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2:
+                    u_local[node_idx] = torch.zeros(
+                        (self.local_map_resolution + 1, self.local_map_resolution + 1)
+                    )
+                else:
+                    u_local[node_idx] = batch.u[
+                        graph_idx,
+                        idx_x_low[node_idx] : idx_x_high[node_idx],
+                        idx_y_low[node_idx] : idx_y_high[node_idx],
+                    ]
+
+            # Perform map encoding
+            u = self.map_encoder(u_local)
 
             ######################
             # Predictions 2/2    #
@@ -945,7 +1452,7 @@ class SequentialModule(pl.LightningModule):
                     edge_attr=edge_attr,
                     batch=batch.batch,
                     hidden=(h_node, h_edge),
-                    u=map_encoding
+                    u=u,
                 )
             else:
                 delta_x, ((h_node, c_node), (h_edge, c_edge)) = self.model(
@@ -954,7 +1461,7 @@ class SequentialModule(pl.LightningModule):
                     edge_attr=edge_attr,
                     batch=batch.batch,
                     hidden=((h_node, c_node), (h_edge, c_edge)),
-                    u=map_encoding
+                    u=u,
                 )
 
             vel = delta_x[:, self.pos_index]
@@ -973,7 +1480,6 @@ class SequentialModule(pl.LightningModule):
         return torch.optim.Adam(
             self.parameters(), lr=self.lr, weight_decay=self.weight_decay
         )
-
 
 
 class ConstantPhysicalBaselineModule(pl.LightningModule):
@@ -1020,7 +1526,7 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
         batch.type = batch.type[type_mask]
 
         # Update input using prediction horizon
-        batch.x = batch.x[:, :self.prediction_horizon]
+        batch.x = batch.x[:, : self.prediction_horizon]
 
         # Limit to x, y, x_vel, y_vel
         batch.x = batch.x[:, :, [0, 1, 3, 4, 10]]
@@ -1030,8 +1536,10 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
 
         # Allocate target/prediction tensors
         n_nodes = batch.num_nodes
-        y_hat = torch.zeros((self.prediction_horizon-11, n_nodes, self.out_features))
-        y_target = torch.zeros((self.prediction_horizon-11, n_nodes, self.out_features))
+        y_hat = torch.zeros((self.prediction_horizon - 11, n_nodes, self.out_features))
+        y_target = torch.zeros(
+            (self.prediction_horizon - 11, n_nodes, self.out_features)
+        )
         # Remove valid flag from features
         batch.x = batch.x[:, :, :-1]
         # Find valid agents at time t=11
@@ -1048,7 +1556,7 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
         y_hat[0, :, :] = predicted_graph[:, : self.out_features]
         y_target[0, :, :] = batch.x[:, 11, : self.out_features]
 
-        for t in range(11, self.prediction_horizon-1):
+        for t in range(11, self.prediction_horizon - 1):
             predicted_pos += delta_pos
             predicted_graph = torch.cat([predicted_pos, last_vel], dim=1)
             y_hat[t - 10, :, :] = predicted_graph[:, : self.out_features]
@@ -1075,7 +1583,10 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
             y_hat[-1, fde_ttp_mask][:, [0, 1]], y_target[-1, fde_ttp_mask][:, [0, 1]]
         )
         ade_ttp_mask = torch.logical_and(
-            val_mask, batch.tracks_to_predict.expand((self.prediction_horizon - 11, mask.size(0)))
+            val_mask,
+            batch.tracks_to_predict.expand(
+                (self.prediction_horizon - 11, mask.size(0))
+            ),
         )
         ade_ttp_loss = self.val_ade_loss(
             y_hat[:, :, [0, 1]][ade_ttp_mask], y_target[:, :, [0, 1]][ade_ttp_mask]
@@ -1119,7 +1630,7 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
         batch.type = batch.type[type_mask]
 
         # Update input using prediction horizon
-        batch.x = batch.x[:, :self.prediction_horizon]
+        batch.x = batch.x[:, : self.prediction_horizon]
 
         # Limit to x, y, x_vel, y_vel
         batch.x = batch.x[:, :, [0, 1, 3, 4, 10]]
@@ -1129,7 +1640,7 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
 
         # Allocate target/prediction tensors
         n_nodes = batch.num_nodes
-        y_hat = torch.zeros((self.prediction_horizon-1, n_nodes, 4))
+        y_hat = torch.zeros((self.prediction_horizon - 1, n_nodes, 4))
         # Remove valid flag from features
         batch.x = batch.x[:, :, :-1]
 

@@ -1,0 +1,25 @@
+defaults:
+  - datamodule: sequential
+  - model: ???
+  - regressor: sequential
+  - trainer: sequential
+  - _self_
+
+logger:
+  offline: False
+  version: ???
+  project: ???
+
+misc:
+  seed: 1
+  model_type: ???
+  dm_type: SequentialNBodyDataModule
+  regressor_type: SequentialModule
+  train: True
+  log_freq: 10
+
+hydra:
+  output_subdir: null
+  run:
+    dir: .
+
