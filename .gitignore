@@ -98,6 +98,7 @@ todo.txt
 /src/predictions/raw_preds/waymo/baseline/sequence_001.pt
 /src/predictions/
 /jobfiles/
+/jobfile_gmprnn/
 *.err
 *.out
 *.log

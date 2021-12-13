@@ -1404,11 +1404,12 @@ class convolutional_model(nn.Module):
 class road_encoder(nn.Module):
     def __init__(self, width: int = 300, hidden_size: int = 128):
         super(road_encoder, self).__init__()
-        hidden_channels = [10, 10, 10, 1]
+        hidden_channels = [10, 20, 10, 1]
         strides = [2, 2, 1, 1]
         filters = [5, 5, 5, 3]
 
         self.conv_modules = nn.ModuleList()
+        self.bn_modules = nn.ModuleList()
         x_dummy = torch.ones((1, 1, width, width))
 
         for i in range(4):
@@ -1418,16 +1419,21 @@ class road_encoder(nn.Module):
                 kernel_size=filters[i],
                 stride=strides[i]
             ))
+            self.bn_modules.append(nn.BatchNorm2d(hidden_channels[i]))
             x_dummy = self.conv_modules[i](x_dummy)
-        self.fc = nn.Linear(in_features=x_dummy.numel(), out_features=hidden_size)
+
+        self.fc_1 = nn.Linear(in_features=x_dummy.numel(), out_features=hidden_size)
+        self.fc_2 = nn.Linear(in_features=hidden_size, out_features=hidden_size)
+
 
     def forward(self, u):
         # Add single color channel dimension
         u = u.unsqueeze(1)
-        for conv_layer in self.conv_modules:
-            u = F.leaky_relu(conv_layer(u))
-
-        out = self.fc(torch.flatten(u, start_dim=1))
+        for i, conv_layer in enumerate(self.conv_modules):
+            u = conv_layer(u)
+            u = F.leaky_relu(self.bn_modules[i](u))
+        u = F.leaky_relu(self.fc_1(torch.flatten(u, start_dim=1)))
+        out = self.fc_2(u)
         return out
 
 
@@ -1491,12 +1497,9 @@ class rnn_message_passing_global(nn.Module):
             ),
         )
 
-    def forward(self, x, edge_index, edge_attr, u, hidden: tuple, batch=None):
+    def forward(self, x, edge_index, edge_attr, u, hidden: tuple, batch):
         # Unpack hidden states
         h_node, h_edge = hidden
-
-        # Perform edge dropout
-        # edge_index, edge_attr = dropout_adj(edge_index=edge_index, edge_attr=edge_attr, p=self.dropout)
 
         # Aggregate and encode edge histories. Shape [n_nodes, rnn_edge_size]
         edge_attr_encoded, h_edge = self.edge_history_encoder(edge_attr=edge_attr, hidden=h_edge, edge_index=edge_index,

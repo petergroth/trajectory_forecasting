@@ -63,7 +63,9 @@ class SequentialModule(pl.LightningModule):
         self.model = eval(model_type)(**model_dict)
 
         # Instantiate map encoder
-        self.map_encoder = road_encoder(width=300, hidden_size=model_dict["map_encoding_size"])
+
+        self.map_encoder = road_encoder(width=300, hidden_size=model_dict["map_encoding_size"]) \
+            if "map_encoding_size" in model_dict else None
 
         # Learning parameters
         self.normalise = normalise
@@ -168,7 +170,7 @@ class SequentialModule(pl.LightningModule):
             c_edge = c_edge.type_as(batch.x)
 
         # Encode map features
-        map_encoding = self.map_encoder(batch.u)
+        map_encoding = self.map_encoder(batch.u) if self.map_encoder is not None else None
 
         ######################
         # History            #
@@ -201,6 +203,8 @@ class SequentialModule(pl.LightningModule):
                 max_num_neighbors=self.n_neighbours,
                 flow="source_to_target",
             )
+
+            edge_index, _ = torch_geometric.utils.add_self_loops(edge_index, num_nodes=x_t.shape[0])
 
             if self.undirected:
                 edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
@@ -300,6 +304,8 @@ class SequentialModule(pl.LightningModule):
                 max_num_neighbors=self.n_neighbours,
                 flow="source_to_target",
             )
+
+            edge_index, _ = torch_geometric.utils.add_self_loops(edge_index, num_nodes=x_t.shape[0])
 
             if self.undirected:
                 edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
@@ -488,7 +494,7 @@ class SequentialModule(pl.LightningModule):
             c_edge = c_edge.type_as(batch.x)
 
         # Encode map features
-        map_encoding = self.map_encoder(batch.u)
+        map_encoding = self.map_encoder(batch.u) if self.map_encoder is not None else None
 
         ######################
         # History            #
@@ -514,6 +520,8 @@ class SequentialModule(pl.LightningModule):
                 max_num_neighbors=self.n_neighbours,
                 flow="source_to_target",
             )
+
+            edge_index, _ = torch_geometric.utils.add_self_loops(edge_index, num_nodes=x_t.shape[0])
 
             if self.undirected:
                 edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
@@ -606,6 +614,8 @@ class SequentialModule(pl.LightningModule):
                 max_num_neighbors=self.n_neighbours,
                 flow="source_to_target",
             )
+
+            edge_index, _ = torch_geometric.utils.add_self_loops(edge_index, num_nodes=x_t.shape[0])
 
             if self.undirected:
                 edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
@@ -768,7 +778,7 @@ class SequentialModule(pl.LightningModule):
             c_edge = c_edge.type_as(batch.x)
 
         # Encode map features
-        map_encoding = self.map_encoder(batch.u)
+        map_encoding = self.map_encoder(batch.u) if self.map_encoder is not None else None
 
         ######################
         # History            #
@@ -794,6 +804,8 @@ class SequentialModule(pl.LightningModule):
                 max_num_neighbors=self.n_neighbours,
                 flow="source_to_target",
             )
+
+            edge_index, _ = torch_geometric.utils.add_self_loops(edge_index, num_nodes=x_t.shape[0])
 
             if self.undirected:
                 edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
@@ -891,6 +903,8 @@ class SequentialModule(pl.LightningModule):
                 max_num_neighbors=self.n_neighbours,
                 flow="source_to_target",
             )
+
+            edge_index, _ = torch_geometric.utils.add_self_loops(edge_index, num_nodes=x_t.shape[0])
 
             if self.undirected:
                 edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
