@@ -1,21 +1,23 @@
 import argparse
+import math
 import os
+import random
+from typing import Union
 
+import hydra
 import pytorch_lightning as pl
 import torch
 import torch_geometric.nn
+import torchmetrics
+from omegaconf import DictConfig, OmegaConf
+from pytorch_lightning.callbacks import RichProgressBar
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.utilities.seed import seed_everything
-from src.data.dataset_waymo import OneStepWaymoDataModule, SequentialWaymoDataModule
-import torchmetrics
 from torch_geometric.data import Batch
+
+from src.data.dataset_waymo import (OneStepWaymoDataModule,
+                                    SequentialWaymoDataModule)
 from src.models.model import *
-import hydra
-from omegaconf import DictConfig, OmegaConf
-from typing import Union
-from pytorch_lightning.callbacks import RichProgressBar
-import math
-import random
 
 
 class OneStepModule(pl.LightningModule):
@@ -1291,7 +1293,7 @@ class SequentialModule(pl.LightningModule):
         )
 
         # Define target values
-        y_target = batch.x[:, 11:, :self.out_features]
+        y_target = batch.x[:, 11:, : self.out_features]
         y_target = y_target.type_as(batch.x)
         y_target = y_target.permute(1, 0, 2)
 
@@ -1938,7 +1940,7 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
         batch.type = batch.type[type_mask]
 
         # Update input using prediction horizon
-        batch.x = batch.x[:, :self.prediction_horizon]
+        batch.x = batch.x[:, : self.prediction_horizon]
 
         # Limit to x, y, x_vel, y_vel
         batch.x = batch.x[:, :, [0, 1, 3, 4, 10]]
@@ -1948,8 +1950,10 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
 
         # Allocate target/prediction tensors
         n_nodes = batch.num_nodes
-        y_hat = torch.zeros((self.prediction_horizon-11, n_nodes, self.out_features))
-        y_target = torch.zeros((self.prediction_horizon-11, n_nodes, self.out_features))
+        y_hat = torch.zeros((self.prediction_horizon - 11, n_nodes, self.out_features))
+        y_target = torch.zeros(
+            (self.prediction_horizon - 11, n_nodes, self.out_features)
+        )
         # Remove valid flag from features
         batch.x = batch.x[:, :, :-1]
         # Find valid agents at time t=11
@@ -1966,7 +1970,7 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
         y_hat[0, :, :] = predicted_graph[:, : self.out_features]
         y_target[0, :, :] = batch.x[:, 11, : self.out_features]
 
-        for t in range(11, self.prediction_horizon-1):
+        for t in range(11, self.prediction_horizon - 1):
             predicted_pos += delta_pos
             predicted_graph = torch.cat([predicted_pos, last_vel], dim=1)
             y_hat[t - 10, :, :] = predicted_graph[:, : self.out_features]
@@ -1993,7 +1997,10 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
             y_hat[-1, fde_ttp_mask][:, [0, 1]], y_target[-1, fde_ttp_mask][:, [0, 1]]
         )
         ade_ttp_mask = torch.logical_and(
-            val_mask, batch.tracks_to_predict.expand((self.prediction_horizon - 11, mask.size(0)))
+            val_mask,
+            batch.tracks_to_predict.expand(
+                (self.prediction_horizon - 11, mask.size(0))
+            ),
         )
         ade_ttp_loss = self.val_ade_loss(
             y_hat[:, :, [0, 1]][ade_ttp_mask], y_target[:, :, [0, 1]][ade_ttp_mask]
@@ -2037,7 +2044,7 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
         batch.type = batch.type[type_mask]
 
         # Update input using prediction horizon
-        batch.x = batch.x[:, :self.prediction_horizon]
+        batch.x = batch.x[:, : self.prediction_horizon]
 
         # Limit to x, y, x_vel, y_vel
         batch.x = batch.x[:, :, [0, 1, 2, 3]]
@@ -2047,7 +2054,7 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
 
         # Allocate target/prediction tensors
         n_nodes = batch.num_nodes
-        y_hat = torch.zeros((self.prediction_horizon-1, n_nodes, 4))
+        y_hat = torch.zeros((self.prediction_horizon - 1, n_nodes, 4))
         # Remove valid flag from features
         batch.x = batch.x[:, :, :-1]
 

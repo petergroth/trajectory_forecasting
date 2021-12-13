@@ -1,21 +1,23 @@
 import argparse
+import math
 import os
+import random
+from typing import Union
 
+import hydra
 import pytorch_lightning as pl
 import torch
 import torch_geometric.nn
+import torchmetrics
+from omegaconf import DictConfig, OmegaConf
+from pytorch_lightning.callbacks import RichProgressBar
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.utilities.seed import seed_everything
-from src.data.dataset_waymo import OneStepWaymoDataModule, SequentialWaymoDataModule
-import torchmetrics
 from torch_geometric.data import Batch
+
+from src.data.dataset_waymo import (OneStepWaymoDataModule,
+                                    SequentialWaymoDataModule)
 from src.models.model import *
-import hydra
-from omegaconf import DictConfig, OmegaConf
-from typing import Union
-from pytorch_lightning.callbacks import RichProgressBar
-import math
-import random
 
 
 class SequentialModule(pl.LightningModule):

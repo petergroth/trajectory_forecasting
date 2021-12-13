@@ -1,6 +1,6 @@
 import argparse
-from src.utils import run_n_simulations, create_gif
 
+from src.utils import create_gif, run_n_simulations
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

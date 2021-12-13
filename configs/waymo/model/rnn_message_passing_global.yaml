@@ -3,9 +3,9 @@ dropout: 0.0
 node_features: 15
 edge_features: 1
 rnn_size: 64
-rnn_edge_size: 8
+rnn_edge_size: 32
 out_features: 4
 num_layers: 2
 rnn_type: LSTM
 latent_edge_features: 32
-map_encoding_size: 128
+map_encoding_size: 32
