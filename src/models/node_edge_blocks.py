@@ -1,21 +1,16 @@
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
+
 import torch
-import torch_geometric.utils
-from torch import nn, Tensor
-from torch_geometric.nn import (
-    GATConv,
-    GCNConv,
-    Sequential,
-    GatedGraphConv,
-    MessagePassing,
-)
-from torch_geometric.nn.norm import BatchNorm
-from torch_geometric.nn.meta import MetaLayer
 import torch.nn.functional as F
-from torch_scatter import scatter_mean, scatter_add
-from typing import Union
+import torch_geometric.utils
+from torch import Tensor, nn
+from torch_geometric.nn import (GATConv, GatedGraphConv, GCNConv,
+                                MessagePassing, Sequential)
+from torch_geometric.nn.meta import MetaLayer
+from torch_geometric.nn.norm import BatchNorm
 # from src.data.dataset import SequentialNBodyDataModule, OneStepNBodyDataModule
 from torch_geometric.utils import dropout_adj
+from torch_scatter import scatter_add, scatter_mean
 
 # from torch_geometric_temporal.nn import GConvLSTM, GCLSTM, TGCN
 
@@ -112,37 +107,22 @@ class node_mlp_out_global(nn.Module):
         hidden_size: int = 64,
         node_features: int = 5,
         dropout: float = 0.0,
-        edge_features: int = 0,
         out_features: int = 4,
-        map_encoding_size: int = 128
     ):
         super(node_mlp_out_global, self).__init__()
-        self.out_features = out_features
-
         self.node_mlp_1 = nn.Sequential(
-            nn.Linear(
-                in_features=node_features + edge_features + map_encoding_size, out_features=hidden_size
-            ),
+            nn.Linear(in_features=node_features, out_features=hidden_size),
             nn.Dropout(p=dropout),
             nn.LeakyReLU(),
             nn.Linear(in_features=hidden_size, out_features=hidden_size),
             nn.Dropout(p=dropout),
             nn.LeakyReLU(),
-            nn.Linear(in_features=hidden_size, out_features=self.out_features),
+            nn.Linear(in_features=hidden_size, out_features=out_features),
         )
 
-    def forward(self, x, edge_index, edge_attr, u, batch):
-        # x: [N, F_x], where N is the number of nodes.
-        # batch: [N] with max entry B - 1.
-        row, col = edge_index
-        # Aggregate edge attributes
-        edge_attr = scatter_add(edge_attr, row, dim=0, dim_size=x.size(0))
-
-        # Concatenate node features with agg. edge attributes and global features
-        out = torch.cat([x, edge_attr, u[batch]], dim=1)
-
+    def forward(self, x):
         # Update dynamic node attributes
-        out = self.node_mlp_1(out)
+        out = self.node_mlp_1(x)
         # Return delta dynamics
         return out
 
@@ -186,9 +166,7 @@ class edge_mlp_1(nn.Module):
             input = torch.cat([src, dest, edge_attr], dim=1)
         else:
             input = torch.cat([src, dest], dim=1)
-        messages = self.message_mlp(
-            input
-        )
+        messages = self.message_mlp(input)
         return messages
 
 

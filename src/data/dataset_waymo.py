@@ -1,18 +1,18 @@
-import matplotlib.pyplot as plt
-import numpy as np
 import math
 import os
 import os.path as osp
+from typing import Optional
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pytorch_lightning as pl
+import tensorflow as tf
 import torch
 from torch.nn.functional import one_hot
-
-from src.utils import parse_sequence
 from torch_geometric.data import Data, Dataset, InMemoryDataset
 from torch_geometric.loader import DataLoader
-import pytorch_lightning as pl
 
-import tensorflow as tf
-from typing import Optional
+from src.utils import parse_sequence
 
 
 class OneStepWaymoTrainDataset(InMemoryDataset):
@@ -141,7 +141,7 @@ class OneStepWaymoTrainDataset(InMemoryDataset):
         # Collate and save
         data, slices = self.collate(data_list)
         # GLOBAL SCALER
-        global_scale = data.std[:, [0, 1, 2, 3, 4, 7, 8, 9]].mean()
+        # global_scale = data.std[:, [0, 1, 2, 3, 4, 7, 8, 9]].mean()
         # global_scaler = 8.025897979736328
         torch.save((data, slices), self.processed_paths[0])
 
@@ -213,39 +213,39 @@ class SequentialWaymoTrainDataset(InMemoryDataset):
                 for j, key in enumerate(key_values):
                     # Encode history
                     feature_matrix[:, :10, j] = parsed["state/past/" + key].numpy()
-                    feature_matrix[:, 10, j] = parsed["state/current/" + key].numpy().squeeze()
+                    feature_matrix[:, 10, j] = (
+                        parsed["state/current/" + key].numpy().squeeze()
+                    )
                     feature_matrix[:, 11:, j] = parsed["state/future/" + key].numpy()
 
                 roadgraph = parsed["roadgraph_samples/xyz"].numpy()
-                roadgraph_mask = np.array(parsed["roadgraph_samples/valid"].numpy().squeeze(), dtype=bool)
+                roadgraph_mask = np.array(
+                    parsed["roadgraph_samples/valid"].numpy().squeeze(), dtype=bool
+                )
                 roadgraph = roadgraph[roadgraph_mask][:, :2]
 
                 # Compute span of area
-                all_x = feature_matrix[:, :11, 0][feature_matrix[:, :11, -1].astype(bool)]
-                all_y = feature_matrix[:, :11, 1][feature_matrix[:, :11, -1].astype(bool)]
+                all_x = feature_matrix[:, :11, 0][
+                    feature_matrix[:, :11, -1].astype(bool)
+                ]
+                all_y = feature_matrix[:, :11, 1][
+                    feature_matrix[:, :11, -1].astype(bool)
+                ]
                 center_x, center_y = np.mean(all_x), np.mean(all_y)
                 width = 150
                 # Histogram of roadgraph
-                u, _, _ = np.histogram2d(x=roadgraph[:, 0],
-                                         y=roadgraph[:, 1],
-                                         range=[[center_x-width/2, center_x+width/2],
-                                                [center_y-width/2, center_y+width/2]],
-                                         bins=[width*2, width*2])
+                u, _, _ = np.histogram2d(
+                    x=roadgraph[:, 0],
+                    y=roadgraph[:, 1],
+                    range=[
+                        [center_x - width / 2, center_x + width / 2],
+                        [center_y - width / 2, center_y + width / 2],
+                    ],
+                    bins=[width * 2, width * 2],
+                )
                 u = u.T
                 # Binarise
                 u[u > 0] = 1
-
-                # plt.pcolor(u)
-                # plt.show()
-                # plt.hist2d(x=roadgraph[:, 0], y=roadgraph[:, 1],
-                #            range=[[center_x - width / 2, center_x + width / 2],
-                #                   [center_y - width / 2, center_y + width / 2]],
-                #            bins=[width * 2, width * 2])
-                #
-                # plt.scatter(x=all_x, y=all_y, s=10, marker='x', color='k')
-                #
-                #
-                # plt.show()
 
                 feature_matrix = torch.Tensor(feature_matrix)
                 # Process yaw-values into [-pi, pi]
@@ -355,50 +355,50 @@ class SequentialWaymoValDataset(InMemoryDataset):
                 for j, key in enumerate(key_values):
                     # Encode history
                     feature_matrix[:, :10, j] = parsed["state/past/" + key].numpy()
-                    feature_matrix[:, 10, j] = parsed["state/current/" + key].numpy().squeeze()
+                    feature_matrix[:, 10, j] = (
+                        parsed["state/current/" + key].numpy().squeeze()
+                    )
                     feature_matrix[:, 11:, j] = parsed["state/future/" + key].numpy()
 
                 roadgraph = parsed["roadgraph_samples/xyz"].numpy()
-                roadgraph_mask = np.array(parsed["roadgraph_samples/valid"].numpy().squeeze(), dtype=bool)
+                roadgraph_mask = np.array(
+                    parsed["roadgraph_samples/valid"].numpy().squeeze(), dtype=bool
+                )
                 roadgraph = roadgraph[roadgraph_mask][:, :2]
 
                 # Compute span of area
-                all_x = feature_matrix[:, :11, 0][feature_matrix[:, :11, -1].astype(bool)]
-                all_y = feature_matrix[:, :11, 1][feature_matrix[:, :11, -1].astype(bool)]
+                all_x = feature_matrix[:, :11, 0][
+                    feature_matrix[:, :11, -1].astype(bool)
+                ]
+                all_y = feature_matrix[:, :11, 1][
+                    feature_matrix[:, :11, -1].astype(bool)
+                ]
                 center_x, center_y = np.mean(all_x), np.mean(all_y)
                 width = 150
                 # Histogram of roadgraph
-                u, _, _ = np.histogram2d(x=roadgraph[:, 0],
-                                         y=roadgraph[:, 1],
-                                         range=[[center_x - width / 2, center_x + width / 2],
-                                                [center_y - width / 2, center_y + width / 2]],
-                                         bins=[width * 2, width * 2])
+                u, _, _ = np.histogram2d(
+                    x=roadgraph[:, 0],
+                    y=roadgraph[:, 1],
+                    range=[
+                        [center_x - width / 2, center_x + width / 2],
+                        [center_y - width / 2, center_y + width / 2],
+                    ],
+                    bins=[width * 2, width * 2],
+                )
                 u = u.T
                 # Binarise
                 u[u > 0] = 1
-
-                # plt.pcolor(u)
-                # plt.show()
-                # plt.hist2d(x=roadgraph[:, 0], y=roadgraph[:, 1],
-                #            range=[[center_x - width / 2, center_x + width / 2],
-                #                   [center_y - width / 2, center_y + width / 2]],
-                #            bins=[width * 2, width * 2])
-                #
-                # plt.scatter(x=all_x, y=all_y, s=10, marker='x', color='k')
-                #
-                #
-                # plt.show()
 
                 feature_matrix = torch.Tensor(feature_matrix)
                 # Process yaw-values into [-pi, pi]
                 x_yaws = feature_matrix[:, :, 5:7]
                 x_yaws[x_yaws > 0] = (
-                        torch.fmod(x_yaws[x_yaws > 0] + math.pi, torch.tensor(2 * math.pi))
-                        - math.pi
+                    torch.fmod(x_yaws[x_yaws > 0] + math.pi, torch.tensor(2 * math.pi))
+                    - math.pi
                 )
                 x_yaws[x_yaws < 0] = (
-                        torch.fmod(x_yaws[x_yaws < 0] - math.pi, torch.tensor(2 * math.pi))
-                        + math.pi
+                    torch.fmod(x_yaws[x_yaws < 0] - math.pi, torch.tensor(2 * math.pi))
+                    + math.pi
                 )
                 feature_matrix[:, :, 5:7] = x_yaws
 

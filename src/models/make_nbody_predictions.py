@@ -1,19 +1,19 @@
 import argparse
+import os
+
+import hydra
+import matplotlib.pyplot as plt
+import numpy as np
 import pytorch_lightning as pl
+import torch
+import yaml
+# from models import ConstantModel
+from matplotlib.patches import Circle, Rectangle
+from omegaconf import DictConfig, OmegaConf
+from pytorch_lightning.utilities.seed import seed_everything
+
 from src.data.dataset_nbody import *
 from src.models.train_nbody_model import *
-import yaml
-from pytorch_lightning.utilities.seed import seed_everything
-import torch
-import os
-import matplotlib.pyplot as plt
-from matplotlib.patches import Rectangle
-import numpy as np
-import hydra
-from omegaconf import DictConfig, OmegaConf
-
-# from models import ConstantModel
-from matplotlib.patches import Circle
 
 
 def make_predictions(path, config, sequence_idx=0):
@@ -41,6 +41,7 @@ def make_predictions(path, config, sequence_idx=0):
             y_hat, y_target = regressor.predict_step(batch)
             torch.save((y_hat, y_target), dirpath + f"/sequence_{i:04}.pt")
             return
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -89,7 +90,9 @@ def main():
         # color = (np.random.random(), np.random.random(), np.random.random())
         x = y_target[:, agent, 0].detach().numpy()
         y = y_target[:, agent, 1].detach().numpy()
-        axglob[0].scatter(x=x, y=y, s=50, color=colors[agent], alpha=0.2, edgecolors="k")
+        axglob[0].scatter(
+            x=x, y=y, s=50, color=colors[agent], alpha=0.2, edgecolors="k"
+        )
         axglob[0].quiver(
             y_target[0, agent, 0].detach().numpy(),
             y_target[0, agent, 1].detach().numpy(),
@@ -129,7 +132,9 @@ def main():
 
         x = y_hat[:, agent, 0].detach().numpy()
         y = y_hat[:, agent, 1].detach().numpy()
-        axglob[1].scatter(x=x, y=y, s=30, color=colors[agent], alpha=0.2, edgecolors="k")
+        axglob[1].scatter(
+            x=x, y=y, s=30, color=colors[agent], alpha=0.2, edgecolors="k"
+        )
         axglob[1].quiver(
             y_hat[0, agent, 0].detach().numpy(),
             y_hat[0, agent, 1].detach().numpy(),

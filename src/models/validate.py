@@ -1,11 +1,13 @@
 import argparse
+
+import hydra
 import pytorch_lightning as pl
-from src.data.dataset_waymo import OneStepWaymoDataModule, SequentialWaymoDataModule
+import yaml
+
+from src.data.dataset_waymo import (OneStepWaymoDataModule,
+                                    SequentialWaymoDataModule)
 from src.models.model import *
 from src.models.train_waymo_model import *
-import yaml
-import hydra
-
 
 # @hydra.main(config_path="../../configs/waymo/", config_name="config")
 # def main(config):

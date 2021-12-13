@@ -1,11 +1,13 @@
 import os
 import os.path as osp
+from typing import Optional
+
+import pytorch_lightning as pl
 import torch
-from src.utils import generate_fully_connected_edges, load_simulations
 from torch_geometric.data import Data, Dataset, InMemoryDataset
 from torch_geometric.loader import DataLoader
-import pytorch_lightning as pl
-from typing import Optional
+
+from src.utils import generate_fully_connected_edges, load_simulations
 
 
 class OneStepTrainDataset(InMemoryDataset):
@@ -176,7 +178,7 @@ class OneStepNBodyDataModule(pl.LightningDataModule):
         self.train_dataset = OneStepTrainDataset()
         self.val_dataset = SequentialValDataset()
         assert len(self.val_dataset) == 500
-        assert len(self.train_dataset) == 1000*90
+        assert len(self.train_dataset) == 1000 * 90
 
     def train_dataloader(self):
         return DataLoader(
@@ -229,4 +231,3 @@ class SequentialNBodyDataModule(pl.LightningDataModule):
         return DataLoader(
             self.val_dataset, batch_size=self.val_batch_size, shuffle=False
         )
-

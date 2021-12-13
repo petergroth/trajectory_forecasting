@@ -1,23 +1,17 @@
 from typing import Optional, Tuple
 
 import torch
-import torch_geometric.utils
-from torch import nn, Tensor
-from torch_geometric.nn import (
-    GATConv,
-    GCNConv,
-    Sequential,
-    GatedGraphConv,
-    MessagePassing,
-)
-from torch_geometric.nn.meta import MetaLayer
 import torch.nn.functional as F
-from torch_scatter import scatter_mean, scatter_add
+import torch_geometric.utils
+from torch import Tensor, nn
+from torch_geometric.nn import (GATConv, GatedGraphConv, GCNConv,
+                                MessagePassing, Sequential)
+from torch_geometric.nn.meta import MetaLayer
+from torch_geometric.utils import dropout_adj
+from torch_scatter import scatter_add, scatter_mean
 
 # from src.data.dataset import SequentialNBodyDataModule, OneStepNBodyDataModule
 from src.models.node_edge_blocks import *
-from torch_geometric.utils import dropout_adj
-
 
 # from torch_geometric_temporal.nn import GConvLSTM, GCLSTM, TGCN
 
@@ -34,13 +28,13 @@ class ConstantModel(nn.Module):
 class mlp_forward_model(nn.Module):
     # Forward model without edge update function
     def __init__(
-            self,
-            hidden_size: int = 64,
-            node_features: int = 5,
-            dropout: float = 0.0,
-            skip: bool = True,
-            aggregate: bool = False,
-            **kwargs,
+        self,
+        hidden_size: int = 64,
+        node_features: int = 5,
+        dropout: float = 0.0,
+        skip: bool = True,
+        aggregate: bool = False,
+        **kwargs,
     ):
         super(mlp_forward_model, self).__init__()
         self.aggregate = aggregate
@@ -90,15 +84,15 @@ class mlp_forward_model(nn.Module):
 class mlp_full_forward_model(nn.Module):
     # Forward model with edge update function
     def __init__(
-            self,
-            hidden_size: int = 64,
-            node_features: int = 5,
-            dropout: float = 0.0,
-            edge_features: int = 0,
-            latent_edge_features: int = 0,
-            skip: bool = True,
-            aggregate: bool = False,
-            out_features: int = 4,
+        self,
+        hidden_size: int = 64,
+        node_features: int = 5,
+        dropout: float = 0.0,
+        edge_features: int = 0,
+        latent_edge_features: int = 0,
+        skip: bool = True,
+        aggregate: bool = False,
+        out_features: int = 4,
     ):
         super(mlp_full_forward_model, self).__init__()
         self.hidden_size = hidden_size
@@ -168,16 +162,16 @@ class mlp_full_forward_model(nn.Module):
 class mpnn_forward_model(nn.Module):
     # Message passing neural network. Inspired from https://arxiv.org/abs/2002.09405v2
     def __init__(
-            self,
-            hidden_size: int = 64,
-            node_features: int = 5,
-            dropout: float = 0.0,
-            edge_features: int = 0,
-            latent_edge_features: int = 0,
-            rounds: int = 1,
-            shared_params: bool = True,
-            out_features: int = 7,
-            **kwargs,
+        self,
+        hidden_size: int = 64,
+        node_features: int = 5,
+        dropout: float = 0.0,
+        edge_features: int = 0,
+        latent_edge_features: int = 0,
+        rounds: int = 1,
+        shared_params: bool = True,
+        out_features: int = 7,
+        **kwargs,
     ):
         super(mpnn_forward_model, self).__init__()
         self.hidden_size = hidden_size
@@ -307,17 +301,17 @@ class mpnn_forward_model(nn.Module):
 class rnn_message_passing(nn.Module):
     # Recurrent message-passing GNN
     def __init__(
-            self,
-            hidden_size: int = 64,
-            dropout: float = 0.0,
-            node_features: int = 5,
-            edge_features: int = 0,
-            num_layers: int = 1,
-            rnn_size: int = 20,
-            rnn_edge_size: int = 8,
-            out_features: int = 4,
-            rnn_type: str = "LSTM",
-            latent_edge_features: int = 32
+        self,
+        hidden_size: int = 64,
+        dropout: float = 0.0,
+        node_features: int = 5,
+        edge_features: int = 0,
+        num_layers: int = 1,
+        rnn_size: int = 20,
+        rnn_edge_size: int = 8,
+        out_features: int = 4,
+        rnn_type: str = "LSTM",
+        latent_edge_features: int = 32,
     ):
         super(rnn_message_passing, self).__init__()
         self.num_layers = num_layers
@@ -332,7 +326,7 @@ class rnn_message_passing(nn.Module):
             rnn_size=rnn_size,
             dropout=dropout,
             num_layers=num_layers,
-            rnn_type=rnn_type
+            rnn_type=rnn_type,
         )
         # Edge encoder
         self.edge_history_encoder = edge_rnn_1(
@@ -340,12 +334,12 @@ class rnn_message_passing(nn.Module):
             rnn_size=rnn_edge_size,
             dropout=dropout,
             num_layers=num_layers,
-            rnn_type=rnn_type
+            rnn_type=rnn_type,
         )
         # Message-passing GN block
         self.GN = GraphNetworkBlock(
             edge_model=edge_mlp_1(
-                node_features=rnn_size+rnn_edge_size,
+                node_features=rnn_size + rnn_edge_size,
                 edge_features=edge_features,
                 hidden_size=hidden_size,
                 dropout=dropout,
@@ -353,10 +347,10 @@ class rnn_message_passing(nn.Module):
             ),
             node_model=node_mlp_out(
                 hidden_size=hidden_size,
-                node_features=rnn_size+rnn_edge_size,
+                node_features=rnn_size + rnn_edge_size,
                 dropout=dropout,
                 edge_features=latent_edge_features,
-                out_features=out_features
+                out_features=out_features,
             ),
         )
 
@@ -368,17 +362,31 @@ class rnn_message_passing(nn.Module):
         # edge_index, edge_attr = dropout_adj(edge_index=edge_index, edge_attr=edge_attr, p=self.dropout)
 
         # Aggregate and encode edge histories. Shape [n_nodes, rnn_edge_size]
-        edge_attr_encoded, h_edge = self.edge_history_encoder(edge_attr=edge_attr, hidden=h_edge, edge_index=edge_index,
-                                                              x_size=x.size(0))
+        edge_attr_encoded, h_edge = self.edge_history_encoder(
+            edge_attr=edge_attr, hidden=h_edge, edge_index=edge_index, x_size=x.size(0)
+        )
         # Encode node histories. Shape [n_nodes, rnn_size]
-        x_encoded, h_node = self.node_history_encoder(x=x, edge_index=edge_index, edge_attr=None, u=None, batch=None,
-                                                      hidden=h_node)
+        x_encoded, h_node = self.node_history_encoder(
+            x=x,
+            edge_index=edge_index,
+            edge_attr=None,
+            u=None,
+            batch=None,
+            hidden=h_node,
+        )
 
         # Concatenate. Shape [n_nodes, rnn_size+rnn_edge_size
         x_concat = torch.cat([x_encoded, edge_attr_encoded], dim=-1)
 
         # Perform message passing to obtain final outputs
-        out, _, _ = self.GN(x=x_concat, edge_index=edge_index, edge_attr=edge_attr, u=None, batch=None, hidden=None)
+        out, _, _ = self.GN(
+            x=x_concat,
+            edge_index=edge_index,
+            edge_attr=edge_attr,
+            u=None,
+            batch=None,
+            hidden=None,
+        )
 
         return out, (h_node, h_edge)
 
@@ -386,17 +394,17 @@ class rnn_message_passing(nn.Module):
 class rnn_mp_hetero(nn.Module):
     # Recurrent message-passing GNN
     def __init__(
-            self,
-            hidden_size: int = 64,
-            dropout: float = 0.0,
-            node_features: int = 5,
-            edge_features: int = 0,
-            num_layers: int = 1,
-            rnn_size: int = 20,
-            rnn_edge_size: int = 8,
-            out_features: int = 4,
-            rnn_type: str = "LSTM",
-            latent_edge_features: int = 32
+        self,
+        hidden_size: int = 64,
+        dropout: float = 0.0,
+        node_features: int = 5,
+        edge_features: int = 0,
+        num_layers: int = 1,
+        rnn_size: int = 20,
+        rnn_edge_size: int = 8,
+        out_features: int = 4,
+        rnn_type: str = "LSTM",
+        latent_edge_features: int = 32,
     ):
         super(rnn_mp_hetero, self).__init__()
         self.num_layers = num_layers
@@ -412,7 +420,7 @@ class rnn_mp_hetero(nn.Module):
             rnn_size=rnn_size,
             dropout=dropout,
             num_layers=num_layers,
-            rnn_type=rnn_type
+            rnn_type=rnn_type,
         )
         # Edge history encoder
         self.edge_history_encoder = edge_rnn_1(
@@ -420,12 +428,12 @@ class rnn_mp_hetero(nn.Module):
             rnn_size=rnn_edge_size,
             dropout=dropout,
             num_layers=num_layers,
-            rnn_type=rnn_type
+            rnn_type=rnn_type,
         )
         # Message-passing GN block
         self.edge_encoding = GraphNetworkBlock(
             edge_model=edge_mlp_1(
-                node_features=rnn_size+rnn_edge_size,
+                node_features=rnn_size + rnn_edge_size,
                 edge_features=edge_features,
                 hidden_size=hidden_size,
                 dropout=dropout,
@@ -473,19 +481,31 @@ class rnn_mp_hetero(nn.Module):
         h_node, h_edge = hidden
 
         # Aggregate and encode edge histories. Shape [n_nodes, rnn_edge_size]
-        edge_attr_encoded, h_edge = self.edge_history_encoder(edge_attr=edge_attr, hidden=h_edge, edge_index=edge_index,
-                                                              x_size=x.size(0))
+        edge_attr_encoded, h_edge = self.edge_history_encoder(
+            edge_attr=edge_attr, hidden=h_edge, edge_index=edge_index, x_size=x.size(0)
+        )
         # Encode node histories. Shape [n_nodes, rnn_size]
-        x_encoded, h_node = self.node_history_encoder(x=x, edge_index=edge_index, edge_attr=None, u=None, batch=None,
-                                                      hidden=h_node)
+        x_encoded, h_node = self.node_history_encoder(
+            x=x,
+            edge_index=edge_index,
+            edge_attr=None,
+            u=None,
+            batch=None,
+            hidden=h_node,
+        )
 
         # Concatenate. Shape [n_nodes, rnn_size+rnn_edge_size
         x_concat = torch.cat([x_encoded, edge_attr_encoded], dim=-1)
 
         # Compute message for each edge
-        _, edge_attr, _ = self.edge_encoding(x=x_concat,
-                                             edge_index=edge_index,
-                                             edge_attr=edge_attr, u=None, batch=None, hidden=None)
+        _, edge_attr, _ = self.edge_encoding(
+            x=x_concat,
+            edge_index=edge_index,
+            edge_attr=edge_attr,
+            u=None,
+            batch=None,
+            hidden=None,
+        )
 
         # Aggregate messages per node
         row, col = edge_index
@@ -513,16 +533,16 @@ class rnn_mp_hetero(nn.Module):
 class rnn_gat(nn.Module):
     # Recurrent attention-based GNN
     def __init__(
-            self,
-            dropout: float = 0.0,
-            node_features: int = 5,
-            edge_features: int = 0,
-            num_layers: int = 1,
-            rnn_size: int = 20,
-            rnn_edge_size: int = 8,
-            out_features: int = 4,
-            rnn_type: str = "LSTM",
-            heads: int = 4
+        self,
+        dropout: float = 0.0,
+        node_features: int = 5,
+        edge_features: int = 0,
+        num_layers: int = 1,
+        rnn_size: int = 20,
+        rnn_edge_size: int = 8,
+        out_features: int = 4,
+        rnn_type: str = "LSTM",
+        heads: int = 4,
     ):
         super(rnn_gat, self).__init__()
         self.num_layers = num_layers
@@ -537,18 +557,18 @@ class rnn_gat(nn.Module):
             rnn_size=rnn_size,
             dropout=dropout,
             num_layers=num_layers,
-            rnn_type=rnn_type
+            rnn_type=rnn_type,
         )
         self.edge_history_encoder = edge_rnn_1(
             edge_features=edge_features,
             rnn_size=rnn_edge_size,
             dropout=dropout,
             num_layers=num_layers,
-            rnn_type=rnn_type
+            rnn_type=rnn_type,
         )
 
         self.gat_out = GATConv(
-            in_channels=rnn_size+rnn_edge_size,
+            in_channels=rnn_size + rnn_edge_size,
             out_channels=out_features,
             heads=heads,
             dropout=dropout,
@@ -559,11 +579,18 @@ class rnn_gat(nn.Module):
         # Unpack hidden states
         h_node, h_edge = hidden
         # Aggregate and encode edge histories. Shape [n_nodes, rnn_edge_size]
-        edge_attr_encoded, h_edge = self.edge_history_encoder(edge_attr=edge_attr, hidden=h_edge, edge_index=edge_index,
-                                                              x_size=x.size(0))
+        edge_attr_encoded, h_edge = self.edge_history_encoder(
+            edge_attr=edge_attr, hidden=h_edge, edge_index=edge_index, x_size=x.size(0)
+        )
         # Encode node histories. Shape [n_nodes, rnn_size]
-        x_encoded, h_node = self.node_history_encoder(x=x, edge_index=edge_index, edge_attr=None, u=None, batch=None,
-                                                      hidden=h_node)
+        x_encoded, h_node = self.node_history_encoder(
+            x=x,
+            edge_index=edge_index,
+            edge_attr=None,
+            u=None,
+            batch=None,
+            hidden=h_node,
+        )
 
         # Concatenate. Shape [n_nodes, rnn_size+rnn_edge_size]
         out = torch.cat([x_encoded, edge_attr_encoded], dim=-1)
@@ -574,18 +601,18 @@ class rnn_gat(nn.Module):
 
 class rnn_mp_gat(nn.Module):
     def __init__(
-            self,
-            hidden_size: int = 64,
-            dropout: float = 0.0,
-            node_features: int = 5,
-            edge_features: int = 0,
-            num_layers: int = 1,
-            rnn_size: int = 20,
-            rnn_edge_size: int = 8,
-            out_features: int = 4,
-            rnn_type: str = "LSTM",
-            heads: int = 4,
-            latent_edge_features: int = 32
+        self,
+        hidden_size: int = 64,
+        dropout: float = 0.0,
+        node_features: int = 5,
+        edge_features: int = 0,
+        num_layers: int = 1,
+        rnn_size: int = 20,
+        rnn_edge_size: int = 8,
+        out_features: int = 4,
+        rnn_type: str = "LSTM",
+        heads: int = 4,
+        latent_edge_features: int = 32,
     ):
         super(rnn_mp_gat, self).__init__()
         self.num_layers = num_layers
@@ -599,18 +626,18 @@ class rnn_mp_gat(nn.Module):
             rnn_size=rnn_size,
             dropout=dropout,
             num_layers=num_layers,
-            rnn_type=rnn_type
+            rnn_type=rnn_type,
         )
         self.edge_history_encoder = edge_rnn_1(
             edge_features=edge_features,
             rnn_size=rnn_edge_size,
             dropout=dropout,
             num_layers=num_layers,
-            rnn_type=rnn_type
+            rnn_type=rnn_type,
         )
 
         self.gat_in = GATConv(
-            in_channels=rnn_size+rnn_edge_size,
+            in_channels=rnn_size + rnn_edge_size,
             out_channels=hidden_size,
             heads=heads,
             dropout=dropout,
@@ -630,7 +657,7 @@ class rnn_mp_gat(nn.Module):
                 node_features=hidden_size,
                 dropout=dropout,
                 edge_features=latent_edge_features,
-                out_features=out_features
+                out_features=out_features,
             ),
         )
 
@@ -638,11 +665,18 @@ class rnn_mp_gat(nn.Module):
         # Unpack hidden states
         h_node, h_edge = hidden
         # Aggregate and encode edge histories. Shape [n_nodes, rnn_edge_size]
-        edge_attr_encoded, h_edge = self.edge_history_encoder(edge_attr=edge_attr, hidden=h_edge, edge_index=edge_index,
-                                                              x_size=x.size(0))
+        edge_attr_encoded, h_edge = self.edge_history_encoder(
+            edge_attr=edge_attr, hidden=h_edge, edge_index=edge_index, x_size=x.size(0)
+        )
         # Encode node histories. Shape [n_nodes, rnn_size]
-        x_encoded, h_node = self.node_history_encoder(x=x, edge_index=edge_index, edge_attr=None, u=None, batch=None,
-                                                      hidden=h_node)
+        x_encoded, h_node = self.node_history_encoder(
+            x=x,
+            edge_index=edge_index,
+            edge_attr=None,
+            u=None,
+            batch=None,
+            hidden=h_node,
+        )
 
         # Concatenate. Shape [n_nodes, rnn_size+rnn_edge_size]
         x_encoded = torch.cat([x_encoded, edge_attr_encoded], dim=-1)
@@ -651,9 +685,7 @@ class rnn_mp_gat(nn.Module):
         x_encoded = self.gat_in(x=x_encoded, edge_index=edge_index)
 
         # Message passing
-        out, _, _ = self.GN(x=x_encoded,
-                            edge_index=edge_index,
-                            edge_attr=edge_attr)
+        out, _, _ = self.GN(x=x_encoded, edge_index=edge_index, edge_attr=edge_attr)
 
         return out, (h_node, h_edge)
 
@@ -661,17 +693,17 @@ class rnn_mp_gat(nn.Module):
 class rnn_node_forward_model(nn.Module):
     # Forward model with edge update function
     def __init__(
-            self,
-            hidden_size: int = 64,
-            node_features: int = 5,
-            dropout: float = 0.0,
-            edge_features: int = 0,
-            latent_edge_features: int = 0,
-            skip: bool = True,
-            num_layers: int = 1,
-            rnn_size: int = 20,
-            out_features: int = 7,
-            **kwargs,
+        self,
+        hidden_size: int = 64,
+        node_features: int = 5,
+        dropout: float = 0.0,
+        edge_features: int = 0,
+        latent_edge_features: int = 0,
+        skip: bool = True,
+        num_layers: int = 1,
+        rnn_size: int = 20,
+        out_features: int = 7,
+        **kwargs,
     ):
         super(rnn_node_forward_model, self).__init__()
         self.hidden_size = hidden_size
@@ -746,17 +778,17 @@ class rnn_node_forward_model(nn.Module):
 class rnn_forward_model_v2(nn.Module):
     # Forward model with edge update function
     def __init__(
-            self,
-            hidden_size: int = 64,
-            node_features: int = 5,
-            dropout: float = 0.0,
-            edge_features: int = 0,
-            latent_edge_features: int = 0,
-            skip: bool = True,
-            num_layers: int = 1,
-            rnn_size: int = 20,
-            out_features: int = 7,
-            **kwargs,
+        self,
+        hidden_size: int = 64,
+        node_features: int = 5,
+        dropout: float = 0.0,
+        edge_features: int = 0,
+        latent_edge_features: int = 0,
+        skip: bool = True,
+        num_layers: int = 1,
+        rnn_size: int = 20,
+        out_features: int = 7,
+        **kwargs,
     ):
         super(rnn_forward_model_v2, self).__init__()
         self.hidden_size = hidden_size
@@ -833,19 +865,19 @@ class rnn_forward_model_v2(nn.Module):
 class rnn_forward_model_v3(nn.Module):
     # Forward model with edge update function
     def __init__(
-            self,
-            hidden_size: int = 64,
-            node_features: int = 5,
-            dropout: float = 0.0,
-            edge_features: int = 0,
-            latent_edge_features: int = 0,
-            skip: bool = True,
-            num_layers: int = 1,
-            rnn_size: int = 20,
-            out_features: int = 7,
-            rnn_type: str = "GRU",
-            aggregate: bool = False,
-            **kwargs,
+        self,
+        hidden_size: int = 64,
+        node_features: int = 5,
+        dropout: float = 0.0,
+        edge_features: int = 0,
+        latent_edge_features: int = 0,
+        skip: bool = True,
+        num_layers: int = 1,
+        rnn_size: int = 20,
+        out_features: int = 7,
+        rnn_type: str = "GRU",
+        aggregate: bool = False,
+        **kwargs,
     ):
         super(rnn_forward_model_v3, self).__init__()
         self.hidden_size = hidden_size
@@ -928,19 +960,19 @@ class rnn_forward_model_v3(nn.Module):
 class rnn_forward_model_v4(nn.Module):
     # Forward model with edge update function
     def __init__(
-            self,
-            hidden_size: int = 64,
-            node_features: int = 5,
-            dropout: float = 0.0,
-            edge_features: int = 0,
-            latent_edge_features: int = 0,
-            skip: bool = True,
-            num_layers: int = 1,
-            rnn_size: int = 20,
-            out_features: int = 7,
-            rnn_type: str = "GRU",
-            aggregate: bool = False,
-            **kwargs,
+        self,
+        hidden_size: int = 64,
+        node_features: int = 5,
+        dropout: float = 0.0,
+        edge_features: int = 0,
+        latent_edge_features: int = 0,
+        skip: bool = True,
+        num_layers: int = 1,
+        rnn_size: int = 20,
+        out_features: int = 7,
+        rnn_type: str = "GRU",
+        aggregate: bool = False,
+        **kwargs,
     ):
         super(rnn_forward_model_v4, self).__init__()
         self.hidden_size = hidden_size
@@ -1026,13 +1058,13 @@ class GraphNetworkBlock(MetaLayer):
                 item.reset_parameters()
 
     def forward(
-            self,
-            x: Tensor,
-            edge_index: Tensor,
-            edge_attr: Optional[Tensor] = None,
-            u: Optional[Tensor] = None,
-            batch: Optional[Tensor] = None,
-            hidden=None,
+        self,
+        x: Tensor,
+        edge_index: Tensor,
+        edge_attr: Optional[Tensor] = None,
+        u: Optional[Tensor] = None,
+        batch: Optional[Tensor] = None,
+        hidden=None,
     ):
         """"""
         # Hidden is a tuple of (edge_hidden, node_hidden)
@@ -1082,14 +1114,14 @@ class GraphNetworkBlock(MetaLayer):
 class mlp_baseline(nn.Module):
     # Forward model without edge update function
     def __init__(
-            self,
-            hidden_size: int = 64,
-            node_features: int = 5,
-            n_nodes: int = 10,
-            normalise: bool = True,
-            dropout: float = 0.0,
-            permute: bool = False,
-            **kwargs,
+        self,
+        hidden_size: int = 64,
+        node_features: int = 5,
+        n_nodes: int = 10,
+        normalise: bool = True,
+        dropout: float = 0.0,
+        permute: bool = False,
+        **kwargs,
     ):
         super(mlp_baseline, self).__init__()
         self.hidden_size = hidden_size
@@ -1138,13 +1170,13 @@ class mlp_baseline(nn.Module):
 class mlp_node_baseline(nn.Module):
     # Forward model without edge update function
     def __init__(
-            self,
-            hidden_size: int = 64,
-            node_features: int = 5,
-            n_nodes: int = 10,
-            dropout: float = 0.0,
-            out_features: int = 7,
-            **kwargs,
+        self,
+        hidden_size: int = 64,
+        node_features: int = 5,
+        n_nodes: int = 10,
+        dropout: float = 0.0,
+        out_features: int = 7,
+        **kwargs,
     ):
         super(mlp_node_baseline, self).__init__()
         self.hidden_size = hidden_size
@@ -1183,15 +1215,15 @@ class mlp_node_baseline(nn.Module):
 class rnn_baseline(nn.Module):
     # Forward model without edge update function
     def __init__(
-            self,
-            hidden_size: int = 64,
-            node_features: int = 5,
-            n_nodes: int = 10,
-            normalise: bool = True,
-            dropout: float = 0.0,
-            rnn_size: int = 20,
-            num_layers: int = 1,
-            **kwargs,
+        self,
+        hidden_size: int = 64,
+        node_features: int = 5,
+        n_nodes: int = 10,
+        normalise: bool = True,
+        dropout: float = 0.0,
+        rnn_size: int = 20,
+        num_layers: int = 1,
+        **kwargs,
     ):
         super(rnn_baseline, self).__init__()
         self.normalise = normalise
@@ -1238,15 +1270,15 @@ class rnn_baseline(nn.Module):
 class rnn_graph_baseline(nn.Module):
     # Forward model without edge update function
     def __init__(
-            self,
-            hidden_size: int = 64,
-            node_features: int = 5,
-            n_nodes: int = 10,
-            normalise: bool = True,
-            dropout: float = 0.0,
-            rnn_size: int = 20,
-            num_layers: int = 1,
-            **kwargs,
+        self,
+        hidden_size: int = 64,
+        node_features: int = 5,
+        n_nodes: int = 10,
+        normalise: bool = True,
+        dropout: float = 0.0,
+        rnn_size: int = 20,
+        num_layers: int = 1,
+        **kwargs,
     ):
         super(rnn_graph_baseline, self).__init__()
         self.hidden_size = hidden_size
@@ -1300,14 +1332,14 @@ class rnn_graph_baseline(nn.Module):
 
 class attentional_model(nn.Module):
     def __init__(
-            self,
-            hidden_size: int = 64,
-            node_features: int = 5,
-            dropout: float = 0.0,
-            heads: int = 4,
-            middle_gat: bool = False,
-            out_features: int = 4,
-            edge_features: int = 1,
+        self,
+        hidden_size: int = 64,
+        node_features: int = 5,
+        dropout: float = 0.0,
+        heads: int = 4,
+        middle_gat: bool = False,
+        out_features: int = 4,
+        edge_features: int = 1,
     ):
         super(attentional_model, self).__init__()
         self.hidden_size = hidden_size
@@ -1369,13 +1401,13 @@ class attentional_model(nn.Module):
 
 class convolutional_model(nn.Module):
     def __init__(
-            self,
-            hidden_size: int = 64,
-            node_features: int = 5,
-            dropout: float = 0.0,
-            skip: bool = False,
-            out_features: int = 4,
-            edge_features: int = 1,
+        self,
+        hidden_size: int = 64,
+        node_features: int = 5,
+        dropout: float = 0.0,
+        skip: bool = False,
+        out_features: int = 4,
+        edge_features: int = 1,
     ):
         super(convolutional_model, self).__init__()
         self.hidden_size = hidden_size
@@ -1402,50 +1434,61 @@ class convolutional_model(nn.Module):
 
 
 class road_encoder(nn.Module):
-    def __init__(self, width: int = 300, hidden_size: int = 128):
+    def __init__(self, width: int = 300, hidden_size: int = 41):
         super(road_encoder, self).__init__()
-        hidden_channels = [10, 10, 10, 1]
-        strides = [2, 2, 1, 1]
-        filters = [5, 5, 5, 3]
+        hidden_channels = [20, 10, 5, 1]
+        strides = [1, 1, 1, 1]
+        filters = [5, 3, 3, 3]
+        self.width = width
 
         self.conv_modules = nn.ModuleList()
+        self.bn_modules = nn.ModuleList()
         x_dummy = torch.ones((1, 1, width, width))
 
         for i in range(4):
-            self.conv_modules.append(nn.Conv2d(
-                in_channels=1 if i == 0 else hidden_channels[i-1],
-                out_channels=hidden_channels[i],
-                kernel_size=filters[i],
-                stride=strides[i]
-            ))
+            self.conv_modules.append(
+                nn.Conv2d(
+                    in_channels=1 if i == 0 else hidden_channels[i - 1],
+                    out_channels=hidden_channels[i],
+                    kernel_size=filters[i],
+                    stride=strides[i],
+                )
+            )
+            self.bn_modules.append(nn.BatchNorm2d(hidden_channels[i]))
             x_dummy = self.conv_modules[i](x_dummy)
-        self.fc = nn.Linear(in_features=x_dummy.numel(), out_features=hidden_size)
+
+        self.fc_1 = nn.Linear(in_features=x_dummy.numel(), out_features=hidden_size)
+        # self.fc_2 = nn.Linear(in_features=hidden_size, out_features=hidden_size)
 
     def forward(self, u):
         # Add single color channel dimension
         u = u.unsqueeze(1)
-        for conv_layer in self.conv_modules:
-            u = F.leaky_relu(conv_layer(u))
-
-        out = self.fc(torch.flatten(u, start_dim=1))
+        assert u.shape[-1] == self.width
+        assert u.shape[-2] == self.width
+        for i, conv_layer in enumerate(self.conv_modules):
+            u = conv_layer(u)
+            u = F.leaky_relu(self.bn_modules[i](u))
+        # u = F.leaky_relu(self.fc_1(torch.flatten(u, start_dim=1)))
+        # out = self.fc_2(u)
+        out = self.fc_1(torch.flatten(u, start_dim=1))
         return out
 
 
 class rnn_message_passing_global(nn.Module):
     # Recurrent message-passing GNN
     def __init__(
-            self,
-            hidden_size: int = 64,
-            dropout: float = 0.0,
-            node_features: int = 5,
-            edge_features: int = 0,
-            num_layers: int = 1,
-            rnn_size: int = 20,
-            rnn_edge_size: int = 8,
-            out_features: int = 4,
-            rnn_type: str = "LSTM",
-            latent_edge_features: int = 32,
-            map_encoding_size: int = 128
+        self,
+        hidden_size: int = 64,
+        dropout: float = 0.0,
+        node_features: int = 5,
+        edge_features: int = 0,
+        num_layers: int = 1,
+        rnn_size: int = 20,
+        rnn_edge_size: int = 8,
+        out_features: int = 4,
+        rnn_type: str = "LSTM",
+        latent_edge_features: int = 32,
+        map_encoding_size: int = 32,
     ):
         super(rnn_message_passing_global, self).__init__()
         self.num_layers = num_layers
@@ -1453,62 +1496,76 @@ class rnn_message_passing_global(nn.Module):
         self.rnn_edge_size = rnn_edge_size
         self.dropout = dropout
 
-        # Node history encoder
+        # Node history encoder.
+        # Computes a node-wise representation which incorporates the nodes' respective histories.
         self.node_history_encoder = node_rnn_simple(
             node_features=node_features,
             edge_features=0,
             rnn_size=rnn_size,
             dropout=dropout,
             num_layers=num_layers,
-            rnn_type=rnn_type
+            rnn_type=rnn_type,
         )
 
-        # Edge history encoder
-        self.edge_history_encoder = edge_rnn_1(
-            edge_features=edge_features,
-            rnn_size=rnn_edge_size,
-            dropout=dropout,
-            num_layers=num_layers,
-            rnn_type=rnn_type
-        )
-
-        # Message-passing GN block
-        self.GN = GraphNetworkBlock(
+        # GN-block to compute messages/interactions between nodes
+        self.message_gn = GraphNetworkBlock(
             edge_model=edge_mlp_1(
-                node_features=rnn_size+rnn_edge_size,
+                node_features=node_features,
                 edge_features=edge_features,
                 hidden_size=hidden_size,
                 dropout=dropout,
                 latent_edge_features=latent_edge_features,
-            ),
-            node_model=node_mlp_out_global(
-                hidden_size=hidden_size,
-                node_features=rnn_size+rnn_edge_size,
-                dropout=dropout,
-                edge_features=latent_edge_features,
-                out_features=out_features,
-                map_encoding_size=map_encoding_size
-            ),
+            )
+        )
+
+        # Interaction history encoder.
+        # Computes a node-wise history which incorporates influences from neighbouring nodes using messages.
+        self.edge_history_encoder = edge_rnn_1(
+            edge_features=latent_edge_features,
+            rnn_size=rnn_edge_size,
+            dropout=dropout,
+            num_layers=num_layers,
+            rnn_type=rnn_type,
+        )
+
+        # Output GN
+        self.node_output = node_mlp_out_global(
+            hidden_size=hidden_size,
+            node_features=rnn_size + rnn_edge_size + map_encoding_size,
+            dropout=dropout,
+            out_features=out_features,
         )
 
     def forward(self, x, edge_index, edge_attr, u, hidden: tuple, batch=None):
+        # x: [n_nodes, node_features]
+        # edge_index: [2, n_edges]
+        # edge_attr : [n_edges, edge_features]
+        # u: [n_nodes, local_map_resolution]
+
         # Unpack hidden states
         h_node, h_edge = hidden
 
-        # Perform edge dropout
-        # edge_index, edge_attr = dropout_adj(edge_index=edge_index, edge_attr=edge_attr, p=self.dropout)
+        # Encode node histories. Shape [n_nodes, rnn_size]
+        node_history, h_node = self.node_history_encoder(
+            x=x, edge_index=None, edge_attr=None, u=None, batch=None, hidden=h_node
+        )
+
+        # Compute messages. Shape [n_edges, latent_edge_features]
+        _, messages, _ = self.message_gn(
+            x=x, edge_index=edge_index, edge_attr=edge_attr, u=None, batch=None
+        )
 
         # Aggregate and encode edge histories. Shape [n_nodes, rnn_edge_size]
-        edge_attr_encoded, h_edge = self.edge_history_encoder(edge_attr=edge_attr, hidden=h_edge, edge_index=edge_index,
-                                                              x_size=x.size(0))
-        # Encode node histories. Shape [n_nodes, rnn_size]
-        x_encoded, h_node = self.node_history_encoder(x=x, edge_index=edge_index, edge_attr=None, u=None, batch=None,
-                                                      hidden=h_node)
+        node_interaction_history, h_edge = self.edge_history_encoder(
+            edge_attr=messages, hidden=h_edge, edge_index=edge_index, x_size=x.size(0)
+        )
 
-        # Concatenate. Shape [n_nodes, rnn_size+rnn_edge_size
-        x_concat = torch.cat([x_encoded, edge_attr_encoded], dim=-1)
+        # Concatenate. Shape [n_nodes, rnn_size+rnn_edge_size+map_encoding_size]
+        full_node_representation = torch.cat(
+            [node_history, node_interaction_history, u], dim=-1
+        )
 
-        # Perform message passing to obtain final outputs
-        out, _, _ = self.GN(x=x_concat, edge_index=edge_index, edge_attr=edge_attr, u=u, batch=batch, hidden=None)
+        # Final node update. [n_nodes, out_features]
+        out = self.node_output(x=full_node_representation)
 
         return out, (h_node, h_edge)
