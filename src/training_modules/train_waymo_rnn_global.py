@@ -252,6 +252,8 @@ class SequentialModule(pl.LightningModule):
                 flow="source_to_target",
             )
 
+            edge_index, _ = torch_geometric.utils.add_self_loops(edge_index, num_nodes=x_t.shape[0])
+
             if self.undirected:
                 edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
 
@@ -418,6 +420,8 @@ class SequentialModule(pl.LightningModule):
                 max_num_neighbors=self.n_neighbours,
                 flow="source_to_target",
             )
+
+            edge_index, _ = torch_geometric.utils.add_self_loops(edge_index, num_nodes=x_t.shape[0])
 
             if self.undirected:
                 edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
@@ -735,6 +739,8 @@ class SequentialModule(pl.LightningModule):
                 flow="source_to_target",
             )
 
+            edge_index, _ = torch_geometric.utils.add_self_loops(edge_index, num_nodes=x_t.shape[0])
+
             if self.undirected:
                 edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
 
@@ -892,6 +898,8 @@ class SequentialModule(pl.LightningModule):
                 max_num_neighbors=self.n_neighbours,
                 flow="source_to_target",
             )
+
+            edge_index, _ = torch_geometric.utils.add_self_loops(edge_index, num_nodes=x_t.shape[0])
 
             if self.undirected:
                 edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
@@ -1185,6 +1193,8 @@ class SequentialModule(pl.LightningModule):
                 flow="source_to_target",
             )
 
+            edge_index, _ = torch_geometric.utils.add_self_loops(edge_index, num_nodes=x_t.shape[0])
+
             if self.undirected:
                 edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
 
@@ -1343,6 +1353,8 @@ class SequentialModule(pl.LightningModule):
                 max_num_neighbors=self.n_neighbours,
                 flow="source_to_target",
             )
+
+            edge_index, _ = torch_geometric.utils.add_self_loops(edge_index, num_nodes=x_t.shape[0])
 
             if self.undirected:
                 edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)

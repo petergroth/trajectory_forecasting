@@ -1471,6 +1471,7 @@ class road_encoder(nn.Module):
         # u = F.leaky_relu(self.fc_1(torch.flatten(u, start_dim=1)))
         # out = self.fc_2(u)
         out = self.fc_1(torch.flatten(u, start_dim=1))
+
         return out
 
 

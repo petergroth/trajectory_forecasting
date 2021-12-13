@@ -364,6 +364,7 @@ def main():
         loc_y - width / 2,
         loc_y + width / 2,
     )
+
     x_min, x_max, y_min, y_max = extent
     os.makedirs(args.output_path, exist_ok=True)
 
@@ -375,12 +376,6 @@ def main():
     #     torch.min(y_target[:, :, 1][small_mask]).item(),
     #     torch.max(y_target[:, :, 1][small_mask]).item(),
     # )
-
-    # def point_to_idx(point, loc_x, loc_y, width, res):
-    #     point = np.array([-28540, 41810])
-    #     width = 150
-    #     x_span = np.linspace(loc_x-width/2, loc_x+width/2, width)
-    #     y_span = np.linspace(loc_y-width/2, loc_y+width/2, width)
 
     fig, ax = plt.subplots(1, 2, figsize=(20, 10))
     #
@@ -413,10 +408,12 @@ def main():
         alpha=0.5,
     )
 
+
     colors = [
         (np.random.random(), np.random.random(), np.random.random())
         for _ in range(n_agents)
     ]
+
 
     alphas = np.linspace(0.1, 1, n_steps)
     for t in range(n_steps - 1):
@@ -452,8 +449,8 @@ def main():
     ax[0].set_title("Groundtruth trajectories")
     ax[1].set_title("Predicted trajectories")
 
-    plt.show()
-    # fig.savefig(f"{args.output_path}/sequence_{args.sequence_idx:04}_51.png")
+    # plt.show()
+    fig.savefig(f"{args.output_path}/sequence_{args.sequence_idx:04}_51.png")
 
 
 if __name__ == "__main__":
