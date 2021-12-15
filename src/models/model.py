@@ -1570,3 +1570,320 @@ class rnn_message_passing_global(nn.Module):
         out = self.node_output(x=full_node_representation)
 
         return out, (h_node, h_edge)
+
+class rnn_message_passing_global_v2(nn.Module):
+    # Recurrent message-passing GNN
+    def __init__(
+        self,
+        hidden_size: int = 64,
+        dropout: float = 0.0,
+        node_features: int = 5,
+        edge_features: int = 0,
+        num_layers: int = 1,
+        rnn_size: int = 20,
+        rnn_edge_size: int = 8,
+        out_features: int = 4,
+        rnn_type: str = "LSTM",
+        latent_edge_features: int = 32,
+        map_encoding_size: int = 32,
+    ):
+        super(rnn_message_passing_global_v2, self).__init__()
+        self.num_layers = num_layers
+        self.rnn_size = rnn_size
+        self.rnn_edge_size = rnn_edge_size
+        self.dropout = dropout
+
+        # Node history encoder.
+        # Computes a node-wise representation which incorporates the nodes' respective histories.
+        self.node_history_encoder = node_rnn_simple(
+            node_features=node_features,
+            edge_features=0,
+            rnn_size=rnn_size,
+            dropout=dropout,
+            num_layers=num_layers,
+            rnn_type=rnn_type,
+        )
+
+        # GN-block to compute messages/interactions between nodes
+        self.message_gn = GraphNetworkBlock(
+            edge_model=edge_mlp_1(
+                node_features=node_features,
+                edge_features=edge_features,
+                hidden_size=hidden_size,
+                dropout=dropout,
+                latent_edge_features=latent_edge_features,
+            )
+        )
+
+        # Interaction history encoder.
+        # Computes a node-wise history which incorporates influences from neighbouring nodes using messages.
+        self.edge_history_encoder = edge_rnn_1(
+            edge_features=latent_edge_features,
+            rnn_size=rnn_edge_size,
+            dropout=dropout,
+            num_layers=num_layers,
+            rnn_type=rnn_type,
+        )
+
+        # Output GN
+        self.GN_out = GraphNetworkBlock(
+            edge_model=edge_mlp_1(
+                node_features=rnn_size + rnn_edge_size + map_encoding_size,
+                edge_features=edge_features,
+                hidden_size=hidden_size,
+                dropout=dropout,
+                latent_edge_features=latent_edge_features,
+            ),
+            node_model=node_mlp_out(
+                hidden_size=hidden_size,
+                node_features=rnn_size + rnn_edge_size + map_encoding_size,
+                dropout=dropout,
+                edge_features=latent_edge_features,
+                out_features=out_features,
+            ),
+        )
+
+    def forward(self, x, edge_index, edge_attr, u, hidden: tuple, batch=None):
+        # x: [n_nodes, node_features]
+        # edge_index: [2, n_edges]
+        # edge_attr : [n_edges, edge_features]
+        # u: [n_nodes, local_map_resolution]
+
+        # Unpack hidden states
+        h_node, h_edge = hidden
+
+        # Encode node histories. Shape [n_nodes, rnn_size]
+        node_history, h_node = self.node_history_encoder(
+            x=x, edge_index=None, edge_attr=None, u=None, batch=None, hidden=h_node
+        )
+
+        # Compute messages. Shape [n_edges, latent_edge_features]
+        _, messages, _ = self.message_gn(
+            x=x, edge_index=edge_index, edge_attr=edge_attr, u=None, batch=None
+        )
+
+        # Aggregate and encode edge histories. Shape [n_nodes, rnn_edge_size]
+        node_interaction_history, h_edge = self.edge_history_encoder(
+            edge_attr=messages, hidden=h_edge, edge_index=edge_index, x_size=x.size(0)
+        )
+
+        # Concatenate. Shape [n_nodes, rnn_size+rnn_edge_size+map_encoding_size]
+        full_node_representation = torch.cat(
+            [node_history, node_interaction_history, u], dim=-1
+        )
+
+        # Final node update. [n_nodes, out_features]
+        out, _, _ = self.GN_out(x=full_node_representation, edge_index=edge_index, edge_attr=edge_attr,
+                                u=None, batch=None)
+
+        return out, (h_node, h_edge)
+
+
+class rnn_message_passing_global_v3(nn.Module):
+    # Recurrent message-passing GNN
+    def __init__(
+        self,
+        hidden_size: int = 64,
+        dropout: float = 0.0,
+        node_features: int = 5,
+        edge_features: int = 0,
+        num_layers: int = 1,
+        rnn_size: int = 20,
+        rnn_edge_size: int = 8,
+        out_features: int = 4,
+        rnn_type: str = "LSTM",
+        latent_edge_features: int = 32,
+        map_encoding_size: int = 32,
+    ):
+        super(rnn_message_passing_global_v3, self).__init__()
+        self.num_layers = num_layers
+        self.rnn_size = rnn_size
+        self.rnn_edge_size = rnn_edge_size
+        self.dropout = dropout
+
+        # Node history encoder.
+        # Computes a node-wise representation which incorporates the nodes' respective histories.
+        self.node_history_encoder = node_rnn_simple(
+            node_features=node_features+map_encoding_size,
+            edge_features=0,
+            rnn_size=rnn_size,
+            dropout=dropout,
+            num_layers=num_layers,
+            rnn_type=rnn_type,
+        )
+
+        # GN-block to compute messages/interactions between nodes
+        self.message_gn = GraphNetworkBlock(
+            edge_model=edge_mlp_1(
+                node_features=node_features+map_encoding_size,
+                edge_features=edge_features,
+                hidden_size=hidden_size,
+                dropout=dropout,
+                latent_edge_features=latent_edge_features,
+            )
+        )
+
+        # Interaction history encoder.
+        # Computes a node-wise history which incorporates influences from neighbouring nodes using messages.
+        self.edge_history_encoder = edge_rnn_1(
+            edge_features=latent_edge_features,
+            rnn_size=rnn_edge_size,
+            dropout=dropout,
+            num_layers=num_layers,
+            rnn_type=rnn_type,
+        )
+
+        # Output GN
+        self.GN_out = GraphNetworkBlock(
+            edge_model=edge_mlp_1(
+                node_features=rnn_size + rnn_edge_size,
+                edge_features=edge_features,
+                hidden_size=hidden_size,
+                dropout=dropout,
+                latent_edge_features=latent_edge_features,
+            ),
+            node_model=node_mlp_out(
+                hidden_size=hidden_size,
+                node_features=rnn_size + rnn_edge_size,
+                dropout=dropout,
+                edge_features=latent_edge_features,
+                out_features=out_features,
+            ),
+        )
+
+    def forward(self, x, edge_index, edge_attr, u, hidden: tuple, batch=None):
+        # x: [n_nodes, node_features]
+        # edge_index: [2, n_edges]
+        # edge_attr : [n_edges, edge_features]
+        # u: [n_nodes, local_map_resolution]
+
+        # Unpack hidden states
+        h_node, h_edge = hidden
+
+        #
+        x = torch.cat([x, u], dim=-1)
+
+        # Encode node histories. Shape [n_nodes, rnn_size]
+        node_history, h_node = self.node_history_encoder(
+            x=x, edge_index=None, edge_attr=None, u=None, batch=None, hidden=h_node
+        )
+
+        # Compute messages. Shape [n_edges, latent_edge_features]
+        _, messages, _ = self.message_gn(
+            x=x, edge_index=edge_index, edge_attr=edge_attr, u=None, batch=None
+        )
+
+        # Aggregate and encode edge histories. Shape [n_nodes, rnn_edge_size]
+        node_interaction_history, h_edge = self.edge_history_encoder(
+            edge_attr=messages, hidden=h_edge, edge_index=edge_index, x_size=x.size(0)
+        )
+
+        # Concatenate. Shape [n_nodes, rnn_size+rnn_edge_size+map_encoding_size]
+        full_node_representation = torch.cat(
+            [node_history, node_interaction_history], dim=-1
+        )
+
+        # Final node update. [n_nodes, out_features]
+        out, _, _ = self.GN_out(x=full_node_representation, edge_index=edge_index, edge_attr=edge_attr,
+                                u=None, batch=None)
+
+        return out, (h_node, h_edge)
+
+
+class rnn_message_passing_global_v4(nn.Module):
+    # Recurrent message-passing GNN
+    def __init__(
+        self,
+        hidden_size: int = 64,
+        dropout: float = 0.0,
+        node_features: int = 5,
+        edge_features: int = 0,
+        num_layers: int = 1,
+        rnn_size: int = 20,
+        rnn_edge_size: int = 8,
+        out_features: int = 4,
+        rnn_type: str = "LSTM",
+        latent_edge_features: int = 32,
+        map_encoding_size: int = 32,
+    ):
+        super(rnn_message_passing_global_v4, self).__init__()
+        self.num_layers = num_layers
+        self.rnn_size = rnn_size
+        self.rnn_edge_size = rnn_edge_size
+        self.dropout = dropout
+
+        # Node history encoder.
+        # Computes a node-wise representation which incorporates the nodes' respective histories.
+        self.node_history_encoder = node_rnn_simple(
+            node_features=node_features+map_encoding_size,
+            edge_features=0,
+            rnn_size=rnn_size,
+            dropout=dropout,
+            num_layers=num_layers,
+            rnn_type=rnn_type,
+        )
+
+        # GN-block to compute messages/interactions between nodes
+        self.message_gn = GraphNetworkBlock(
+            edge_model=edge_mlp_1(
+                node_features=node_features+map_encoding_size,
+                edge_features=edge_features,
+                hidden_size=hidden_size,
+                dropout=dropout,
+                latent_edge_features=latent_edge_features,
+            )
+        )
+
+        # Interaction history encoder.
+        # Computes a node-wise history which incorporates influences from neighbouring nodes using messages.
+        self.edge_history_encoder = edge_rnn_1(
+            edge_features=latent_edge_features,
+            rnn_size=rnn_edge_size,
+            dropout=dropout,
+            num_layers=num_layers,
+            rnn_type=rnn_type,
+        )
+
+        # Output GN
+        self.node_output = node_mlp_out_global(
+            hidden_size=hidden_size,
+            node_features=rnn_size + rnn_edge_size,
+            dropout=dropout,
+            out_features=out_features,
+        )
+
+    def forward(self, x, edge_index, edge_attr, u, hidden: tuple, batch=None):
+        # x: [n_nodes, node_features]
+        # edge_index: [2, n_edges]
+        # edge_attr : [n_edges, edge_features]
+        # u: [n_nodes, local_map_resolution]
+
+        # Unpack hidden states
+        h_node, h_edge = hidden
+
+        x = torch.cat([x, u], dim=-1)
+
+        # Encode node histories. Shape [n_nodes, rnn_size]
+        node_history, h_node = self.node_history_encoder(
+            x=x, edge_index=None, edge_attr=None, u=None, batch=None, hidden=h_node
+        )
+
+        # Compute messages. Shape [n_edges, latent_edge_features]
+        _, messages, _ = self.message_gn(
+            x=x, edge_index=edge_index, edge_attr=edge_attr, u=None, batch=None
+        )
+
+        # Aggregate and encode edge histories. Shape [n_nodes, rnn_edge_size]
+        node_interaction_history, h_edge = self.edge_history_encoder(
+            edge_attr=messages, hidden=h_edge, edge_index=edge_index, x_size=x.size(0)
+        )
+
+        # Concatenate. Shape [n_nodes, rnn_size+rnn_edge_size+map_encoding_size]
+        full_node_representation = torch.cat(
+            [node_history, node_interaction_history], dim=-1
+        )
+
+        # Final node update. [n_nodes, out_features]
+        out = self.node_output(x=full_node_representation)
+
+        return out, (h_node, h_edge)

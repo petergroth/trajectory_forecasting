@@ -286,6 +286,7 @@ class SequentialModule(pl.LightningModule):
                     self.local_map_resolution + 1,
                 )
             )
+            u_local = u_local.type_as(batch.x)
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
@@ -455,6 +456,7 @@ class SequentialModule(pl.LightningModule):
                     self.local_map_resolution + 1,
                 )
             )
+            u_local = u_local.type_as(batch.x)
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
@@ -768,6 +770,7 @@ class SequentialModule(pl.LightningModule):
                     self.local_map_resolution + 1,
                 )
             )
+            u_local = u_local.type_as(batch.x)
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
@@ -928,6 +931,7 @@ class SequentialModule(pl.LightningModule):
                     self.local_map_resolution + 1,
                 )
             )
+            u_local = u_local.type_as(batch.x)
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
@@ -1059,6 +1063,10 @@ class SequentialModule(pl.LightningModule):
         self.log("val_total_loss", loss, batch_size=val_mask.sum().item())
         self.log("val_fde_ttp_loss", fde_ttp_loss, batch_size=fde_ttp_mask.sum().item())
         self.log("val_ade_ttp_loss", ade_ttp_loss, batch_size=ade_ttp_mask.sum().item())
+
+        ######################
+        # Visualise          #
+        ######################
 
         return loss
 
@@ -1193,7 +1201,7 @@ class SequentialModule(pl.LightningModule):
                 flow="source_to_target",
             )
 
-            edge_index, _ = torch_geometric.utils.add_self_loops(edge_index, num_nodes=x_t.shape[0])
+            # edge_index, _ = torch_geometric.utils.add_self_loops(edge_index, num_nodes=x_t.shape[0])
 
             if self.undirected:
                 edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
@@ -1222,6 +1230,7 @@ class SequentialModule(pl.LightningModule):
                     self.local_map_resolution + 1,
                 )
             )
+            u_local = u_local.type_as(batch.x)
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
@@ -1383,6 +1392,7 @@ class SequentialModule(pl.LightningModule):
                     self.local_map_resolution + 1,
                 )
             )
+            u_local = u_local.type_as(batch.x)
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
@@ -1703,16 +1713,18 @@ def main(config):
         config=OmegaConf.to_container(config, resolve=True),
         **config["logger"],
     )
-    wandb_logger.watch(regressor, log_freq=config["misc"]["log_freq"], log_graph=False)
+    wandb_logger.watch(regressor, log_freq=config["misc"]["log_freq"], log_graph=True)
     # Add default dir for logs
 
     # Setup callbacks
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
-        filename=config["logger"]["version"], monitor="val_total_loss", save_last=True
+        filename=config["logger"]["version"], monitor="val_total_loss", save_last=True, save_top_k=3
     )
+    summary_callback = pl.callbacks.ModelSummary(max_depth=2)
+
     # Create trainer, fit, and validate
     trainer = pl.Trainer(
-        logger=wandb_logger, **config["trainer"], callbacks=[checkpoint_callback]
+        logger=wandb_logger, **config["trainer"], callbacks=[checkpoint_callback, summary_callback]
     )
 
     if config["misc"]["train"]:
@@ -1723,3 +1735,4 @@ def main(config):
 
 if __name__ == "__main__":
     main()
+
