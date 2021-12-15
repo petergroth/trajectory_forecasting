@@ -39,6 +39,7 @@ def make_predictions(path, config, n_steps=51, sequence_idx=0):
     # agent = [0, 1, 2, 3]
     # batch.x = batch.x[agent]
     batch.batch = torch.zeros(batch.x.size(0)).type(torch.int64)
+    batch.num_graphs = 1
     # batch.batch = batch.batch[agent]
     # batch.tracks_to_predict = batch.tracks_to_predict[agent]
     # batch.type = batch.type[agent]
@@ -431,13 +432,13 @@ def main():
         )
 
         # ax[1] = plot_edges_single_agent(ax=ax[1], t=t, states=y_hat, alpha=alphas[t], agent=3, mask=mask)
-        ax[1] = plot_edges_all_agents(
-            ax=ax[1],
-            t=t,
-            states=y_hat,
-            dist=config["regressor"]["min_dist"],
-            n_neighbours=config["regressor"]["n_neighbours"],
-        )
+        # ax[1] = plot_edges_all_agents(
+        #     ax=ax[1],
+        #     t=t,
+        #     states=y_hat,
+        #     dist=config["regressor"]["min_dist"],
+        #     n_neighbours=config["regressor"]["n_neighbours"],
+        # )
         # ax[1] = plot_edges_single_agent(ax=ax[1], t=t, states=y_hat, alpha=alphas[t], agent=0, mask=mask)
 
     ax[0].axis("equal")
@@ -449,8 +450,8 @@ def main():
     ax[0].set_title("Groundtruth trajectories")
     ax[1].set_title("Predicted trajectories")
 
-    # plt.show()
-    fig.savefig(f"{args.output_path}/sequence_{args.sequence_idx:04}_51.png")
+    plt.show()
+    # fig.savefig(f"{args.output_path}/sequence_{args.sequence_idx:04}_51.png")
 
 
 if __name__ == "__main__":

@@ -6,6 +6,8 @@ if __name__ == "__main__":
     dm = SequentialWaymoDataModule(batch_size=32, shuffle=True)
     dm.setup()
 
-    loader = dm.val_dataloader()
 
-    batch = next(iter(loader))
+    # dm.train_dataset.process()
+    # loader = dm.val_dataloader()
+    #
+    # batch = next(iter(loader))
