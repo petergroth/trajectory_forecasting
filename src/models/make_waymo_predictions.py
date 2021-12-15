@@ -39,6 +39,7 @@ def make_predictions(path, config, n_steps=51, sequence_idx=0):
     # agent = [0, 1, 2, 3]
     # batch.x = batch.x[agent]
     batch.batch = torch.zeros(batch.x.size(0)).type(torch.int64)
+    batch.num_graphs = 1
     # batch.batch = batch.batch[agent]
     # batch.tracks_to_predict = batch.tracks_to_predict[agent]
     # batch.type = batch.type[agent]
@@ -49,13 +50,18 @@ def make_predictions(path, config, n_steps=51, sequence_idx=0):
 
 def plot_time_step(ax, t, states, alpha, colors, n_steps):
     # Scatter plot of all agent positions
+    if t == n_steps-1 or t == 10:
+        edgecolors = "k"
+    else:
+        edgecolors = None
+
     ax.scatter(
         x=states[t, :, 0].numpy(),
         y=states[t, :, 1].numpy(),
         s=50,
         color=colors,
         alpha=alpha,
-        edgecolors="k" if t == n_steps - 1 else None,
+        edgecolors=edgecolors,
     )
     # Draw velocity arrows at first and final future predictions
     if t == 10 or t == n_steps - 2:
@@ -355,6 +361,8 @@ def main():
     n_steps = args.n_steps
     _, n_agents, n_features = y_hat.shape
     roadgraph = batch.u.squeeze().numpy() / 2
+    roadgraph = roadgraph[40:-40, 40:-40]
+    # print(roadgraph.shape)
     loc_x = batch.loc[:, 0].squeeze().numpy()
     loc_y = batch.loc[:, 1].squeeze().numpy()
     width = 150
@@ -417,7 +425,7 @@ def main():
 
     alphas = np.linspace(0.1, 1, n_steps)
     for t in range(n_steps - 1):
-        # Plot groundtruth
+        #Plot groundtruth
         ax[0] = plot_time_step(
             ax=ax[0],
             t=t,
@@ -431,13 +439,13 @@ def main():
         )
 
         # ax[1] = plot_edges_single_agent(ax=ax[1], t=t, states=y_hat, alpha=alphas[t], agent=3, mask=mask)
-        ax[1] = plot_edges_all_agents(
-            ax=ax[1],
-            t=t,
-            states=y_hat,
-            dist=config["regressor"]["min_dist"],
-            n_neighbours=config["regressor"]["n_neighbours"],
-        )
+        # ax[1] = plot_edges_all_agents(
+        #     ax=ax[1],
+        #     t=t,
+        #     states=y_hat,
+        #     dist=config["regressor"]["min_dist"],
+        #     n_neighbours=config["regressor"]["n_neighbours"],
+        # )
         # ax[1] = plot_edges_single_agent(ax=ax[1], t=t, states=y_hat, alpha=alphas[t], agent=0, mask=mask)
 
     ax[0].axis("equal")
@@ -450,7 +458,7 @@ def main():
     ax[1].set_title("Predicted trajectories")
 
     # plt.show()
-    fig.savefig(f"{args.output_path}/sequence_{args.sequence_idx:04}_51.png")
+    fig.savefig(f"{args.output_path}/sequence_{args.sequence_idx:04}_{n_steps}.png")
 
 
 if __name__ == "__main__":

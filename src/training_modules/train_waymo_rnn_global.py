@@ -21,7 +21,6 @@ from src.data.dataset_waymo import (OneStepWaymoDataModule,
 from src.models.model import *
 from src.training_modules import *
 
-
 class SequentialModule(pl.LightningModule):
     def __init__(
         self,
@@ -252,7 +251,7 @@ class SequentialModule(pl.LightningModule):
                 flow="source_to_target",
             )
 
-            edge_index, _ = torch_geometric.utils.add_self_loops(edge_index, num_nodes=x_t.shape[0])
+            # edge_index, _ = torch_geometric.utils.add_self_loops(edge_index, num_nodes=x_t.shape[0])
 
             if self.undirected:
                 edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
@@ -286,6 +285,7 @@ class SequentialModule(pl.LightningModule):
                     self.local_map_resolution + 1,
                 )
             )
+            u_local = u_local.type_as(batch.x)
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
@@ -421,7 +421,7 @@ class SequentialModule(pl.LightningModule):
                 flow="source_to_target",
             )
 
-            edge_index, _ = torch_geometric.utils.add_self_loops(edge_index, num_nodes=x_t.shape[0])
+            # edge_index, _ = torch_geometric.utils.add_self_loops(edge_index, num_nodes=x_t.shape[0])
 
             if self.undirected:
                 edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
@@ -455,6 +455,7 @@ class SequentialModule(pl.LightningModule):
                     self.local_map_resolution + 1,
                 )
             )
+            u_local = u_local.type_as(batch.x)
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
@@ -739,7 +740,7 @@ class SequentialModule(pl.LightningModule):
                 flow="source_to_target",
             )
 
-            edge_index, _ = torch_geometric.utils.add_self_loops(edge_index, num_nodes=x_t.shape[0])
+            # edge_index, _ = torch_geometric.utils.add_self_loops(edge_index, num_nodes=x_t.shape[0])
 
             if self.undirected:
                 edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
@@ -768,6 +769,7 @@ class SequentialModule(pl.LightningModule):
                     self.local_map_resolution + 1,
                 )
             )
+            u_local = u_local.type_as(batch.x)
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
@@ -899,7 +901,7 @@ class SequentialModule(pl.LightningModule):
                 flow="source_to_target",
             )
 
-            edge_index, _ = torch_geometric.utils.add_self_loops(edge_index, num_nodes=x_t.shape[0])
+            # edge_index, _ = torch_geometric.utils.add_self_loops(edge_index, num_nodes=x_t.shape[0])
 
             if self.undirected:
                 edge_index, edge_attr = torch_geometric.utils.to_undirected(edge_index)
@@ -928,6 +930,7 @@ class SequentialModule(pl.LightningModule):
                     self.local_map_resolution + 1,
                 )
             )
+            u_local = u_local.type_as(batch.x)
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
@@ -1222,6 +1225,7 @@ class SequentialModule(pl.LightningModule):
                     self.local_map_resolution + 1,
                 )
             )
+            u_local = u_local.type_as(batch.x)
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
@@ -1383,6 +1387,7 @@ class SequentialModule(pl.LightningModule):
                     self.local_map_resolution + 1,
                 )
             )
+            u_local = u_local.type_as(batch.x)
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
