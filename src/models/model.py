@@ -1434,7 +1434,7 @@ class convolutional_model(nn.Module):
 
 
 class road_encoder(nn.Module):
-    def __init__(self, width: int = 300, hidden_size: int = 41):
+    def __init__(self, width: int = 300, hidden_size: int = 41, in_map_channels: int = 8):
         super(road_encoder, self).__init__()
         hidden_channels = [20, 10, 5, 1]
         strides = [1, 1, 1, 1]
@@ -1443,12 +1443,12 @@ class road_encoder(nn.Module):
 
         self.conv_modules = nn.ModuleList()
         self.bn_modules = nn.ModuleList()
-        x_dummy = torch.ones((1, 1, width, width))
+        x_dummy = torch.ones((1, in_map_channels, width, width))
 
         for i in range(4):
             self.conv_modules.append(
                 nn.Conv2d(
-                    in_channels=1 if i == 0 else hidden_channels[i - 1],
+                    in_channels=in_map_channels if i == 0 else hidden_channels[i - 1],
                     out_channels=hidden_channels[i],
                     kernel_size=filters[i],
                     stride=strides[i],
@@ -1462,7 +1462,6 @@ class road_encoder(nn.Module):
 
     def forward(self, u):
         # Add single color channel dimension
-        u = u.unsqueeze(1)
         assert u.shape[-1] == self.width
         assert u.shape[-2] == self.width
         for i, conv_layer in enumerate(self.conv_modules):
@@ -1476,7 +1475,9 @@ class road_encoder(nn.Module):
 
 
 class rnn_message_passing_global(nn.Module):
-    # Recurrent message-passing GNN
+    #   Encoding of node history
+    #   Encoding of interaction history with message passing
+    #   Concatenation of histories and mapping before node update
     def __init__(
         self,
         hidden_size: int = 64,

@@ -2,13 +2,9 @@ out_features: 7
 noise: null
 lr: 1.0e-4
 weight_decay: 0.0
-edge_type: distance
 min_dist: 10
 n_neighbours: 15
 edge_weight: True
-fully_connected: False
-self_loop: False
-undirected: False
 normalise: False
 node_features: 15
 edge_features: 1
