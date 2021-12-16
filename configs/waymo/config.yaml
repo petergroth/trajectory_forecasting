@@ -1,8 +1,8 @@
 defaults:
-  - datamodule: onestep
+  - datamodule: sequential
   - model: mlp_forward
-  - regressor: onestep
-  - trainer: onestep
+  - regressor: sequential
+  - trainer: sequential
   - _self_
 
 logger:
@@ -14,11 +14,9 @@ logger:
 misc:
   seed: 1
   model_type: mlp_full_forward_model
-  dm_type: OneStepWaymoDataModule
-  regressor_type: OneStepModule
-  checkpoint: False
+  dm_type: SequentialWaymoDataModule
+  regressor_type: SequentialModule
   train: True
-  continue_training: null
   log_freq: 10
 
 hydra:

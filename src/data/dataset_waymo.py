@@ -6,13 +6,13 @@ from typing import Optional
 import matplotlib.pyplot as plt
 import numpy as np
 import pytorch_lightning as pl
-#import tensorflow as tf
+import tensorflow as tf
 import torch
 from torch.nn.functional import one_hot
 from torch_geometric.data import Data, Dataset, InMemoryDataset
 from torch_geometric.loader import DataLoader
 from typing import Optional
-# from src.utils import parse_sequence
+from src.utils import parse_sequence
 
 
 class OneStepWaymoTrainDataset(InMemoryDataset):
@@ -180,11 +180,11 @@ class SequentialWaymoTrainDataset(InMemoryDataset):
         key_values = [
             "x",
             "y",
-            "z",
+            # "z",
             "velocity_x",
             "velocity_y",
-            "bbox_yaw",
-            "vel_yaw",
+            # "bbox_yaw",
+            # "vel_yaw",
             "width",
             "length",
             "height",
@@ -195,7 +195,7 @@ class SequentialWaymoTrainDataset(InMemoryDataset):
         n_nodes = 128
         n_features = len(key_values)
         n_steps = 91
-
+        # total_sum = np.zeros(16)
         # Move through raw files
         for i, raw_path in enumerate(self.raw_file_names):
             # Load file
@@ -218,11 +218,16 @@ class SequentialWaymoTrainDataset(InMemoryDataset):
                     )
                     feature_matrix[:, 11:, j] = parsed["state/future/" + key].numpy()
 
+
                 roadgraph = parsed["roadgraph_samples/xyz"].numpy()
+                roadgraph_type = parsed["roadgraph_samples/type"].numpy()
                 roadgraph_mask = np.array(
                     parsed["roadgraph_samples/valid"].numpy().squeeze(), dtype=bool
                 )
                 roadgraph = roadgraph[roadgraph_mask][:, :2]
+                roadgraph_type = roadgraph_type[roadgraph_mask][:, :2]
+
+                width = 150
 
                 # Compute span of area
                 all_x = feature_matrix[:, :11, 0][
@@ -232,33 +237,100 @@ class SequentialWaymoTrainDataset(InMemoryDataset):
                     feature_matrix[:, :11, -1].astype(bool)
                 ]
                 center_x, center_y = np.mean(all_x), np.mean(all_y)
-                width = 150
-                # Histogram of roadgraph
-                u, _, _ = np.histogram2d(
-                    x=roadgraph[:, 0],
-                    y=roadgraph[:, 1],
-                    range=[
-                        [center_x - width / 2, center_x + width / 2],
-                        [center_y - width / 2, center_y + width / 2],
-                    ],
-                    bins=[width * 2, width * 2],
-                )
-                u = u.T
-                # Binarise
-                u[u > 0] = 1
+
+                # channels = [1, 2, 3, 6, 7, 12, 15, 16, 17, 18, 19]
+                channel_dict = {"LaneCenterFreeway": 1,
+                                "LaneCenterSurfaceStreet": 2,
+                                "LaneCenterBikeLane": 3,
+                                "RoadLineBrokenSingleWhite": 6,
+                                "RoadLineSolidSingleWhite": 7,
+                                "RoadLineSolidDoubleWhite": 8,
+                                "RoadLineBrokenSingleYellow": 9,
+                                "RoadLineBrokenDoubleYellow": 10,
+                                "RoadlineSolidSingleYellow": 11,
+                                "RoadlineSolidDoubleYellow": 12,
+                                "RoadLinePassingDoubleYellow": 13,
+                                "RoadEdgeBoundary": 15,
+                                "RoadEdgeMedian": 16,
+                                "StopSign": 17,
+                                "Crosswalk": 18,
+                                "SpeedBump": 19
+                }
+                # channels = np.arange(20)
+                u = np.zeros((len(channel_dict), width*2, width*2), dtype=np.byte)
+                for j, key in enumerate(channel_dict):
+                    road_edge_mask = (roadgraph_type == channel_dict[key]).squeeze()
+                    roadgraph_i = roadgraph[road_edge_mask]
+                    # Histogram of roadgraph
+                    u_i, _, _ = np.histogram2d(
+                        x=roadgraph_i[:, 0],
+                        y=roadgraph_i[:, 1],
+                        range=[
+                            [center_x - width / 2, center_x + width / 2],
+                            [center_y - width / 2, center_y + width / 2],
+                        ],
+                        bins=[width * 2, width * 2],
+                    )
+                    # Binarise
+                    u_i[u_i > 0] = 1
+                    # total_sum[i] += u_i.sum()
+                    u_i = u_i.astype(np.byte)
+                    u[j] = u_i.T
+
+                # Combine similar road features for smaller memory footprint
+                u_center = u[0]+u[1]
+                u_bikelane = u[2]
+                u_broken_white = u[3]
+                u_solid_white = u[4] + u[5]
+                u_broken_yellow = u[6] + u[7] + u[10]
+                u_solid_yellow = u[8] + u[9]
+                u_edges = u[11] + u[12]
+                u_obstacles = u[13] + u[14] + u[15]
+
+                u = np.stack([u_center,
+                              u_bikelane,
+                              u_broken_white,
+                              u_solid_white,
+                              u_broken_yellow,
+                              u_solid_yellow,
+                              u_edges,
+                              u_obstacles])
+
+                # for i in range(u.shape[0]):
+                #     fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+                #     ax.imshow(u[i], origin='lower', extent=(center_x - width / 2,
+                #                                              center_x + width / 2,
+                #                                              center_y - width / 2,
+                #                                              center_y + width / 2),
+                #               interpolation=None, cmap='Greys'
+                #              )
+                #     ax.scatter(x=all_x, y=all_y, color='#f58a00')
+                #     plt.title(i)
+                #     plt.show()
+                #
+                # fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+                # ax.imshow(np.sum(u,axis=0), origin='lower', extent=(center_x - width / 2,
+                #                                         center_x + width / 2,
+                #                                         center_y - width / 2,
+                #                                         center_y + width / 2),
+                #           interpolation=None, cmap='Greys'
+                #           )
+                # ax.scatter(x=all_x, y=all_y, color='#f58a00')
+                # # plt.title(i)
+                # plt.show()
 
                 feature_matrix = torch.Tensor(feature_matrix)
-                # Process yaw-values into [-pi, pi]
-                x_yaws = feature_matrix[:, :, 5:7]
-                x_yaws[x_yaws > 0] = (
-                    torch.fmod(x_yaws[x_yaws > 0] + math.pi, torch.tensor(2 * math.pi))
-                    - math.pi
-                )
-                x_yaws[x_yaws < 0] = (
-                    torch.fmod(x_yaws[x_yaws < 0] - math.pi, torch.tensor(2 * math.pi))
-                    + math.pi
-                )
-                feature_matrix[:, :, 5:7] = x_yaws
+                # # Process yaw-values into [-pi, pi]
+                # x_yaws = feature_matrix[:, :, 5:7]
+                # x_yaws[x_yaws > 0] = (
+                #     torch.fmod(x_yaws[x_yaws > 0] + math.pi, torch.tensor(2 * math.pi))
+                #     - math.pi
+                # )
+                # x_yaws[x_yaws < 0] = (
+                #     torch.fmod(x_yaws[x_yaws < 0] - math.pi, torch.tensor(2 * math.pi))
+                #     + math.pi
+                # )
+                # feature_matrix[:, :, 5:7] = x_yaws
 
                 # Values and mask to use for normalisation
                 vals = feature_matrix[:, :11, :-1]
@@ -281,12 +353,17 @@ class SequentialWaymoTrainDataset(InMemoryDataset):
                 data["type"] = one_hot(type[mask], num_classes=5)
                 data["loc"] = loc.unsqueeze(0)
                 data["std"] = std.unsqueeze(0)
-                data["u"] = torch.Tensor(u).unsqueeze(0)
+                data["u"] = torch.ByteTensor(u).unsqueeze(0)
 
                 data_list.append(data)
 
+            # print(f"Finished file {i+1}")
+
         # Collate and save
+        # print("Attempting to collate")
         data, slices = self.collate(data_list)
+        del data_list, feature_matrix, parsed, u, roadgraph, dataset
+        # print("Attempting to save")
         torch.save((data, slices), self.processed_paths[0])
 
 
@@ -322,11 +399,11 @@ class SequentialWaymoValDataset(InMemoryDataset):
         key_values = [
             "x",
             "y",
-            "z",
+            # "z",
             "velocity_x",
             "velocity_y",
-            "bbox_yaw",
-            "vel_yaw",
+            # "bbox_yaw",
+            # "vel_yaw",
             "width",
             "length",
             "height",
@@ -337,7 +414,7 @@ class SequentialWaymoValDataset(InMemoryDataset):
         n_nodes = 128
         n_features = len(key_values)
         n_steps = 91
-
+        # total_sum = np.zeros(16)
         # Move through raw files
         for i, raw_path in enumerate(self.raw_file_names):
             # Load file
@@ -361,10 +438,14 @@ class SequentialWaymoValDataset(InMemoryDataset):
                     feature_matrix[:, 11:, j] = parsed["state/future/" + key].numpy()
 
                 roadgraph = parsed["roadgraph_samples/xyz"].numpy()
+                roadgraph_type = parsed["roadgraph_samples/type"].numpy()
                 roadgraph_mask = np.array(
                     parsed["roadgraph_samples/valid"].numpy().squeeze(), dtype=bool
                 )
                 roadgraph = roadgraph[roadgraph_mask][:, :2]
+                roadgraph_type = roadgraph_type[roadgraph_mask][:, :2]
+
+                width = 150
 
                 # Compute span of area
                 all_x = feature_matrix[:, :11, 0][
@@ -374,33 +455,100 @@ class SequentialWaymoValDataset(InMemoryDataset):
                     feature_matrix[:, :11, -1].astype(bool)
                 ]
                 center_x, center_y = np.mean(all_x), np.mean(all_y)
-                width = 150
-                # Histogram of roadgraph
-                u, _, _ = np.histogram2d(
-                    x=roadgraph[:, 0],
-                    y=roadgraph[:, 1],
-                    range=[
-                        [center_x - width / 2, center_x + width / 2],
-                        [center_y - width / 2, center_y + width / 2],
-                    ],
-                    bins=[width * 2, width * 2],
-                )
-                u = u.T
-                # Binarise
-                u[u > 0] = 1
+
+                # channels = [1, 2, 3, 6, 7, 12, 15, 16, 17, 18, 19]
+                channel_dict = {"LaneCenterFreeway": 1,
+                                "LaneCenterSurfaceStreet": 2,
+                                "LaneCenterBikeLane": 3,
+                                "RoadLineBrokenSingleWhite": 6,
+                                "RoadLineSolidSingleWhite": 7,
+                                "RoadLineSolidDoubleWhite": 8,
+                                "RoadLineBrokenSingleYellow": 9,
+                                "RoadLineBrokenDoubleYellow": 10,
+                                "RoadlineSolidSingleYellow": 11,
+                                "RoadlineSolidDoubleYellow": 12,
+                                "RoadLinePassingDoubleYellow": 13,
+                                "RoadEdgeBoundary": 15,
+                                "RoadEdgeMedian": 16,
+                                "StopSign": 17,
+                                "Crosswalk": 18,
+                                "SpeedBump": 19
+                                }
+                # channels = np.arange(20)
+                u = np.zeros((len(channel_dict), width * 2, width * 2), dtype=np.byte)
+                for j, key in enumerate(channel_dict):
+                    road_edge_mask = (roadgraph_type == channel_dict[key]).squeeze()
+                    roadgraph_i = roadgraph[road_edge_mask]
+                    # Histogram of roadgraph
+                    u_i, _, _ = np.histogram2d(
+                        x=roadgraph_i[:, 0],
+                        y=roadgraph_i[:, 1],
+                        range=[
+                            [center_x - width / 2, center_x + width / 2],
+                            [center_y - width / 2, center_y + width / 2],
+                        ],
+                        bins=[width * 2, width * 2],
+                    )
+                    # Binarise
+                    u_i[u_i > 0] = 1
+                    # total_sum[i] += u_i.sum()
+                    u_i = u_i.astype(np.byte)
+                    u[j] = u_i.T
+
+                # Combine similar road features for smaller memory footprint
+                u_center = u[0] + u[1]
+                u_bikelane = u[2]
+                u_broken_white = u[3]
+                u_solid_white = u[4] + u[5]
+                u_broken_yellow = u[6] + u[7] + u[10]
+                u_solid_yellow = u[8] + u[9]
+                u_edges = u[11] + u[12]
+                u_obstacles = u[13] + u[14] + u[15]
+
+                u = np.stack([u_center,
+                              u_bikelane,
+                              u_broken_white,
+                              u_solid_white,
+                              u_broken_yellow,
+                              u_solid_yellow,
+                              u_edges,
+                              u_obstacles])
+
+                # for i in range(u.shape[0]):
+                #     fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+                #     ax.imshow(u[i], origin='lower', extent=(center_x - width / 2,
+                #                                              center_x + width / 2,
+                #                                              center_y - width / 2,
+                #                                              center_y + width / 2),
+                #               interpolation=None, cmap='Greys'
+                #              )
+                #     ax.scatter(x=all_x, y=all_y, color='#f58a00')
+                #     plt.title(i)
+                #     plt.show()
+                #
+                # fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+                # ax.imshow(np.sum(u,axis=0), origin='lower', extent=(center_x - width / 2,
+                #                                         center_x + width / 2,
+                #                                         center_y - width / 2,
+                #                                         center_y + width / 2),
+                #           interpolation=None, cmap='Greys'
+                #           )
+                # ax.scatter(x=all_x, y=all_y, color='#f58a00')
+                # # plt.title(i)
+                # plt.show()
 
                 feature_matrix = torch.Tensor(feature_matrix)
-                # Process yaw-values into [-pi, pi]
-                x_yaws = feature_matrix[:, :, 5:7]
-                x_yaws[x_yaws > 0] = (
-                    torch.fmod(x_yaws[x_yaws > 0] + math.pi, torch.tensor(2 * math.pi))
-                    - math.pi
-                )
-                x_yaws[x_yaws < 0] = (
-                    torch.fmod(x_yaws[x_yaws < 0] - math.pi, torch.tensor(2 * math.pi))
-                    + math.pi
-                )
-                feature_matrix[:, :, 5:7] = x_yaws
+                # # Process yaw-values into [-pi, pi]
+                # x_yaws = feature_matrix[:, :, 5:7]
+                # x_yaws[x_yaws > 0] = (
+                #     torch.fmod(x_yaws[x_yaws > 0] + math.pi, torch.tensor(2 * math.pi))
+                #     - math.pi
+                # )
+                # x_yaws[x_yaws < 0] = (
+                #     torch.fmod(x_yaws[x_yaws < 0] - math.pi, torch.tensor(2 * math.pi))
+                #     + math.pi
+                # )
+                # feature_matrix[:, :, 5:7] = x_yaws
 
                 # Values and mask to use for normalisation
                 vals = feature_matrix[:, :11, :-1]
@@ -423,12 +571,17 @@ class SequentialWaymoValDataset(InMemoryDataset):
                 data["type"] = one_hot(type[mask], num_classes=5)
                 data["loc"] = loc.unsqueeze(0)
                 data["std"] = std.unsqueeze(0)
-                data["u"] = torch.Tensor(u).unsqueeze(0)
+                data["u"] = torch.ByteTensor(u).unsqueeze(0)
 
                 data_list.append(data)
 
+            # print(f"Finished file {i+1}")
+
         # Collate and save
+        # print("Attempting to collate")
         data, slices = self.collate(data_list)
+        del data_list, feature_matrix, parsed, u, roadgraph, dataset
+        # print("Attempting to save")
         torch.save((data, slices), self.processed_paths[0])
 
 
