@@ -60,8 +60,13 @@ class SequentialModule(pl.LightningModule):
         self.model = eval(model_type)(**model_dict)
 
         # Instantiate map encoder
-        self.map_encoder = road_encoder(
-            width=local_map_resolution + 1, hidden_size=model_dict["map_encoding_size"], in_map_channels=map_channels
+        self.local_map_encoder = road_encoder(
+            width=local_map_resolution + 1,
+            hidden_size=model_dict["local_map_encoding_size"],
+            in_map_channels=map_channels
+        )
+        self.global_map_encoder = road_encoder(
+            width=300,  hidden_size=model_dict["global_map_encoding_size"], in_map_channels=map_channels
         )
         self.local_map_resolution = local_map_resolution
         self.local_map_resolution_half = int(local_map_resolution / 2)
@@ -171,10 +176,6 @@ class SequentialModule(pl.LightningModule):
         # Map preparation    #
         ######################
 
-        # Increase importance of road boundaries
-
-
-
         # Zero pad each map for edge-cases
         batch.u = nn.functional.pad(
             batch.u,
@@ -277,6 +278,17 @@ class SequentialModule(pl.LightningModule):
             )
             u_local = u_local.type_as(batch.x)
 
+            # Allocate global maps
+            u_global = torch.zeros(
+                (
+                    x_t.size(0),
+                    batch.u.size(1),
+                    300,
+                    300,
+                )
+            )
+            u_global = u_global.type_as(batch.x)
+
             # Find closest pixels in x and y directions
             center_pixel_x = (
                     torch.argmax(
@@ -318,9 +330,16 @@ class SequentialModule(pl.LightningModule):
                                         idx_x_low[node_idx]: idx_x_high[node_idx],
                                         idx_y_low[node_idx]: idx_y_high[node_idx],
                                         ]
+                    u_global[node_idx] = batch.u[
+                                         graph_idx,
+                                         :,
+                                         self.local_map_resolution: -self.local_map_resolution,
+                                         self.local_map_resolution: -self.local_map_resolution]
+                    u_global[node_idx, :, center_pixel_y[node_idx], center_pixel_x[node_idx]] = 10
 
             # Perform map encoding
-            u = self.map_encoder(u_local)
+            u_loc = self.local_map_encoder(u_local)
+            u_glo = self.global_map_encoder(u_global)
 
             #######################
             # Training 1/2        #

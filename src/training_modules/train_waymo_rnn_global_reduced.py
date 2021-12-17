@@ -42,7 +42,7 @@ class SequentialModule(pl.LightningModule):
         edge_dropout: float = 0,
         prediction_horizon: int = 91,
         local_map_resolution: int = 40,
-        map_channels: int = 7,
+        map_channels: int = 8,
     ):
         super().__init__()
         # Set up metrics
@@ -75,7 +75,7 @@ class SequentialModule(pl.LightningModule):
         self.weight_decay = weight_decay
         self.teacher_forcing_ratio = teacher_forcing_ratio
         self.training_horizon = training_horizon
-        self.norm_index = [0, 1, 2, 3, 4, 5, 6]
+        self.norm_index = [0, 1, 2, 3]
         self.pos_index = [0, 1]
         self.edge_dropout = edge_dropout
         self.prediction_horizon = prediction_horizon
@@ -124,21 +124,13 @@ class SequentialModule(pl.LightningModule):
         mask = batch.x[:, :, -1].bool()
 
         # Discard masks and extract static features
-        batch.x = batch.x[:, :, :-1]
-        # static_features = torch.cat(
-        #     [batch.x[:, 10, self.out_features :], batch.type], dim=1
-        # )
-        static_features = batch.x[:, 10, self.out_features :]
-        static_features = static_features.type_as(batch.x)
+        batch.x = batch.x[:, :, [0, 1, 2, 3]]
         edge_attr = None
         # Extract dimensions and allocate predictions
         n_nodes = batch.num_nodes
         y_predictions = torch.zeros((n_nodes, self.training_horizon, self.out_features))
         y_predictions = y_predictions.type_as(batch.x)
 
-        # Obtain target delta dynamic nodes
-        # Use torch.roll to compute differences between x_t and x_{t+1}.
-        # Ignore final difference (between t_0 and t_{-1})
         y_target = batch.x[:, 1 : (self.training_horizon + 1), : self.out_features]
         y_target = y_target.type_as(batch.x)
 
@@ -170,10 +162,6 @@ class SequentialModule(pl.LightningModule):
         ######################
         # Map preparation    #
         ######################
-
-        # Increase importance of road boundaries
-
-
 
         # Zero pad each map for edge-cases
         batch.u = nn.functional.pad(
@@ -209,10 +197,6 @@ class SequentialModule(pl.LightningModule):
                 map_ranges[i, 2], map_ranges[i, 3], 150 * 2 + 1
             )
 
-        # Scale road-boundary layer and remove bikelanes
-        batch.u[:, 6] *= 5
-        batch.u = batch.u[:, [0, 2, 3, 4, 5, 6, 7]]
-
         ######################
         # History            #
         ######################
@@ -221,7 +205,6 @@ class SequentialModule(pl.LightningModule):
 
             # Extract current input
             mask_t = mask[:, t]
-            # x_t = torch.cat([batch.x[mask_t, t, :], batch.type[mask_t]], dim=1)
             x_t = batch.x[mask_t, t, :]
             x_t = x_t.type_as(batch.x)
 
@@ -374,7 +357,7 @@ class SequentialModule(pl.LightningModule):
 
             vel = delta_x[:, [0, 1]]
             pos = batch.x[mask_t, t][:, self.pos_index] + 0.1 * vel
-            x_t = torch.cat([pos, vel, static_features[mask_t]], dim=-1)
+            x_t = torch.cat([pos, vel], dim=-1)
             x_t = x_t.type_as(batch.x)
 
             # Save deltas for loss computation
@@ -521,7 +504,7 @@ class SequentialModule(pl.LightningModule):
 
             vel = delta_x[:, [0, 1]]
             pos = x_prev[:, [0, 1]] + 0.1 * vel
-            x_t = torch.cat([pos, vel, static_features], dim=-1)
+            x_t = torch.cat([pos, vel], dim=-1)
             x_t = x_t.type_as(batch.x)
 
             # Save deltas for loss computation
@@ -625,12 +608,7 @@ class SequentialModule(pl.LightningModule):
             (self.prediction_horizon - 11, n_nodes, self.out_features)
         )
         y_target = y_target.type_as(batch.x)
-        batch.x = batch.x[:, :, :-1]
-        # static_features = torch.cat(
-        #     [batch.x[:, 10, self.out_features :], batch.type], dim=1
-        # )
-        static_features = batch.x[:, 10, self.out_features :]
-        static_features = static_features.type_as(batch.x)
+        batch.x = batch.x[:, :, [0, 1, 2, 3]]
         edge_attr = None
 
         # Initial hidden state
@@ -694,10 +672,6 @@ class SequentialModule(pl.LightningModule):
                 map_ranges[i, 2], map_ranges[i, 3], 150 * 2 + 1
             )
 
-        # Scale road-boundary layer and remove bikelanes
-        batch.u[:, 6] *= 5
-        batch.u = batch.u[:, [0, 2, 3, 4, 5, 6, 7]]
-
         ######################
         # History            #
         ######################
@@ -709,7 +683,6 @@ class SequentialModule(pl.LightningModule):
             ######################
 
             mask_t = mask[:, t]
-            # x_t = torch.cat([batch.x[mask_t, t, :], batch.type[mask_t]], dim=1)
             x_t = batch.x[mask_t, t, :]
             x_t = x_t.type_as(batch.x)
 
@@ -739,7 +712,6 @@ class SequentialModule(pl.LightningModule):
             # Map encoding 1/2    #
             #######################
 
-            # Allocate local maps
             # Allocate local maps
             u_local = torch.zeros(
                 (
@@ -848,7 +820,7 @@ class SequentialModule(pl.LightningModule):
             if t == 10:
                 vel = delta_x[:, [0, 1]]
                 pos = batch.x[mask_t, t][:, self.pos_index] + 0.1 * vel
-                predicted_graph = torch.cat([pos, vel, static_features[mask_t]], dim=-1)
+                predicted_graph = torch.cat([pos, vel], dim=-1)
                 predicted_graph = predicted_graph.type_as(batch.x)
 
         # Save first prediction and target
@@ -986,7 +958,7 @@ class SequentialModule(pl.LightningModule):
 
             vel = delta_x[:, [0, 1]]
             pos = predicted_graph[:, [0, 1]] + 0.1 * vel
-            predicted_graph = torch.cat([pos, vel, static_features], dim=-1)
+            predicted_graph = torch.cat([pos, vel], dim=-1)
 
             predicted_graph = predicted_graph.type_as(batch.x)
 
@@ -1042,7 +1014,7 @@ class SequentialModule(pl.LightningModule):
         return loss
 
     def predict_step(self, batch, batch_idx=None, prediction_horizon: int = 91):
-
+        raise NotImplementedError
         ######################
         # Initialisation     #
         ######################
