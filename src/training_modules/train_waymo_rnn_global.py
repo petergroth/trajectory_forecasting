@@ -29,7 +29,7 @@ class SequentialModule(pl.LightningModule):
         lr: float = 1e-4,
         weight_decay: float = 0.0,
         noise: Union[None, float] = None,
-        teacher_forcing_ratio: float = 0.3,
+        teacher_forcing_ratio: float = 0.0,
         min_dist: int = 0,
         n_neighbours: int = 30,
         edge_weight: bool = False,
@@ -42,6 +42,7 @@ class SequentialModule(pl.LightningModule):
         edge_dropout: float = 0,
         prediction_horizon: int = 91,
         local_map_resolution: int = 40,
+        map_channels: int = 8,
     ):
         super().__init__()
         # Set up metrics
@@ -60,7 +61,7 @@ class SequentialModule(pl.LightningModule):
 
         # Instantiate map encoder
         self.map_encoder = road_encoder(
-            width=local_map_resolution + 1, hidden_size=model_dict["map_encoding_size"]
+            width=local_map_resolution + 1, hidden_size=model_dict["map_encoding_size"], in_map_channels=map_channels
         )
         self.local_map_resolution = local_map_resolution
         self.local_map_resolution_half = int(local_map_resolution / 2)
@@ -203,6 +204,10 @@ class SequentialModule(pl.LightningModule):
             interval_y[i] = torch.linspace(
                 map_ranges[i, 2], map_ranges[i, 3], 150 * 2 + 1
             )
+
+        # Scale road-boundary layer and remove bikelanes
+        # batch.u[:, 6] *= 2
+        # batch.u = batch.u[:, [0, 2, 3, 4, 5, 6, 7]]
 
         ######################
         # History            #
@@ -685,6 +690,10 @@ class SequentialModule(pl.LightningModule):
                 map_ranges[i, 2], map_ranges[i, 3], 150 * 2 + 1
             )
 
+        # Scale road-boundary layer and remove bikelanes
+        # batch.u[:, 6] *= 2
+        # batch.u = batch.u[:, [0, 2, 3, 4, 5, 6, 7]]
+
         ######################
         # History            #
         ######################
@@ -1028,7 +1037,7 @@ class SequentialModule(pl.LightningModule):
 
         return loss
 
-    def predict_step(self, batch, batch_idx=None, prediction_horizon: int = 91):
+    def predict_step(self, batch, batch_idx=None, prediction_horizon: int = 51):
 
         ######################
         # Initialisation     #
@@ -1131,6 +1140,10 @@ class SequentialModule(pl.LightningModule):
             interval_y[i] = torch.linspace(
                 map_ranges[i, 2], map_ranges[i, 3], 150 * 2 + 1
             )
+
+        # Scale road-boundary layer and remove bikelanes
+        batch.u[:, 6] *= 2
+        # batch.u = batch.u[:, [0, 2, 3, 4, 5, 6, 7]]
 
         ######################
         # History            #
