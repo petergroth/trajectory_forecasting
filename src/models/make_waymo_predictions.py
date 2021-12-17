@@ -360,7 +360,8 @@ def main():
     )
     n_steps = args.n_steps
     _, n_agents, n_features = y_hat.shape
-    roadgraph = batch.u.squeeze().numpy() / 2
+    roadgraph = batch.u.squeeze().numpy()
+    roadgraph = np.sum(roadgraph, axis=0)
     roadgraph = roadgraph[40:-40, 40:-40]
     # print(roadgraph.shape)
     loc_x = batch.loc[:, 0].squeeze().numpy()
