@@ -171,10 +171,6 @@ class SequentialModule(pl.LightningModule):
         # Map preparation    #
         ######################
 
-        # Increase importance of road boundaries
-
-
-
         # Zero pad each map for edge-cases
         batch.u = nn.functional.pad(
             batch.u,
