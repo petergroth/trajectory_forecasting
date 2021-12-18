@@ -104,6 +104,7 @@ class SequentialModule(pl.LightningModule):
         # Determine valid initialisations at t=11
         mask = batch.x[:, :, -1]
         valid_mask = mask[:, 10] > 0
+        batch.u[batch.u > 1] = 1
 
         # Discard non-valid nodes as no initial trajectories will be known
         batch.x = batch.x[valid_mask]
@@ -630,6 +631,7 @@ class SequentialModule(pl.LightningModule):
         # Determine valid initialisations at t=11
         mask = batch.x[:, :, -1]
         valid_mask = mask[:, 10] > 0
+        batch.u[batch.u > 1] = 1
 
         # Discard non-valid nodes as no initial trajectories will be known
         batch.x = batch.x[valid_mask]
@@ -1113,7 +1115,7 @@ class SequentialModule(pl.LightningModule):
         # Determine valid initialisations at t=11
         mask = batch.x[:, :, -1]
         valid_mask = mask[:, 10] > 0
-
+        batch.u[batch.u > 1] = 1
         # Discard non-valid nodes as no initial trajectories will be known
         batch.x = batch.x[valid_mask]
         batch.batch = batch.batch[valid_mask]
