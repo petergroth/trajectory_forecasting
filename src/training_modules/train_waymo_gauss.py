@@ -103,6 +103,7 @@ class SequentialModule(pl.LightningModule):
         # Determine valid initialisations at t=11
         mask = batch.x[:, :, -1]
         valid_mask = mask[:, 10] > 0
+        batch.u[batch.u > 1] = 1
 
         # Discard non-valid nodes as no initial trajectories will be known
         batch.x = batch.x[valid_mask]
@@ -143,6 +144,10 @@ class SequentialModule(pl.LightningModule):
         likelihoods = torch.zeros((n_nodes, self.training_horizon))
         Sigma_pos = torch.eye(2).reshape(1, 2, 2).repeat(n_nodes, 1, 1)
         Sigma_vel = torch.eye(2).reshape(1, 2, 2).repeat(n_nodes, 1, 1)
+        likelihoods = likelihoods.type_as(batch.x)
+        Sigma_pos = Sigma_pos.type_as(batch.x)
+        Sigma_vel = Sigma_vel.type_as(batch.x)
+
         # Initial hidden state
         if self.rnn_type == "GRU":
             h_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
@@ -575,7 +580,7 @@ class SequentialModule(pl.LightningModule):
         # Compute likelihoods of all agents at all times
         mean_nllh = torch.mean(-likelihoods[loss_mask])
         self.log(
-            "train_mean_llh",
+            "train_mean_nllh",
             mean_nllh,
             on_step=True,
             on_epoch=True,
@@ -627,6 +632,7 @@ class SequentialModule(pl.LightningModule):
         # Determine valid initialisations at t=11
         mask = batch.x[:, :, -1]
         valid_mask = mask[:, 10] > 0
+        batch.u[batch.u > 1] = 1
 
         # Discard non-valid nodes as no initial trajectories will be known
         batch.x = batch.x[valid_mask]
@@ -669,6 +675,9 @@ class SequentialModule(pl.LightningModule):
         likelihoods = torch.zeros((n_nodes, self.prediction_horizon-11))
         Sigma_pos = torch.eye(2).reshape(1, 2, 2).repeat(n_nodes, 1, 1)
         Sigma_vel = torch.eye(2).reshape(1, 2, 2).repeat(n_nodes, 1, 1)
+        likelihoods = likelihoods.type_as(batch.x)
+        Sigma_pos = Sigma_pos.type_as(batch.x)
+        Sigma_vel = Sigma_vel.type_as(batch.x)
 
         # Initial hidden state
         if self.rnn_type == "GRU":
@@ -1079,7 +1088,7 @@ class SequentialModule(pl.LightningModule):
         # Compute likelihoods of all agents at all times
         mean_nllh = torch.mean(-likelihoods[val_mask])
         self.log(
-            "val_mean_llh",
+            "val_mean_nllh",
             mean_nllh,
             batch_size=val_mask.sum().item(),
         )
@@ -1107,7 +1116,7 @@ class SequentialModule(pl.LightningModule):
         # Determine valid initialisations at t=11
         mask = batch.x[:, :, -1]
         valid_mask = mask[:, 10] > 0
-
+        batch.u[batch.u > 1] = 1
         # Discard non-valid nodes as no initial trajectories will be known
         batch.x = batch.x[valid_mask]
         batch.batch = batch.batch[valid_mask]
@@ -1128,8 +1137,8 @@ class SequentialModule(pl.LightningModule):
 
         # Allocate target/prediction tensors
         n_nodes = batch.num_nodes
-        y_hat = torch.zeros((prediction_horizon - 1, n_nodes, self.node_features))
-        y_target = torch.zeros((prediction_horizon - 1, n_nodes, self.node_features))
+        y_hat = torch.zeros((prediction_horizon - 1, n_nodes, 7))
+        y_target = torch.zeros((prediction_horizon - 1, n_nodes, 7))
         # Ensure device placement
         y_hat = y_hat.type_as(batch.x)
         y_target = y_target.type_as(batch.x)
@@ -1138,13 +1147,15 @@ class SequentialModule(pl.LightningModule):
         # static_features = torch.cat(
         #     [batch.x[:, 10, self.out_features :], batch.type], dim=1
         # )
-        static_features = batch.x[:, 10, self.out_features :]
+        static_features = batch.x[:, 10, 4 :]
         edge_attr = None
 
         # Allocate likelihood tensor and covariance matrices
         # likelihoods = torch.zeros((n_nodes, self.training_horizon))
         Sigma_vel = torch.eye(2).reshape(1, 2, 2).repeat(n_nodes, 1, 1)
         Sigma_pos = torch.eye(2).reshape(1, 1, 2, 2).repeat(prediction_horizon, n_nodes, 1, 1)
+        Sigma_pos = Sigma_pos.type_as(batch.x)
+        Sigma_vel = Sigma_vel.type_as(batch.x)
 
         # Initial hidden state
         if self.rnn_type == "GRU":
