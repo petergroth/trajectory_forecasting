@@ -14,8 +14,7 @@ from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning.utilities.seed import seed_everything
 
 from src.data.dataset_waymo import OneStepWaymoDataModule
-from src.training_modules.train_waymo_rnn_global import *
-
+from src.training_modules.train_waymo_gauss import *
 
 def make_predictions(path, config, n_steps=51, sequence_idx=0):
     # Set seed
@@ -31,7 +30,7 @@ def make_predictions(path, config, n_steps=51, sequence_idx=0):
         regressor = eval(config["misc"]["regressor_type"]).load_from_checkpoint(path)
     else:
         regressor = eval(config["misc"]["regressor_type"])(**config["regressor"])
-    # Setup
+        # Setup
     regressor.eval()
     datamodule.setup()
     dataset = datamodule.val_dataset
@@ -41,9 +40,14 @@ def make_predictions(path, config, n_steps=51, sequence_idx=0):
     batch.num_graphs = 1
 
     # Make and return predictions
-    y_hat, y_target, mask = regressor.predict_step(batch, prediction_horizon=n_steps)
+    y_hat, y_target, mask, Sigma = regressor.predict_step(batch, prediction_horizon=n_steps)
+    return y_hat.detach(), y_target, mask, batch, Sigma.detach()
 
-    return y_hat.detach(), y_target, mask, batch
+
+def eigsorted(cov):
+    vals, vecs = np.linalg.eigh(cov)
+    order = vals.argsort()[::-1]
+    return vals[order], vecs[:, order]
 
 
 def plot_time_step(ax, t, states, alpha, colors, n_steps):
@@ -158,7 +162,7 @@ def main():
         config = yaml.safe_load(f)
 
     # Make predictions
-    y_hat, y_target, mask, batch = make_predictions(
+    y_hat, y_target, mask, batch, Sigma = make_predictions(
         path=args.ckpt_path,
         config=config,
         sequence_idx=args.sequence_idx,
@@ -210,8 +214,10 @@ def main():
         (np.random.random(), np.random.random(), np.random.random())
         for _ in range(n_agents)
     ]
-
     alphas = np.linspace(0.1, 1, n_steps)
+
+    # Number of standard deviations for covariance matric to visualise
+    nstd = 1
 
     # Main loop
     for t in range(n_steps - 1):
@@ -227,6 +233,16 @@ def main():
         ax[1] = plot_time_step(
             ax=ax[1], t=t, states=y_hat, alpha=alphas[t], colors=agent_colors, n_steps=n_steps
         )
+
+        # Visualise covariance matrices for all agents
+        for agent in range(n_agents):
+            vals, vecs = eigsorted(Sigma[t, agent].detach().numpy())
+            theta = np.degrees(np.arctan2(*vecs[:, 0][::-1]))
+            w, h = 2 * nstd * np.sqrt(vals)
+            loc = y_hat[t, agent, :2].numpy()
+            ell = Ellipse(xy=loc, width=w, height=h, angle=theta, color=agent_colors[agent], alpha=0.2)
+            ax[1].add_artist(ell)
+
 
         # ax[1] = plot_edges_single_agent(ax=ax[1], t=t, states=y_hat, alpha=alphas[t], agent=3, mask=mask)
         # ax[1] = plot_edges_all_agents(
@@ -247,8 +263,8 @@ def main():
     ax[0].set_title("Groundtruth trajectories")
     ax[1].set_title("Predicted trajectories")
 
-    # plt.show()
-    fig.savefig(f"{args.output_path}/sequence_{args.sequence_idx:04}_{n_steps}.png")
+    plt.show()
+    # fig.savefig(f"{args.output_path}/sequence_{args.sequence_idx:04}_{n_steps}.png")
 
 
 if __name__ == "__main__":
