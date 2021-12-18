@@ -168,6 +168,7 @@ def main():
     n_steps = args.n_steps
     _, n_agents, n_features = y_hat.shape
     roadgraph = batch.u.squeeze().numpy()
+
     # Remove zero-padding
     roadgraph = roadgraph[:, 40:-40, 40:-40]
 

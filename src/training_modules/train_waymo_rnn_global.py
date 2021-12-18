@@ -42,7 +42,7 @@ class SequentialModule(pl.LightningModule):
         edge_dropout: float = 0,
         prediction_horizon: int = 91,
         local_map_resolution: int = 40,
-        map_channels: int = 7,
+        map_channels: int = 8,
     ):
         super().__init__()
         # Set up metrics
@@ -171,10 +171,6 @@ class SequentialModule(pl.LightningModule):
         # Map preparation    #
         ######################
 
-        # Increase importance of road boundaries
-
-
-
         # Zero pad each map for edge-cases
         batch.u = nn.functional.pad(
             batch.u,
@@ -208,10 +204,6 @@ class SequentialModule(pl.LightningModule):
             interval_y[i] = torch.linspace(
                 map_ranges[i, 2], map_ranges[i, 3], 150 * 2 + 1
             )
-
-        # Scale road-boundary layer and remove bikelanes
-        batch.u[:, 6] *= 5
-        batch.u = batch.u[:, [0, 2, 3, 4, 5, 6, 7]]
 
         ######################
         # History            #
@@ -694,10 +686,6 @@ class SequentialModule(pl.LightningModule):
                 map_ranges[i, 2], map_ranges[i, 3], 150 * 2 + 1
             )
 
-        # Scale road-boundary layer and remove bikelanes
-        batch.u[:, 6] *= 5
-        batch.u = batch.u[:, [0, 2, 3, 4, 5, 6, 7]]
-
         ######################
         # History            #
         ######################
@@ -1041,7 +1029,7 @@ class SequentialModule(pl.LightningModule):
 
         return loss
 
-    def predict_step(self, batch, batch_idx=None, prediction_horizon: int = 91):
+    def predict_step(self, batch, batch_idx=None, prediction_horizon: int = 51):
 
         ######################
         # Initialisation     #
@@ -1144,10 +1132,6 @@ class SequentialModule(pl.LightningModule):
             interval_y[i] = torch.linspace(
                 map_ranges[i, 2], map_ranges[i, 3], 150 * 2 + 1
             )
-
-        # Scale road-boundary layer and remove bikelanes
-        batch.u[:, 6] *= 5
-        batch.u = batch.u[:, [0, 2, 3, 4, 5, 6, 7]]
 
         ######################
         # History            #
