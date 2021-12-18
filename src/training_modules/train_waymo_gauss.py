@@ -21,28 +21,29 @@ from src.data.dataset_waymo import (OneStepWaymoDataModule,
 from src.models.model import *
 from src.training_modules import *
 
+
 class SequentialModule(pl.LightningModule):
     def __init__(
-        self,
-        model_type: Union[None, str],
-        model_dict: Union[None, dict],
-        lr: float = 1e-4,
-        weight_decay: float = 0.0,
-        noise: Union[None, float] = None,
-        teacher_forcing_ratio: float = 0.0,
-        min_dist: int = 0,
-        n_neighbours: int = 30,
-        edge_weight: bool = False,
-        self_loop: bool = False,
-        out_features: int = 6,
-        node_features: int = 9,
-        edge_features: int = 1,
-        normalise: bool = True,
-        training_horizon: int = 90,
-        edge_dropout: float = 0,
-        prediction_horizon: int = 91,
-        local_map_resolution: int = 40,
-        map_channels: int = 8,
+            self,
+            model_type: Union[None, str],
+            model_dict: Union[None, dict],
+            lr: float = 1e-4,
+            weight_decay: float = 0.0,
+            noise: Union[None, float] = None,
+            teacher_forcing_ratio: float = 0.0,
+            min_dist: int = 0,
+            n_neighbours: int = 30,
+            edge_weight: bool = False,
+            self_loop: bool = False,
+            out_features: int = 6,
+            node_features: int = 9,
+            edge_features: int = 1,
+            normalise: bool = True,
+            training_horizon: int = 90,
+            edge_dropout: float = 0,
+            prediction_horizon: int = 91,
+            local_map_resolution: int = 40,
+            map_channels: int = 8,
     ):
         super().__init__()
         # Set up metrics
@@ -137,12 +138,16 @@ class SequentialModule(pl.LightningModule):
         y_predictions = y_predictions.type_as(batch.x)
 
         # Tensor of position and velocity targets
-        y_target = batch.x[:, 1 : (self.training_horizon + 1), : 4]
+        y_target = batch.x[:, 1: (self.training_horizon + 1), : 4]
         y_target = y_target.type_as(batch.x)
 
         likelihoods = torch.zeros((n_nodes, self.training_horizon))
         Sigma_pos = torch.eye(2).reshape(1, 2, 2).repeat(n_nodes, 1, 1)
         Sigma_vel = torch.eye(2).reshape(1, 2, 2).repeat(n_nodes, 1, 1)
+        likelihoods = likelihoods.type_as(batch.x)
+        Sigma_pos = Sigma_pos.type_as(batch.x)
+        Sigma_vel = Sigma_vel.type_as(batch.x)
+
         # Initial hidden state
         if self.rnn_type == "GRU":
             h_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
@@ -203,7 +208,6 @@ class SequentialModule(pl.LightningModule):
             interval_y[i] = torch.linspace(
                 map_ranges[i, 2], map_ranges[i, 3], 150 * 2 + 1
             )
-
 
         ######################
         # History            #
@@ -322,8 +326,8 @@ class SequentialModule(pl.LightningModule):
             if self.normalise:
                 # Center node positions
                 x_t[:, self.pos_index] -= batch.loc[batch.batch][mask_t][
-                    :, self.pos_index
-                ]
+                                          :, self.pos_index
+                                          ]
                 # Scale all features (except yaws) with global scaler
                 x_t[:, self.norm_index] /= self.global_scale
                 if edge_attr is not None:
@@ -370,13 +374,13 @@ class SequentialModule(pl.LightningModule):
             x_t = x_t.type_as(batch.x)
 
             # Update current velocity covariance matrix
-            Sigma_vel[mask_t, 0, 0] = torch.exp(delta_x[:, 2])**2
-            Sigma_vel[mask_t, 1, 1] = torch.exp(delta_x[:, 3])**2
+            Sigma_vel[mask_t, 0, 0] = torch.exp(delta_x[:, 2]) ** 2
+            Sigma_vel[mask_t, 1, 1] = torch.exp(delta_x[:, 3]) ** 2
             Sigma_vel[mask_t, 1, 0] = torch.tanh(delta_x[:, 4]) * torch.exp(delta_x[:, 3] + delta_x[:, 2])
             Sigma_vel[mask_t, 0, 1] = Sigma_vel[mask_t][:, 1, 0]
 
             # Compute likelihood of current estimates
-            Sigma_pos[mask_t] += 0.01*Sigma_vel[mask_t]
+            Sigma_pos[mask_t] += 0.01 * Sigma_vel[mask_t]
 
             likelihoods[mask_t, t] = torch.distributions.MultivariateNormal(
                 loc=pos, covariance_matrix=Sigma_pos[mask_t]
@@ -531,26 +535,25 @@ class SequentialModule(pl.LightningModule):
             x_t = x_t.type_as(batch.x)
 
             # Update current velocity covariance matrix
-            Sigma_vel[:, 0, 0] = torch.exp(delta_x[:, 2])**2
-            Sigma_vel[:, 1, 1] = torch.exp(delta_x[:, 3])**2
+            Sigma_vel[:, 0, 0] = torch.exp(delta_x[:, 2]) ** 2
+            Sigma_vel[:, 1, 1] = torch.exp(delta_x[:, 3]) ** 2
             Sigma_vel[:, 1, 0] = torch.tanh(delta_x[:, 4]) * torch.exp(delta_x[:, 3] + delta_x[:, 2])
             Sigma_vel[:, 0, 1] = Sigma_vel[:, 1, 0]
 
             # Compute likelihood of current estimates
-            Sigma_pos += 0.01*Sigma_vel
+            Sigma_pos += 0.01 * Sigma_vel
 
             likelihoods[:, t] = torch.distributions.MultivariateNormal(
                 loc=pos, covariance_matrix=Sigma_pos
             ).log_prob(y_target[:, t, :2])
-
 
             # Save deltas for loss computation
             y_predictions[:, t, :2] = pos
             y_predictions[:, t, 2:] = delta_x
 
         # Determine valid input and target pairs. Compute loss mask as their intersection
-        loss_mask_target = mask[:, 1 : (self.training_horizon + 1)]
-        loss_mask_input = mask[:, 0 : self.training_horizon]
+        loss_mask_target = mask[:, 1: (self.training_horizon + 1)]
+        loss_mask_input = mask[:, 0: self.training_horizon]
         loss_mask = torch.logical_and(loss_mask_input, loss_mask_target)
 
         # Determine valid end-points
@@ -575,7 +578,7 @@ class SequentialModule(pl.LightningModule):
         # Compute likelihoods of all agents at all times
         mean_nllh = torch.mean(-likelihoods[loss_mask])
         self.log(
-            "train_mean_llh",
+            "train_mean_nllh",
             mean_nllh,
             on_step=True,
             on_epoch=True,
@@ -656,19 +659,22 @@ class SequentialModule(pl.LightningModule):
         # Tensor of position and velocity targets
         y_target = batch.x[:, 11:, : 4]
         y_target = y_target.type_as(batch.x)
-        
+
         batch.x = batch.x[:, :, :-1]
         # static_features = torch.cat(
         #     [batch.x[:, 10, self.out_features :], batch.type], dim=1
         # )
-        static_features = batch.x[:, 10,  4:]
+        static_features = batch.x[:, 10, 4:]
         static_features = static_features.type_as(batch.x)
         edge_attr = None
 
         # Allocate likelihood tensor and covariance matrices
-        likelihoods = torch.zeros((n_nodes, self.prediction_horizon-11))
+        likelihoods = torch.zeros((n_nodes, self.prediction_horizon - 11))
         Sigma_pos = torch.eye(2).reshape(1, 2, 2).repeat(n_nodes, 1, 1)
         Sigma_vel = torch.eye(2).reshape(1, 2, 2).repeat(n_nodes, 1, 1)
+        likelihoods = likelihoods.type_as(batch.x)
+        Sigma_pos = Sigma_pos.type_as(batch.x)
+        Sigma_vel = Sigma_vel.type_as(batch.x)
 
         # Initial hidden state
         if self.rnn_type == "GRU":
@@ -836,8 +842,8 @@ class SequentialModule(pl.LightningModule):
             if self.normalise:
                 # Center node positions
                 x_t[:, self.pos_index] -= batch.loc[batch.batch][mask_t][
-                    :, self.pos_index
-                ]
+                                          :, self.pos_index
+                                          ]
                 # Scale all features (except yaws) with global scaler
                 x_t[:, self.norm_index] /= self.global_scale
                 if edge_attr is not None:
@@ -1079,7 +1085,7 @@ class SequentialModule(pl.LightningModule):
         # Compute likelihoods of all agents at all times
         mean_nllh = torch.mean(-likelihoods[val_mask])
         self.log(
-            "val_mean_llh",
+            "val_mean_nllh",
             mean_nllh,
             batch_size=val_mask.sum().item(),
         )
@@ -1128,8 +1134,8 @@ class SequentialModule(pl.LightningModule):
 
         # Allocate target/prediction tensors
         n_nodes = batch.num_nodes
-        y_hat = torch.zeros((prediction_horizon - 1, n_nodes, self.node_features))
-        y_target = torch.zeros((prediction_horizon - 1, n_nodes, self.node_features))
+        y_hat = torch.zeros((prediction_horizon - 1, n_nodes, 7))
+        y_target = torch.zeros((prediction_horizon - 1, n_nodes, 7))
         # Ensure device placement
         y_hat = y_hat.type_as(batch.x)
         y_target = y_target.type_as(batch.x)
@@ -1138,13 +1144,15 @@ class SequentialModule(pl.LightningModule):
         # static_features = torch.cat(
         #     [batch.x[:, 10, self.out_features :], batch.type], dim=1
         # )
-        static_features = batch.x[:, 10, self.out_features :]
+        static_features = batch.x[:, 10, 4:]
         edge_attr = None
 
         # Allocate likelihood tensor and covariance matrices
         # likelihoods = torch.zeros((n_nodes, self.training_horizon))
         Sigma_vel = torch.eye(2).reshape(1, 2, 2).repeat(n_nodes, 1, 1)
         Sigma_pos = torch.eye(2).reshape(1, 1, 2, 2).repeat(prediction_horizon, n_nodes, 1, 1)
+        Sigma_pos = Sigma_pos.type_as(batch.x)
+        Sigma_vel = Sigma_vel.type_as(batch.x)
 
         # Initial hidden state
         if self.rnn_type == "GRU":
@@ -1311,8 +1319,8 @@ class SequentialModule(pl.LightningModule):
             if self.normalise:
                 # Center node positions
                 x_t[:, self.pos_index] -= batch.loc[batch.batch][mask_t][
-                    :, self.pos_index
-                ]
+                                          :, self.pos_index
+                                          ]
                 # Scale all features (except yaws) with global scaler
                 x_t[:, self.norm_index] /= self.global_scale
                 if edge_attr is not None:
@@ -1362,7 +1370,7 @@ class SequentialModule(pl.LightningModule):
             Sigma_vel[mask_t, 1, 1] = torch.exp(delta_x[:, 3]) ** 2
             Sigma_vel[mask_t, 1, 0] = torch.tanh(delta_x[:, 4]) * torch.exp(delta_x[:, 3] + delta_x[:, 2])
             Sigma_vel[mask_t, 0, 1] = Sigma_vel[mask_t][:, 1, 0]
-            Sigma_pos[t+1, mask_t] = Sigma_pos[t, mask_t] + 0.01*Sigma_vel[mask_t]
+            Sigma_pos[t + 1, mask_t] = Sigma_pos[t, mask_t] + 0.01 * Sigma_vel[mask_t]
 
             # Save predictions and targets
             y_hat[t, mask_t, :] = predicted_graph
@@ -1509,7 +1517,7 @@ class SequentialModule(pl.LightningModule):
             Sigma_vel[:, 1, 1] = torch.exp(delta_x[:, 3]) ** 2
             Sigma_vel[:, 1, 0] = torch.tanh(delta_x[:, 4]) * torch.exp(delta_x[:, 3] + delta_x[:, 2])
             Sigma_vel[:, 0, 1] = Sigma_vel[:, 1, 0]
-            Sigma_pos[t+1] = Sigma_pos[t] + 0.01*Sigma_vel
+            Sigma_pos[t + 1] = Sigma_pos[t] + 0.01 * Sigma_vel
 
             # Save prediction alongside true value (next time step state)
             y_hat[t, :, :] = predicted_graph
