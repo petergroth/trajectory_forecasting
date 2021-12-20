@@ -45,6 +45,10 @@ def make_predictions(path, config, n_steps=51, sequence_idx=0):
 
 
 def eigsorted(cov):
+    # Source: 
+    # Ben from https://stackoverflow.com/questions/20126061/
+    # creating-a-confidence-ellipses-in-a-sccatterplot-using-matplotlib?noredirect=1&lq=1
+
     vals, vecs = np.linalg.eigh(cov)
     order = vals.argsort()[::-1]
     return vals[order], vecs[:, order]
@@ -196,7 +200,7 @@ def main():
     layer_colors = ["Greys", "Spectral", "Greys", "Greys", "bwr", "bwr", "Greys", "Reds"]
     layer_alphas = [0.2, 0.3, 0.5, 1, 0.5, 1, 1, 1]
     for layer_id in range(8):
-        layer_mask = roadgraph[layer_id].astype(np.float)
+        layer_mask = roadgraph[layer_id].astype(float)
         for i in range(2):
             ax[i].imshow(
                 layer_mask,
@@ -242,6 +246,7 @@ def main():
             loc = y_hat[t, agent, :2].numpy()
             ell = Ellipse(xy=loc, width=w, height=h, angle=theta, color=agent_colors[agent], alpha=0.2)
             ax[1].add_artist(ell)
+            # print(Sigma[t, agent].detach().numpy())
 
 
         # ax[1] = plot_edges_single_agent(ax=ax[1], t=t, states=y_hat, alpha=alphas[t], agent=3, mask=mask)
@@ -263,8 +268,8 @@ def main():
     ax[0].set_title("Groundtruth trajectories")
     ax[1].set_title("Predicted trajectories")
 
-    plt.show()
-    # fig.savefig(f"{args.output_path}/sequence_{args.sequence_idx:04}_{n_steps}.png")
+    # plt.show()
+    # fig.savefig(f"{args.output_path}/sequence_{args.sequence_idx:04}_{n_steps}_sig_{nstd}.png")
 
 
 if __name__ == "__main__":

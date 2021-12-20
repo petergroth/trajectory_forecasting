@@ -375,10 +375,13 @@ class SequentialModule(pl.LightningModule):
             x_t = x_t.type_as(batch.x)
 
             # Update current velocity covariance matrix
-            Sigma_vel[mask_t, 0, 0] = torch.exp(delta_x[:, 2]) ** 2
-            Sigma_vel[mask_t, 1, 1] = torch.exp(delta_x[:, 3]) ** 2
-            Sigma_vel[mask_t, 1, 0] = torch.tanh(delta_x[:, 4]) * torch.exp(delta_x[:, 3] + delta_x[:, 2])
-            Sigma_vel[mask_t, 0, 1] = Sigma_vel[mask_t][:, 1, 0]
+            sigma_x2 = torch.exp(delta_x[:, 2])
+            sigma_y2 = torch.exp(delta_x[:, 3])
+            cov_xy = torch.tanh(delta_x[:, 4]) * torch.sqrt(sigma_x2 * sigma_y2)
+            Sigma_vel[mask_t, 0, 0] = sigma_x2
+            Sigma_vel[mask_t, 1, 1] = sigma_y2
+            Sigma_vel[mask_t, 1, 0] = cov_xy
+            Sigma_vel[mask_t, 0, 1] = cov_xy
 
             # Compute likelihood of current estimates
             Sigma_pos[mask_t] += 0.01 * Sigma_vel[mask_t]
@@ -454,14 +457,14 @@ class SequentialModule(pl.LightningModule):
             # Find closest pixels in x and y directions
             center_pixel_x = (
                     torch.argmax(
-                        (interval_x[batch.batch[mask_t]] > x_t[:, 0].unsqueeze(-1)).float(),
+                        (interval_x[batch.batch] > x_t[:, 0].unsqueeze(-1)).float(),
                         dim=1,
                     ).type(torch.LongTensor)
                     - 1
             )
             center_pixel_y = (
                     torch.argmax(
-                        (interval_y[batch.batch[mask_t]] > x_t[:, 1].unsqueeze(-1)).float(),
+                        (interval_y[batch.batch] > x_t[:, 1].unsqueeze(-1)).float(),
                         dim=1,
                     ).type(torch.LongTensor)
                     - 2
@@ -484,7 +487,7 @@ class SequentialModule(pl.LightningModule):
             )
 
             # Extract local maps for all agents in current time-step
-            for node_idx, graph_idx in enumerate(batch.batch[mask_t]):
+            for node_idx, graph_idx in enumerate(batch.batch):
                 if not (center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2):
                     u_local[node_idx] = batch.u[
                                         graph_idx,
@@ -536,10 +539,13 @@ class SequentialModule(pl.LightningModule):
             x_t = x_t.type_as(batch.x)
 
             # Update current velocity covariance matrix
-            Sigma_vel[:, 0, 0] = torch.exp(delta_x[:, 2]) ** 2
-            Sigma_vel[:, 1, 1] = torch.exp(delta_x[:, 3]) ** 2
-            Sigma_vel[:, 1, 0] = torch.tanh(delta_x[:, 4]) * torch.exp(delta_x[:, 3] + delta_x[:, 2])
-            Sigma_vel[:, 0, 1] = Sigma_vel[:, 1, 0]
+            sigma_x2 = torch.exp(delta_x[:, 2])
+            sigma_y2 = torch.exp(delta_x[:, 3])
+            cov_xy = torch.tanh(delta_x[:, 4]) * torch.sqrt(sigma_x2 * sigma_y2)
+            Sigma_vel[:, 0, 0] = sigma_x2
+            Sigma_vel[:, 1, 1] = sigma_y2
+            Sigma_vel[:, 1, 0] = cov_xy
+            Sigma_vel[:, 0, 1] = cov_xy
 
             # Compute likelihood of current estimates
             Sigma_pos += 0.01 * Sigma_vel
@@ -886,10 +892,13 @@ class SequentialModule(pl.LightningModule):
                 c_edge[:, mask_t] = h_edge_out[1]
 
             # Update current velocity covariance matrix
-            Sigma_vel[mask_t, 0, 0] = torch.exp(delta_x[:, 2]) ** 2
-            Sigma_vel[mask_t, 1, 1] = torch.exp(delta_x[:, 3]) ** 2
-            Sigma_vel[mask_t, 1, 0] = torch.tanh(delta_x[:, 4]) * torch.exp(delta_x[:, 3] + delta_x[:, 2])
-            Sigma_vel[mask_t, 0, 1] = Sigma_vel[mask_t][:, 1, 0]
+            sigma_x2 = torch.exp(delta_x[:, 2])
+            sigma_y2 = torch.exp(delta_x[:, 3])
+            cov_xy = torch.tanh(delta_x[:, 4]) * torch.sqrt(sigma_x2 * sigma_y2)
+            Sigma_vel[mask_t, 0, 0] = sigma_x2
+            Sigma_vel[mask_t, 1, 1] = sigma_y2
+            Sigma_vel[mask_t, 1, 0] = cov_xy
+            Sigma_vel[mask_t, 0, 1] = cov_xy
 
             # Compute likelihood of current estimates
             Sigma_pos[mask_t] += 0.01 * Sigma_vel[mask_t]
@@ -959,14 +968,14 @@ class SequentialModule(pl.LightningModule):
             # Find closest pixels in x and y directions
             center_pixel_x = (
                     torch.argmax(
-                        (interval_x[batch.batch[mask_t]] > x_t[:, 0].unsqueeze(-1)).float(),
+                        (interval_x[batch.batch] > x_t[:, 0].unsqueeze(-1)).float(),
                         dim=1,
                     ).type(torch.LongTensor)
                     - 1
             )
             center_pixel_y = (
                     torch.argmax(
-                        (interval_y[batch.batch[mask_t]] > x_t[:, 1].unsqueeze(-1)).float(),
+                        (interval_y[batch.batch] > x_t[:, 1].unsqueeze(-1)).float(),
                         dim=1,
                     ).type(torch.LongTensor)
                     - 2
@@ -989,7 +998,7 @@ class SequentialModule(pl.LightningModule):
             )
 
             # Extract local maps for all agents in current time-step
-            for node_idx, graph_idx in enumerate(batch.batch[mask_t]):
+            for node_idx, graph_idx in enumerate(batch.batch):
                 if not (center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2):
                     u_local[node_idx] = batch.u[
                                         graph_idx,
@@ -1041,10 +1050,13 @@ class SequentialModule(pl.LightningModule):
             predicted_graph = predicted_graph.type_as(batch.x)
 
             # Update current velocity covariance matrix
-            Sigma_vel[:, 0, 0] = torch.exp(delta_x[:, 2]) ** 2
-            Sigma_vel[:, 1, 1] = torch.exp(delta_x[:, 3]) ** 2
-            Sigma_vel[:, 1, 0] = torch.tanh(delta_x[:, 4]) * torch.exp(delta_x[:, 3] + delta_x[:, 2])
-            Sigma_vel[:, 0, 1] = Sigma_vel[:, 1, 0]
+            sigma_x2 = torch.exp(delta_x[:, 2])
+            sigma_y2 = torch.exp(delta_x[:, 3])
+            cov_xy = torch.tanh(delta_x[:, 4]) * torch.sqrt(sigma_x2 * sigma_y2)
+            Sigma_vel[:, 0, 0] = sigma_x2
+            Sigma_vel[:, 1, 1] = sigma_y2
+            Sigma_vel[:, 1, 0] = cov_xy
+            Sigma_vel[:, 0, 1] = cov_xy
 
             # Compute likelihood of current estimates
             Sigma_pos += 0.01 * Sigma_vel
@@ -1368,11 +1380,16 @@ class SequentialModule(pl.LightningModule):
             predicted_graph = predicted_graph.type_as(batch.x)
 
             # Update current velocity covariance matrix
-            Sigma_vel[mask_t, 0, 0] = torch.exp(delta_x[:, 2]) ** 2
-            Sigma_vel[mask_t, 1, 1] = torch.exp(delta_x[:, 3]) ** 2
-            Sigma_vel[mask_t, 1, 0] = torch.tanh(delta_x[:, 4]) * torch.exp(delta_x[:, 3] + delta_x[:, 2])
-            Sigma_vel[mask_t, 0, 1] = Sigma_vel[mask_t][:, 1, 0]
-            Sigma_pos[t + 1, mask_t] = Sigma_pos[t, mask_t] + 0.01 * Sigma_vel[mask_t]
+            sigma_x2 = torch.exp(delta_x[:, 2])
+            sigma_y2 = torch.exp(delta_x[:, 3])
+            cov_xy = torch.tanh(delta_x[:, 4]) * torch.sqrt(sigma_x2 * sigma_y2)
+            Sigma_vel[mask_t, 0, 0] = sigma_x2
+            Sigma_vel[mask_t, 1, 1] = sigma_y2
+            Sigma_vel[mask_t, 1, 0] = cov_xy
+            Sigma_vel[mask_t, 0, 1] = cov_xy
+
+            # Compute likelihood of current estimates
+            Sigma_pos[t, mask_t] += 0.01 * Sigma_vel[mask_t]
 
             # Save predictions and targets
             y_hat[t, mask_t, :] = predicted_graph
@@ -1433,14 +1450,14 @@ class SequentialModule(pl.LightningModule):
             # Find closest pixels in x and y directions
             center_pixel_x = (
                     torch.argmax(
-                        (interval_x[batch.batch[mask_t]] > x_t[:, 0].unsqueeze(-1)).float(),
+                        (interval_x[batch.batch] > x_t[:, 0].unsqueeze(-1)).float(),
                         dim=1,
                     ).type(torch.LongTensor)
                     - 1
             )
             center_pixel_y = (
                     torch.argmax(
-                        (interval_y[batch.batch[mask_t]] > x_t[:, 1].unsqueeze(-1)).float(),
+                        (interval_y[batch.batch] > x_t[:, 1].unsqueeze(-1)).float(),
                         dim=1,
                     ).type(torch.LongTensor)
                     - 2
@@ -1463,7 +1480,7 @@ class SequentialModule(pl.LightningModule):
             )
 
             # Extract local maps for all agents in current time-step
-            for node_idx, graph_idx in enumerate(batch.batch[mask_t]):
+            for node_idx, graph_idx in enumerate(batch.batch):
                 if not (center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2):
                     u_local[node_idx] = batch.u[
                                         graph_idx,
@@ -1515,11 +1532,16 @@ class SequentialModule(pl.LightningModule):
             predicted_graph = predicted_graph.type_as(batch.x)
 
             # Update current velocity covariance matrix
-            Sigma_vel[:, 0, 0] = torch.exp(delta_x[:, 2]) ** 2
-            Sigma_vel[:, 1, 1] = torch.exp(delta_x[:, 3]) ** 2
-            Sigma_vel[:, 1, 0] = torch.tanh(delta_x[:, 4]) * torch.exp(delta_x[:, 3] + delta_x[:, 2])
-            Sigma_vel[:, 0, 1] = Sigma_vel[:, 1, 0]
-            Sigma_pos[t + 1] = Sigma_pos[t] + 0.01 * Sigma_vel
+            sigma_x2 = torch.exp(delta_x[:, 2])
+            sigma_y2 = torch.exp(delta_x[:, 3])
+            cov_xy = torch.tanh(delta_x[:, 4]) * torch.sqrt(sigma_x2 * sigma_y2)
+            Sigma_vel[:, 0, 0] = sigma_x2
+            Sigma_vel[:, 1, 1] = sigma_y2
+            Sigma_vel[:, 1, 0] = cov_xy
+            Sigma_vel[:, 0, 1] = cov_xy
+
+            # Compute likelihood of current estimates
+            Sigma_pos[t] += 0.01 * Sigma_vel
 
             # Save prediction alongside true value (next time step state)
             y_hat[t, :, :] = predicted_graph
