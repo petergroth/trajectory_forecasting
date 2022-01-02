@@ -14,7 +14,7 @@ from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning.utilities.seed import seed_everything
 
 from src.data.dataset_waymo import OneStepWaymoDataModule
-from src.training_modules.train_waymo_gauss import *
+from src.training_modules.train_waymo_UA import *
 
 def make_predictions(path, config, n_steps=51, sequence_idx=0):
     # Set seed
@@ -55,8 +55,9 @@ def eigsorted(cov):
 
 
 def plot_time_step(ax, t, states, alpha, colors, n_steps):
+
     # Scatter plot of all agent positions
-    if t == n_steps-1 or t == 10:
+    if t == n_steps - 2 or t == 10:
         edgecolors = "k"
     else:
         edgecolors = None
@@ -66,11 +67,12 @@ def plot_time_step(ax, t, states, alpha, colors, n_steps):
         y=states[t, :, 1].numpy(),
         s=50,
         color=colors,
-        alpha=alpha,
+        alpha=alpha if t != 10 else 0.8,
         edgecolors=edgecolors,
+        zorder=10
     )
     # Draw velocity arrows at first and final future predictions
-    if t == 10 or t == n_steps - 2:
+    if t == n_steps - 2:
         ax.quiver(
             states[t, :, 0].detach().numpy(),
             states[t, :, 1].detach().numpy(),
@@ -82,6 +84,7 @@ def plot_time_step(ax, t, states, alpha, colors, n_steps):
             scale_units="xy",
             scale=1.0,
             color="lightgrey" if t == 10 else "k",
+            zorder=11
         )
 
     return ax
@@ -172,6 +175,7 @@ def main():
         sequence_idx=args.sequence_idx,
         n_steps=args.n_steps,
     )
+    Sigma = Sigma.detach().numpy()
     # Extract sequence information and roadmap
     n_steps = args.n_steps
     _, n_agents, n_features = y_hat.shape
@@ -220,7 +224,7 @@ def main():
     ]
     alphas = np.linspace(0.1, 1, n_steps)
 
-    # Number of standard deviations for covariance matric to visualise
+    # Number of standard deviations for covariance matrix to visualise
     nstd = 1
 
     # Main loop
@@ -234,20 +238,22 @@ def main():
             colors=agent_colors,
             n_steps=n_steps,
         )
-        ax[1] = plot_time_step(
-            ax=ax[1], t=t, states=y_hat, alpha=alphas[t], colors=agent_colors, n_steps=n_steps
-        )
 
         # Visualise covariance matrices for all agents
         for agent in range(n_agents):
-            vals, vecs = eigsorted(Sigma[t, agent].detach().numpy())
-            theta = np.degrees(np.arctan2(*vecs[:, 0][::-1]))
+            # Compute and sort eigenvectors and values
+            vals, vecs = eigsorted(Sigma[t, agent])
+            # Covariance ellipsis orientation, sizes, and location
+            theta = float(np.degrees(np.arctan2(*vecs[:, 0][::-1])))
             w, h = 2 * nstd * np.sqrt(vals)
             loc = y_hat[t, agent, :2].numpy()
-            ell = Ellipse(xy=loc, width=w, height=h, angle=theta, color=agent_colors[agent], alpha=0.2)
+            ell = Ellipse(xy=loc, width=w, height=h, angle=theta, color=agent_colors[agent], alpha=0.1)
             ax[1].add_artist(ell)
-            # print(Sigma[t, agent].detach().numpy())
 
+
+        ax[1] = plot_time_step(
+            ax=ax[1], t=t, states=y_hat, alpha=alphas[t], colors=agent_colors, n_steps=n_steps
+        )
 
         # ax[1] = plot_edges_single_agent(ax=ax[1], t=t, states=y_hat, alpha=alphas[t], agent=3, mask=mask)
         # ax[1] = plot_edges_all_agents(
@@ -269,7 +275,7 @@ def main():
     ax[1].set_title("Predicted trajectories")
 
     # plt.show()
-    # fig.savefig(f"{args.output_path}/sequence_{args.sequence_idx:04}_{n_steps}_sig_{nstd}.png")
+    fig.savefig(f"{args.output_path}/sequence_{args.sequence_idx:04}_{n_steps}_sig_{nstd}.png")
 
 
 if __name__ == "__main__":
