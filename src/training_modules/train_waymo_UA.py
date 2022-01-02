@@ -1550,6 +1550,9 @@ class WaymoUAExp(pl.LightningModule):
 
         return y_hat, y_target, mask, Sigma_pos[1:]
 
+    def test_step(self, batch: Batch, batch_idx: int):
+        return self.validation_step(batch, batch_idx)
+
     def configure_optimizers(self):
         return torch.optim.Adam(
             self.parameters(), lr=self.lr, weight_decay=self.weight_decay
@@ -3084,6 +3087,9 @@ class WaymoUAExpAlt(pl.LightningModule):
 
         return y_hat, y_target, mask, Sigma_pos[1:]
 
+    def test_step(self, batch: Batch, batch_idx: int):
+        return self.validation_step(batch, batch_idx)
+
     def configure_optimizers(self):
         return torch.optim.Adam(
             self.parameters(), lr=self.lr, weight_decay=self.weight_decay
@@ -4615,6 +4621,9 @@ class WaymoUASoftplus(pl.LightningModule):
             y_hat[t, :, :] = predicted_graph
             # y_target[t, :, :] = torch.cat([batch.x[:, t + 1, :], batch.type], dim=1)
             y_target[t, :, :] = batch.x[:, t + 1, :]
+
+        def test_step(self, batch: Batch, batch_idx: int):
+            return self.validation_step(batch, batch_idx)
 
         return y_hat, y_target, mask, Sigma_pos[1:]
 
