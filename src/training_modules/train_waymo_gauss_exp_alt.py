@@ -375,11 +375,11 @@ class SequentialModule(pl.LightningModule):
             x_t = x_t.type_as(batch.x)
 
             # Update current velocity covariance matrix
-            sigma_x = torch.nn.functional.softplus(delta_x[:, 2])
-            sigma_y = torch.nn.functional.softplus(delta_x[:, 3])
+            sigma_x = torch.exp(delta_x[:, 2])
+            sigma_y = torch.exp(delta_x[:, 3])
             cov_xy = torch.tanh(delta_x[:, 4]) * sigma_x * sigma_y
-            Sigma_vel[mask_t, 0, 0] = sigma_x ** 2
-            Sigma_vel[mask_t, 1, 1] = sigma_y ** 2
+            Sigma_vel[mask_t, 0, 0] = sigma_x**2
+            Sigma_vel[mask_t, 1, 1] = sigma_y**2
             Sigma_vel[mask_t, 1, 0] = cov_xy
             Sigma_vel[mask_t, 0, 1] = cov_xy
 
@@ -539,8 +539,8 @@ class SequentialModule(pl.LightningModule):
             x_t = x_t.type_as(batch.x)
 
             # Update current velocity covariance matrix
-            sigma_x = torch.nn.functional.softplus(delta_x[:, 2])
-            sigma_y = torch.nn.functional.softplus(delta_x[:, 3])
+            sigma_x = torch.exp(delta_x[:, 2])
+            sigma_y = torch.exp(delta_x[:, 3])
             cov_xy = torch.tanh(delta_x[:, 4]) * sigma_x * sigma_y
             Sigma_vel[:, 0, 0] = sigma_x ** 2
             Sigma_vel[:, 1, 1] = sigma_y ** 2
@@ -892,11 +892,11 @@ class SequentialModule(pl.LightningModule):
                 c_edge[:, mask_t] = h_edge_out[1]
 
             # Update current velocity covariance matrix
-            sigma_x = torch.nn.functional.softplus(delta_x[:, 2])
-            sigma_y = torch.nn.functional.softplus(delta_x[:, 3])
+            sigma_x = torch.exp(delta_x[:, 2])
+            sigma_y = torch.exp(delta_x[:, 3])
             cov_xy = torch.tanh(delta_x[:, 4]) * sigma_x * sigma_y
-            Sigma_vel[mask_t, 0, 0] = sigma_x ** 2
-            Sigma_vel[mask_t, 1, 1] = sigma_y ** 2
+            Sigma_vel[mask_t, 0, 0] = sigma_x**2
+            Sigma_vel[mask_t, 1, 1] = sigma_y**2
             Sigma_vel[mask_t, 1, 0] = cov_xy
             Sigma_vel[mask_t, 0, 1] = cov_xy
 
@@ -1050,13 +1050,13 @@ class SequentialModule(pl.LightningModule):
             predicted_graph = predicted_graph.type_as(batch.x)
 
             # Update current velocity covariance matrix
-            sigma_x = torch.nn.functional.softplus(delta_x[:, 2])
-            sigma_y = torch.nn.functional.softplus(delta_x[:, 3])
+            sigma_x = torch.exp(delta_x[:, 2])
+            sigma_y = torch.exp(delta_x[:, 3])
             cov_xy = torch.tanh(delta_x[:, 4]) * sigma_x * sigma_y
             Sigma_vel[:, 0, 0] = sigma_x ** 2
             Sigma_vel[:, 1, 1] = sigma_y ** 2
             Sigma_vel[:, 1, 0] = cov_xy
-            Sigma_vel[mask_t, 0, 1] = cov_xy
+            Sigma_vel[:, 0, 1] = cov_xy
 
             # Compute likelihood of current estimates
             Sigma_pos += 0.01 * Sigma_vel
@@ -1380,14 +1380,14 @@ class SequentialModule(pl.LightningModule):
             predicted_graph = predicted_graph.type_as(batch.x)
 
             # Update current velocity covariance matrix
-            sigma_x = torch.nn.functional.softplus(delta_x[:, 2])
-            sigma_y = torch.nn.functional.softplus(delta_x[:, 3])
+            sigma_x = torch.exp(delta_x[:, 2])
+            sigma_y = torch.exp(delta_x[:, 3])
             cov_xy = torch.tanh(delta_x[:, 4]) * sigma_x * sigma_y
             Sigma_vel[mask_t, 0, 0] = sigma_x ** 2
             Sigma_vel[mask_t, 1, 1] = sigma_y ** 2
             Sigma_vel[mask_t, 1, 0] = cov_xy
             Sigma_vel[mask_t, 0, 1] = cov_xy
-            
+
             # Compute likelihood of current estimates
             Sigma_pos[t+1, mask_t] = Sigma_pos[t, mask_t] + 0.01 * Sigma_vel[mask_t]
 
@@ -1532,8 +1532,8 @@ class SequentialModule(pl.LightningModule):
             predicted_graph = predicted_graph.type_as(batch.x)
 
             # Update current velocity covariance matrix
-            sigma_x = torch.nn.functional.softplus(delta_x[:, 2])
-            sigma_y = torch.nn.functional.softplus(delta_x[:, 3])
+            sigma_x = torch.exp(delta_x[:, 2])
+            sigma_y = torch.exp(delta_x[:, 3])
             cov_xy = torch.tanh(delta_x[:, 4]) * sigma_x * sigma_y
             Sigma_vel[:, 0, 0] = sigma_x ** 2
             Sigma_vel[:, 1, 1] = sigma_y ** 2

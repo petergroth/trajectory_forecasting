@@ -1389,7 +1389,7 @@ class SequentialModule(pl.LightningModule):
             Sigma_vel[mask_t, 0, 1] = cov_xy
 
             # Compute likelihood of current estimates
-            Sigma_pos[t, mask_t] += 0.01 * Sigma_vel[mask_t]
+            Sigma_pos[t + 1, mask_t] = Sigma_pos[t, mask_t] + 0.01 * Sigma_vel[mask_t]
 
             # Save predictions and targets
             y_hat[t, mask_t, :] = predicted_graph
@@ -1541,14 +1541,14 @@ class SequentialModule(pl.LightningModule):
             Sigma_vel[:, 0, 1] = cov_xy
 
             # Compute likelihood of current estimates
-            Sigma_pos[t] += 0.01 * Sigma_vel
+            Sigma_pos[t + 1] = Sigma_pos[t] + 0.01 * Sigma_vel
 
             # Save prediction alongside true value (next time step state)
             y_hat[t, :, :] = predicted_graph
             # y_target[t, :, :] = torch.cat([batch.x[:, t + 1, :], batch.type], dim=1)
             y_target[t, :, :] = batch.x[:, t + 1, :]
 
-        return y_hat, y_target, mask, Sigma_pos
+        return y_hat, y_target, mask, Sigma_pos[1:]
 
     def configure_optimizers(self):
         return torch.optim.Adam(
