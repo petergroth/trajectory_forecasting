@@ -4748,6 +4748,9 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
 
         return loss
 
+    def test_step(self, batch: Batch, batch_idx: int):
+        return self.validation_step(batch, batch_idx)
+
     def predict_step(self, batch, batch_idx=None):
 
         ######################
