@@ -836,6 +836,8 @@ class SequentialWaymoDataModule(pl.LightningDataModule):
         if stage in (None, "fit"):
             self.train_dataset = SequentialWaymoTrainDataset()
             self.val_dataset = SequentialWaymoValDataset()
+        elif stage == "validate":
+            self.val_dataset = SequentialWaymoValDataset()
         elif stage == "test":
             self.test_dataset = SequentialWaymoTestDataset()
 
