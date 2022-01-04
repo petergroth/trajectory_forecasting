@@ -30,7 +30,7 @@ def main():
     # Set seed
     seed_everything(config["misc"]["seed"], workers=True)
     # Load datamodule
-    config["datamodule"]["val_batch_size"] = 8
+    config["datamodule"]["val_batch_size"] = 32
     config["datamodule"]["shuffle"] = False
     datamodule = eval(config["misc"]["dm_type"])(**config["datamodule"])
 
