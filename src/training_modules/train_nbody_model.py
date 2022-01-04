@@ -1473,7 +1473,6 @@ def main(config):
         **config["logger"],
     )
     wandb_logger.watch(regressor, log_freq=config["misc"]["log_freq"], log_graph=False)
-    # Add default dir for logs
 
     # Setup callbacks
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
@@ -1488,6 +1487,7 @@ def main(config):
         trainer.fit(model=regressor, datamodule=datamodule)
 
     trainer.validate(regressor, datamodule=datamodule)
+    trainer.test(datamodule=datamodule)
 
 
 if __name__ == "__main__":

@@ -170,6 +170,7 @@ def main():
         scale_units="xy",
         scale=1.0,
         color="k",
+        zorder=10,
     )
 
 
@@ -186,7 +187,7 @@ def main():
 
     plt.tight_layout()
     # plt.show()
-    plt.savefig(f"../../thesis/graphics/synthetic/constant_example.pdf")
+    # plt.savefig(f"../../thesis/graphics/synthetic/constant_example.pdf")
 
 
 if __name__ == "__main__":

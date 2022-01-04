@@ -456,7 +456,7 @@ class node_rnn_simple(nn.Module):
             batch_first=True,
         )
 
-    def forward(self, x, edge_index, edge_attr, u, batch, hidden):
+    def forward(self, x, hidden, edge_index=None, edge_attr=None, u=None, batch=None):
         # If using also encoding edge attributes
         if self.edge_features > 0:
             row, col = edge_index
@@ -561,5 +561,46 @@ class node_gcn(nn.Module):
         out = self.gcn_out(
             x=out, edge_index=edge_index, edge_weight=edge_attr.squeeze()
         )
+
+        return out
+
+
+class road_encoder(nn.Module):
+    def __init__(self, width: int = 300, hidden_size: int = 41, in_map_channels: int = 8):
+        super(road_encoder, self).__init__()
+        hidden_channels = [20, 10, 5, 1]
+        strides = [1, 1, 1, 1]
+        filters = [5, 3, 3, 3]
+        self.width = width
+
+        self.conv_modules = nn.ModuleList()
+        self.bn_modules = nn.ModuleList()
+        x_dummy = torch.ones((1, in_map_channels, width, width))
+
+        for i in range(4):
+            self.conv_modules.append(
+                nn.Conv2d(
+                    in_channels=in_map_channels if i == 0 else hidden_channels[i - 1],
+                    out_channels=hidden_channels[i],
+                    kernel_size=filters[i],
+                    stride=strides[i],
+                )
+            )
+            self.bn_modules.append(nn.BatchNorm2d(hidden_channels[i]))
+            x_dummy = self.conv_modules[i](x_dummy)
+
+        self.fc_1 = nn.Linear(in_features=x_dummy.numel(), out_features=hidden_size)
+        # self.fc_2 = nn.Linear(in_features=hidden_size, out_features=hidden_size)
+
+    def forward(self, u):
+        # Add single color channel dimension
+        assert u.shape[-1] == self.width
+        assert u.shape[-2] == self.width
+        for i, conv_layer in enumerate(self.conv_modules):
+            u = conv_layer(u)
+            u = F.leaky_relu(self.bn_modules[i](u))
+        # u = F.leaky_relu(self.fc_1(torch.flatten(u, start_dim=1)))
+        # out = self.fc_2(u)
+        out = self.fc_1(torch.flatten(u, start_dim=1))
 
         return out
