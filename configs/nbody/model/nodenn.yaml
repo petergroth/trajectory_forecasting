@@ -1,0 +1,6 @@
+hidden_size: 128
+dropout: 0.0
+node_features: 5
+skip: True
+out_features: 2
+

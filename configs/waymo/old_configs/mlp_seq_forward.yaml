@@ -49,7 +49,7 @@ logger:
 
 misc:
   seed: 1
-  model_type: mlp_full_forward_model
+  model_type: ForwardGN
   dm_type: SequentialWaymoDataModule
   regressor_type: SequentialModule
   checkpoint: False

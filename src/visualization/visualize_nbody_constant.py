@@ -2,8 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import rc
 from matplotlib.patches import Circle
-
-from src.utils import load_simulations
+from src.training_modules.train_nbody_model import ConstantPhysicalBaselineModule
 
 rc("text", usetex=True)
 rc("font", **{"family": "serif", "serif": ["Computer Modern Roman"]})
@@ -16,8 +15,12 @@ plt.rcParams["xtick.labelsize"] = ticksize
 plt.rcParams["ytick.labelsize"] = ticksize
 
 if __name__ == "__main__":
-    path = "data/raw/nbody/nbody_10_particles_sim0025.npy"
-    full_arr = load_simulations(path=path)
+
+    # Instantiate model
+
+
+
+
     positions = full_arr[:, :, :2]
     velocities = full_arr[:, :, 2:4]
     sizes = full_arr[:, :, 4]
@@ -66,20 +69,6 @@ if __name__ == "__main__":
                 alpha=alphas[t],
             )
         )
-
-    # for i in range(n_particles):
-    #     ax.add_patch(
-    #         Circle(
-    #             positions[0, i, :], sizes[0, i], edgecolor="k", facecolor='k', alpha=0.1, linestyle=':'
-    #         )
-    #     )
-    #
-    # for i in range(n_particles):
-    #     ax.add_patch(
-    #         Circle(
-    #             positions[-1, i, :], sizes[0, i], edgecolor="k", facecolor=colors[i], alpha=0.4, zorder=2
-    #         )
-    #     )
 
     ax.quiver(
         positions[n_steps-1, :, 0],

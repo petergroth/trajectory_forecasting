@@ -1,10 +1,7 @@
 hidden_size: 128
 rnn_size: 32
-rnn_edge_size: 8
-dropout: 0.3
+dropout: 0.0
 num_layers: 1
 rnn_type: LSTM
 out_features: 2
-edge_features: 1
 node_features: 5
-latent_edge_features: 16

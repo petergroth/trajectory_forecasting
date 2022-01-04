@@ -28,10 +28,7 @@ class OneStepModule(pl.LightningModule):
         noise: Union[None, float] = None,
         lr: float = 1e-4,
         weight_decay: float = 0.0,
-        edge_type: str = "knn",
         min_dist: int = 0,
-        n_neighbours: int = 30,
-        fully_connected: bool = True,
         edge_weight: bool = False,
         self_loop: bool = True,
         undirected: bool = False,
@@ -61,32 +58,12 @@ class OneStepModule(pl.LightningModule):
         self.noise = noise
         self.lr = lr
         self.weight_decay = weight_decay
-        self.log_norm = log_norm
         self.min_dist = min_dist
         self.edge_weight = edge_weight
         self.self_loop = self_loop
         self.undirected = undirected
         self.grav_attraction = grav_attraction
         self.normalise = normalise
-
-        # Normalisation parameters
-        self.register_buffer("node_counter", torch.zeros(1))
-        self.register_buffer("node_in_sum", torch.zeros(node_features))
-        self.register_buffer("node_in_squaresum", torch.zeros(node_features))
-        self.register_buffer("node_in_std", torch.ones(node_features))
-        self.register_buffer("node_in_mean", torch.zeros(node_features))
-        # Output normalisation parameters
-        self.register_buffer("node_out_sum", torch.zeros(out_features))
-        self.register_buffer("node_out_squaresum", torch.zeros(out_features))
-        self.register_buffer("node_out_std", torch.ones(out_features))
-        self.register_buffer("node_out_mean", torch.zeros(out_features))
-        # Edge normalisation parameters
-        self.register_buffer("edge_counter", torch.zeros(1))
-        self.register_buffer("edge_in_sum", torch.zeros(edge_features))
-        self.register_buffer("edge_in_squaresum", torch.zeros(edge_features))
-        self.register_buffer("edge_in_std", torch.ones(edge_features))
-        self.register_buffer("edge_in_mean", torch.zeros(edge_features))
-        self.register_buffer("edge_in_mean", torch.zeros(edge_features))
 
     def training_step(self, batch: Batch, batch_idx: int):
         # Extract node features and edge_index
@@ -533,90 +510,13 @@ class OneStepModule(pl.LightningModule):
 
         return y_hat, y_target
 
+    def test_step(self, batch: Batch, batch_idx: int):
+        return self.validation_step(batch, batch_idx)
+
     def configure_optimizers(self):
         return torch.optim.Adam(
             self.parameters(), lr=self.lr, weight_decay=self.weight_decay
         )
-
-    def update_in_normalisation(self, x, edge_attr=None):
-        if self.normalise:
-            # Node normalisation
-            tmp = torch.sum(x, dim=0)
-            tmp = tmp.type_as(x)
-            self.node_in_sum += tmp
-            self.node_in_squaresum += tmp * tmp
-            self.node_counter += x.size(0)
-            self.register_buffer("node_in_mean", self.node_in_sum / self.node_counter)
-            self.register_buffer(
-                "node_in_std",
-                torch.sqrt(
-                    (
-                        (self.node_in_squaresum / self.node_counter)
-                        - (self.node_in_sum / self.node_counter) ** 2
-                    )
-                ),
-            )
-
-            # Edge normalisation
-            if edge_attr is not None:
-                tmp = torch.sum(edge_attr, dim=0)
-                tmp = tmp.type_as(x)
-                self.edge_in_sum += tmp
-                self.edge_in_squaresum += tmp * tmp
-                self.edge_counter += edge_attr.size(0)
-                self.register_buffer(
-                    "edge_in_mean", self.edge_in_sum / self.edge_counter
-                )
-                self.register_buffer(
-                    "edge_in_std",
-                    torch.sqrt(
-                        (
-                            (self.edge_in_squaresum / self.edge_counter)
-                            - (self.edge_in_sum / self.edge_counter) ** 2
-                        )
-                    ),
-                )
-
-    def in_normalise(self, x, edge_attr=None):
-        if self.normalise:
-            x = torch.sub(x, self.node_in_mean)
-            x = torch.div(x, self.node_in_std)
-
-            # Edge normalisation
-            if edge_attr is not None:
-                if self.centered_edges:
-                    edge_attr = torch.sub(edge_attr, self.edge_in_mean)
-                edge_attr = torch.div(edge_attr, self.edge_in_std)
-
-        return x, edge_attr
-
-    def update_out_normalisation(self, x):
-        if self.normalise:
-            tmp = torch.sum(x, dim=0)
-            self.node_out_sum += tmp
-            self.node_out_squaresum += tmp * tmp
-            self.register_buffer("node_out_mean", self.node_out_sum / self.node_counter)
-            self.register_buffer(
-                "node_out_std",
-                torch.sqrt(
-                    (
-                        (self.node_out_squaresum / self.node_counter)
-                        - (self.node_out_sum / self.node_counter) ** 2
-                    )
-                ),
-            )
-
-    def out_normalise(self, x):
-        if self.normalise:
-            x = torch.sub(x, self.node_out_mean)
-            x = torch.div(x, self.node_out_std)
-        return x
-
-    def out_renormalise(self, x):
-        if self.normalise:
-            x = torch.mul(self.node_out_std, x)
-            x = torch.add(x, self.node_out_mean)
-        return x
 
 
 class SequentialModule(pl.LightningModule):
@@ -1432,6 +1332,9 @@ class SequentialModule(pl.LightningModule):
 
         return y_predictions, y_target
 
+    def test_step(self, batch: Batch, batch_idx: int):
+        return self.validation_step(batch, batch_idx)
+
     def configure_optimizers(self):
         return torch.optim.Adam(
             self.parameters(), lr=self.lr, weight_decay=self.weight_decay
@@ -1439,7 +1342,7 @@ class SequentialModule(pl.LightningModule):
 
 
 class ConstantPhysicalBaselineModule(pl.LightningModule):
-    def __init__(self, prediction_horizon: int = 90, out_features: int = 2, **kwargs):
+    def __init__(self, prediction_horizon: int = 90, out_features: int = 4, **kwargs):
         super().__init__()
         # Setup metrics
         self.val_ade_loss = torchmetrics.MeanSquaredError()
@@ -1457,9 +1360,6 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
     def validation_step(self, batch: Batch, batch_idx: int):
         # Validate on sequential dataset. First 11 observations are used to prime the model.
         # Loss is computed on remaining 80 samples using rollout.
-
-        # Extract dimensions and allocate target/prediction tensors
-        n_nodes = batch.num_nodes
 
         # Setup target and allocate prediction tensors
         y_target = batch.x[:, 11 : (self.prediction_horizon + 1), : self.out_features]
@@ -1497,15 +1397,15 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
 
         return ade_loss
 
-    def predict_step(self, batch, batch_idx=None):
+    def predict_step(self, batch: Batch, prediction_horizon: int = 51):
         # Extract dimensions and allocate target/prediction tensors
         n_nodes = batch.num_nodes
         n_features = 5
-        y_hat = torch.zeros((self.prediction_horizon, n_nodes, n_features))
-        y_target = torch.zeros((self.prediction_horizon, n_nodes, n_features))
+        y_hat = torch.zeros((prediction_horizon, n_nodes, n_features))
+        y_target = torch.zeros((prediction_horizon, n_nodes, n_features))
 
         # Fill in targets
-        for t in range(0, self.prediction_horizon):
+        for t in range(0, prediction_horizon):
             y_target[t, :, :] = batch.x[:, t + 1, :]
 
         static_features = batch.x[:, 0, 4].unsqueeze(1)
@@ -1519,7 +1419,7 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
             )
             y_hat[t, :, :] = predicted_graph
 
-        for t in range(11, self.prediction_horizon):
+        for t in range(11, prediction_horizon):
             last_pos = predicted_pos
             # velocity no longer changing
             # delta_pos no longer changing
@@ -1530,6 +1430,9 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
             y_hat[t, :, :] = predicted_graph
 
         return y_hat, y_target
+
+    def test_step(self, batch: Batch, batch_idx: int):
+        return self.validation_step(batch, batch_idx)
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=1e-4)
@@ -1570,7 +1473,6 @@ def main(config):
         **config["logger"],
     )
     wandb_logger.watch(regressor, log_freq=config["misc"]["log_freq"], log_graph=False)
-    # Add default dir for logs
 
     # Setup callbacks
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
@@ -1585,6 +1487,7 @@ def main(config):
         trainer.fit(model=regressor, datamodule=datamodule)
 
     trainer.validate(regressor, datamodule=datamodule)
+    trainer.test(datamodule=datamodule)
 
 
 if __name__ == "__main__":

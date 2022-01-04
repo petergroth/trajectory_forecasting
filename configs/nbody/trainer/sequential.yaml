@@ -1,9 +1,9 @@
-check_val_every_n_epoch: 2
+check_val_every_n_epoch: 1
 max_epochs: 25
 deterministic: False
 num_sanity_val_steps: 2
 precision: 32 # Default. Only available on GPU.
 gpus: 0
-default_root_dir: logs
+default_root_dir: logs/nbody
 detect_anomaly: False
-gradient_clip_val: 0.5
+gradient_clip_val: 5.0

@@ -1,6 +1,6 @@
-hidden_size: 256
-dropout: 0.5
-latent_edge_features: 128
+hidden_size: 128
+dropout: 0.0
+latent_edge_features: 32
 node_features: 5
 edge_features: 2
 skip: True

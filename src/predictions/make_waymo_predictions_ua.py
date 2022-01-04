@@ -16,7 +16,7 @@ from pytorch_lightning.utilities.seed import seed_everything
 from src.data.dataset_waymo import OneStepWaymoDataModule
 from src.training_modules.train_waymo_UA import *
 
-def make_predictions(path, config, n_steps=51, sequence_idx=0):
+def make_predictions(path: str, config: dict, n_steps: int = 51, sequence_idx: int = 0):
     # Set seed
     seed_everything(config["misc"]["seed"], workers=True)
     # Load datamodule
