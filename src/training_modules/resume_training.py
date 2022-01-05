@@ -32,8 +32,9 @@ def main():
     # Load config file
     with open(args.config) as f:
         config = yaml.safe_load(f)
+
     config["trainer"]["max_epochs"] = args.max_epochs
-    config["trainer"]["max_time"] = -1
+    config["trainer"]["max_time"] = None
 
     # Seed for reproducibility
     seed_everything(config["misc"]["seed"], workers=True)
@@ -63,12 +64,9 @@ def main():
 
     # Create trainer, fit, and validate
     trainer = pl.Trainer(
-        logger=wandb_logger,
-        **config["trainer"],
-        callbacks=[checkpoint_callback, summary_callback],
-        resume_from_checkpoint=args.ckpt_path,
+        logger=wandb_logger, **config["trainer"], callbacks=[checkpoint_callback, summary_callback]
     )
-    trainer.fit(model=regressor, datamodule=datamodule)
+    trainer.fit(model=regressor, datamodule=datamodule, ckpt_path=args.ckpt_path)
 
 
 if __name__ == "__main__":

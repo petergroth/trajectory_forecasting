@@ -292,7 +292,7 @@ def main():
     ax[1].set_title("Predicted trajectories")
 
     # plt.show()
-    # fig.savefig(f"{args.output_path}/sequence_{args.sequence_idx:04}_{n_steps}_sig_{nstd}.png")
+    fig.savefig(f"{args.output_path}/sequence_{args.sequence_idx:04}_{n_steps}_sig_{nstd}.png")
 
 
 if __name__ == "__main__":
