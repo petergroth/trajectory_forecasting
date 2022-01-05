@@ -938,14 +938,14 @@ class rnn_graph_baseline(nn.Module):
 class mlp_baseline(nn.Module):
     # Forward model without edge update function
     def __init__(
-            self,
-            hidden_size: int = 64,
-            node_features: int = 5,
-            n_nodes: int = 10,
-            normalise: bool = True,
-            dropout: float = 0.0,
-            permute: bool = False,
-            **kwargs,
+        self,
+        hidden_size: int = 64,
+        node_features: int = 5,
+        n_nodes: int = 10,
+        normalise: bool = True,
+        dropout: float = 0.0,
+        permute: bool = False,
+        **kwargs,
     ):
         super(mlp_baseline, self).__init__()
         self.hidden_size = hidden_size
@@ -1016,7 +1016,7 @@ class rnn_message_passing_global_v3(nn.Module):
         # Node history encoder.
         # Computes a node-wise representation which incorporates the nodes' respective histories.
         self.node_history_encoder = node_rnn_simple(
-            node_features=node_features+map_encoding_size,
+            node_features=node_features + map_encoding_size,
             edge_features=0,
             rnn_size=rnn_size,
             dropout=dropout,
@@ -1027,7 +1027,7 @@ class rnn_message_passing_global_v3(nn.Module):
         # GN-block to compute messages/interactions between nodes
         self.message_gn = GraphNetworkBlock(
             edge_model=edge_mlp_1(
-                node_features=node_features+map_encoding_size,
+                node_features=node_features + map_encoding_size,
                 edge_features=edge_features,
                 hidden_size=hidden_size,
                 dropout=dropout,
@@ -1096,8 +1096,13 @@ class rnn_message_passing_global_v3(nn.Module):
         )
 
         # Final node update. [n_nodes, out_features]
-        out, _, _ = self.GN_out(x=full_node_representation, edge_index=edge_index, edge_attr=edge_attr,
-                                u=None, batch=None)
+        out, _, _ = self.GN_out(
+            x=full_node_representation,
+            edge_index=edge_index,
+            edge_attr=edge_attr,
+            u=None,
+            batch=None,
+        )
 
         return out, (h_node, h_edge)
 
@@ -1127,7 +1132,7 @@ class rnn_message_passing_global_v4(nn.Module):
         # Node history encoder.
         # Computes a node-wise representation which incorporates the nodes' respective histories.
         self.node_history_encoder = node_rnn_simple(
-            node_features=node_features+map_encoding_size,
+            node_features=node_features + map_encoding_size,
             edge_features=0,
             rnn_size=rnn_size,
             dropout=dropout,
@@ -1138,7 +1143,7 @@ class rnn_message_passing_global_v4(nn.Module):
         # GN-block to compute messages/interactions between nodes
         self.message_gn = GraphNetworkBlock(
             edge_model=edge_mlp_1(
-                node_features=node_features+map_encoding_size,
+                node_features=node_features + map_encoding_size,
                 edge_features=edge_features,
                 hidden_size=hidden_size,
                 dropout=dropout,

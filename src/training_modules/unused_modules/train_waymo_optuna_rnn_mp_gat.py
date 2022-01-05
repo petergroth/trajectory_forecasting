@@ -41,18 +41,19 @@ class Objective(object):
         latent_edge_features = trial.suggest_categorical(
             "latent_edge_features", [4, 8, 16, 32, 64]
         )
+        heads = trial.suggest_categorical("heads", [1, 2, 4, 6, 8, 16])
 
         # Regressor
         weight_decay = trial.suggest_categorical(
             "weight_decay", [1e-4, 5e-4, 1e-3, 5e-3, 1e-2, 1e-1, 0.0]
         )
         training_horizon = trial.suggest_categorical(
-            "training_horizon", [15, 25, 30, 40, 50, 70, 90]
+            "training_horizon", [21, 31, 41, 51, 71, 90]
         )
         teacher_forcing_ratio = trial.suggest_float(
             "teacher_forcing_ratio", low=0.0, high=0.3, step=0.05
         )
-        min_dist = trial.suggest_float("min_dist", low=1.0, high=20.0, step=1.0)
+        min_dist = trial.suggest_float("min_dist", low=2.0, high=20.0, step=1.0)
         lr = trial.suggest_categorical("lr", [1e-5, 5e-5, 1e-4, 5e-4, 1e-3, 5e-3, 1e-2])
         edge_dropout = trial.suggest_float("edge_dropout", low=0.0, high=0.5, step=0.05)
         noise = trial.suggest_float("noise", low=0.0, high=0.01)
@@ -68,6 +69,7 @@ class Objective(object):
             "num_layers": num_layers,
             "hidden_size": hidden_size,
             "latent_edge_features": latent_edge_features,
+            "heads": heads,
         }
         regressor_kwargs = {
             "weight_decay": weight_decay,
@@ -139,13 +141,12 @@ class Objective(object):
         wandb_logger.log_metrics({"best_total_val_loss": val_total_loss})
         wandb_logger.finalize("0")
         wandb_logger.experiment.finish()
-        wandb.finish()
-        del trainer
+        del trainer, wandb_logger
 
         return val_total_loss
 
 
-@hydra.main(config_path="../../configs/waymo/", config_name="config")
+@hydra.main(config_path="../../../configs/waymo/", config_name="config")
 def main(config):
     pruner = optuna.pruners.MedianPruner()
     study = optuna.create_study(

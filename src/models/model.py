@@ -153,7 +153,7 @@ class NodeRNN(nn.Module):
             num_layers=num_layers,
             rnn_type=rnn_type,
         )
-        
+
         # MLP
         self.mlp = nn.Sequential(
             nn.Linear(in_features=rnn_size + node_features, out_features=hidden_size),
@@ -162,7 +162,9 @@ class NodeRNN(nn.Module):
             nn.Linear(in_features=hidden_size, out_features=out_features),
         )
 
-    def forward(self, x, edge_index=None, edge_attr=None, batch=None, u=None, hidden=None):     
+    def forward(
+        self, x, edge_index=None, edge_attr=None, batch=None, u=None, hidden=None
+    ):
         # Forward pass
         node_history, hidden = self.node_history_encoder(x=x, hidden=hidden)
         # Skip connection

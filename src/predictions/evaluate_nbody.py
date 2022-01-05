@@ -2,18 +2,19 @@ import argparse
 import os
 
 import hydra
+import matplotlib.colors as colors
 import matplotlib.pyplot as plt
 import numpy as np
 import pytorch_lightning as pl
 import torch
 import yaml
 # from models import ConstantModel
-from matplotlib.patches import Circle, Rectangle, Ellipse
-import matplotlib.colors as colors
+from matplotlib.patches import Circle, Ellipse, Rectangle
 from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning.utilities.seed import seed_everything
 
-from src.data.dataset_nbody import OneStepNBodyDataModule, SequentialNBodyDataModule
+from src.data.dataset_nbody import (OneStepNBodyDataModule,
+                                    SequentialNBodyDataModule)
 from src.training_modules.train_nbody_model import *
 
 
@@ -36,7 +37,9 @@ def main():
 
     # Load correct model
     if config["misc"]["model_type"] != "ConstantModel":
-        regressor = eval(config["misc"]["regressor_type"]).load_from_checkpoint(args.ckpt_path)
+        regressor = eval(config["misc"]["regressor_type"]).load_from_checkpoint(
+            args.ckpt_path
+        )
         regressor.eval()
     else:
         regressor = ConstantPhysicalBaselineModule(prediction_horizon=51)
@@ -51,4 +54,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

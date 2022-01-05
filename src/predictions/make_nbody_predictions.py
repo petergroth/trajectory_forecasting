@@ -4,20 +4,18 @@ import os
 import hydra
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib import rc
-from matplotlib.patches import Circle
 import pytorch_lightning as pl
 import torch
 import yaml
+from matplotlib import rc
 # from models import ConstantModel
 from matplotlib.patches import Circle, Rectangle
 from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning.utilities.seed import seed_everything
 
 from src.data.dataset_nbody import *
-from src.training_modules.train_nbody_model import (OneStepModule,
-                                                    SequentialModule,
-                                                    ConstantPhysicalBaselineModule)
+from src.training_modules.train_nbody_model import (
+    ConstantPhysicalBaselineModule, OneStepModule, SequentialModule)
 
 rc("text", usetex=True)
 rc("font", **{"family": "serif", "serif": ["Computer Modern Roman"]})
@@ -83,7 +81,6 @@ def main():
     y_hat = y_hat.detach().numpy()
     y_target = y_target.detach().numpy()
 
-
     # Extract boundaries
     x_min, x_max, y_min, y_max = (
         np.min(y_target[:, :, 0]) - 10,
@@ -124,7 +121,7 @@ def main():
                     sizes[i, t],
                     facecolor=colors[i],
                     alpha=alphas[t],
-                    edgecolor='k' if t in (n_steps - 1, 10) else None
+                    edgecolor="k" if t in (n_steps - 1, 10) else None,
                 )
             )
 
@@ -156,7 +153,7 @@ def main():
                     sizes[i, t],
                     facecolor=colors[i],
                     alpha=alphas[t],
-                    edgecolor='k' if t in (n_steps - 1, 10) else None
+                    edgecolor="k" if t in (n_steps - 1, 10) else None,
                 )
             )
 
@@ -175,8 +172,6 @@ def main():
         zorder=10,
     )
 
-
-
     # ax[0].axis("equal")
     # ax[0].set_xlim((x_min, x_max))
     # ax[0].set_ylim((y_min, y_max))
@@ -189,7 +184,9 @@ def main():
 
     plt.tight_layout()
     # plt.show()
-    plt.savefig(f"../../thesis/graphics/synthetic/{args.output_path}_{args.sequence_idx}.pdf")
+    plt.savefig(
+        f"../../thesis/graphics/synthetic/{args.output_path}_{args.sequence_idx}.pdf"
+    )
 
 
 if __name__ == "__main__":

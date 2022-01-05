@@ -59,7 +59,7 @@ if __name__ == "__main__":
     for i in range(n_particles):
         ax.add_patch(
             Circle(
-                positions[n_steps-1, i, :],
+                positions[n_steps - 1, i, :],
                 sizes[0, i],
                 edgecolor="k",
                 facecolor=colors[i],
@@ -82,10 +82,10 @@ if __name__ == "__main__":
     #     )
 
     ax.quiver(
-        positions[n_steps-1, :, 0],
-        positions[n_steps-1, :, 1],
-        velocities[n_steps-1, :, 0],
-        velocities[n_steps-1, :, 1],
+        positions[n_steps - 1, :, 0],
+        positions[n_steps - 1, :, 1],
+        velocities[n_steps - 1, :, 0],
+        velocities[n_steps - 1, :, 1],
         width=0.003,
         headwidth=5,
         angles="xy",

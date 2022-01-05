@@ -180,9 +180,7 @@ class SequentialTestDataset(InMemoryDataset):
         data_list = []
 
         for j, raw_path in enumerate(self.raw_file_names[1500:]):
-            full_arr = load_simulations(
-                self.raw_dir + "/" + raw_path
-            )
+            full_arr = load_simulations(self.raw_dir + "/" + raw_path)
             # Use all x values
             x = torch.Tensor(full_arr).permute(1, 0, 2)
             data = Data(x=x, edge_index=None)
@@ -287,4 +285,3 @@ class SequentialNBodyDataModule(pl.LightningDataModule):
         return DataLoader(
             self.test_dataset, batch_size=self.val_batch_size, shuffle=False
         )
-

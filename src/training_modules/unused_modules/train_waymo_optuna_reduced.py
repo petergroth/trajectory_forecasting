@@ -16,7 +16,7 @@ from src.models.optuna_objectives import *
 from src.models.train_waymo_model_reduced import *
 
 
-@hydra.main(config_path="../../configs/waymo/", config_name="config")
+@hydra.main(config_path="../../../configs/waymo/", config_name="config")
 def main(config):
     # pruner = optuna.pruners.MedianPruner()
     if config.model.model_type == ""

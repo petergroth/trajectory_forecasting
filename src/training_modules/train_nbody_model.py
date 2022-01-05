@@ -1353,7 +1353,7 @@ class SequentialModule(pl.LightningModule):
         y_predictions = torch.zeros((n_nodes, self.training_horizon, self.out_features))
         y_predictions = y_predictions.type_as(batch.x)
         # Define target tensor
-        y_target = batch.x[:, 1: (self.training_horizon + 1), : self.out_features]
+        y_target = batch.x[:, 1 : (self.training_horizon + 1), : self.out_features]
         y_target = y_target.type_as(batch.x)
 
         assert y_target.shape == y_predictions.shape
