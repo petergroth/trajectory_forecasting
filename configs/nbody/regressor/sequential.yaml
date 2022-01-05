@@ -13,3 +13,4 @@ edge_features: 1
 out_features: 4
 training_horizon: 51
 fully_connected: False
+edge_type: distance

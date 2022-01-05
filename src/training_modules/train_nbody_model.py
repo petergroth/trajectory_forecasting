@@ -532,7 +532,7 @@ class SequentialModule(pl.LightningModule):
         n_neighbours: int = 30,
         fully_connected: bool = True,
         edge_weight: bool = False,
-        edge_type: str = "knn",
+        edge_type: str = "distance",
         self_loop: bool = True,
         undirected: bool = False,
         out_features: int = 6,
@@ -838,11 +838,11 @@ class SequentialModule(pl.LightningModule):
             y_predictions[:, :, [2, 3]], y_target[:, :, [2, 3]]
         )
 
-        self.log("train_fde_loss", fde_loss, on_step=True, on_epoch=True)
-        self.log("train_ade_loss", ade_loss, on_step=True, on_epoch=True)
-        self.log("train_vel_loss", vel_loss, on_step=True, on_epoch=True)
+        self.log("train_fde_loss", fde_loss, on_step=True, on_epoch=True, batch_size=n_nodes)
+        self.log("train_ade_loss", ade_loss, on_step=True, on_epoch=True, batch_size=n_nodes)
+        self.log("train_vel_loss", vel_loss, on_step=True, on_epoch=True, batch_size=n_nodes)
         loss = ade_loss
-        self.log("train_total_loss", loss, on_step=True, on_epoch=True)
+        self.log("train_total_loss", loss, on_step=True, on_epoch=True, batch_size=n_nodes)
 
         return loss
 
@@ -1087,12 +1087,12 @@ class SequentialModule(pl.LightningModule):
             y_predictions[:, 11:, [2, 3]], y_target[:, 11:, [2, 3]]
         )
 
-        self.log("val_fde_loss", fde_loss)
-        self.log("val_ade_loss", ade_loss)
-        self.log("val_vel_loss", vel_loss)
+        self.log("val_fde_loss", fde_loss, batch_size=n_nodes)
+        self.log("val_ade_loss", ade_loss, batch_size=n_nodes)
+        self.log("val_vel_loss", vel_loss, batch_size=n_nodes)
         loss = ade_loss
 
-        self.log("val_total_loss", loss)
+        self.log("val_total_loss", loss, batch_size=n_nodes)
 
         return loss
 
@@ -1487,6 +1487,7 @@ def main(config):
         trainer.fit(model=regressor, datamodule=datamodule)
 
     trainer.validate(regressor, datamodule=datamodule)
+
     trainer.test(datamodule=datamodule)
 
 
