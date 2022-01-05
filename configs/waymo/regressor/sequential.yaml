@@ -8,5 +8,5 @@ edge_weight: True
 normalise: False
 node_features: 15
 edge_features: 1
-teacher_forcing_ratio: 0.3
-prediction_horizon: 91
+teacher_forcing_ratio: 0.0
+prediction_horizon: 51

@@ -20,7 +20,7 @@ from src.training_modules.train_nbody_model import *
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("config")
-    parser.add_argument("--ckpt_path", default=None)
+    parser.add_argument("ckpt_path")
     args = parser.parse_args()
 
     # Load config file

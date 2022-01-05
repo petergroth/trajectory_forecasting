@@ -359,7 +359,7 @@ class MPGNN(nn.Module):
 
 
 class RMPGNN(nn.Module):
-    # Recurrent Message-Passing Graph Neural Network
+    # Recurrent message-passing GNN
     def __init__(
         self,
         hidden_size: int = 64,
@@ -412,27 +412,18 @@ class RMPGNN(nn.Module):
         )
 
         # Output GN
-        self.GN_out = GraphNetworkBlock(
-            edge_model=edge_mlp_1(
-                node_features=rnn_size + rnn_edge_size,
-                edge_features=edge_features,
-                hidden_size=hidden_size,
-                dropout=dropout,
-                latent_edge_features=latent_edge_features,
-            ),
-            node_model=node_mlp_out(
-                hidden_size=hidden_size,
-                node_features=rnn_size + rnn_edge_size,
-                dropout=dropout,
-                edge_features=latent_edge_features,
-                out_features=out_features,
-            ),
+        self.node_output = node_mlp_out_global(
+            hidden_size=hidden_size,
+            node_features=rnn_size + rnn_edge_size,
+            dropout=dropout,
+            out_features=out_features,
         )
 
     def forward(self, x, edge_index, edge_attr, u, hidden: tuple, batch=None):
         # x: [n_nodes, node_features]
         # edge_index: [2, n_edges]
         # edge_attr : [n_edges, edge_features]
+        # u: [n_nodes, local_map_resolution]
 
         # Unpack hidden states
         h_node, h_edge = hidden
@@ -458,8 +449,7 @@ class RMPGNN(nn.Module):
         )
 
         # Final node update. [n_nodes, out_features]
-        out, _, _ = self.GN_out(x=full_node_representation, edge_index=edge_index, edge_attr=edge_attr,
-                                u=None, batch=None)
+        out = self.node_output(x=full_node_representation)
 
         return out, (h_node, h_edge)
 
@@ -519,21 +509,11 @@ class LocalRMPGNN(nn.Module):
         )
 
         # Output GN
-        self.GN_out = GraphNetworkBlock(
-            edge_model=edge_mlp_1(
-                node_features=rnn_size + rnn_edge_size + map_encoding_size,
-                edge_features=edge_features,
-                hidden_size=hidden_size,
-                dropout=dropout,
-                latent_edge_features=latent_edge_features,
-            ),
-            node_model=node_mlp_out(
-                hidden_size=hidden_size,
-                node_features=rnn_size + rnn_edge_size + map_encoding_size,
-                dropout=dropout,
-                edge_features=latent_edge_features,
-                out_features=out_features,
-            ),
+        self.node_output = node_mlp_out_global(
+            hidden_size=hidden_size,
+            node_features=rnn_size + rnn_edge_size + map_encoding_size,
+            dropout=dropout,
+            out_features=out_features,
         )
 
     def forward(self, x, edge_index, edge_attr, u, hidden: tuple, batch=None):
@@ -566,8 +546,6 @@ class LocalRMPGNN(nn.Module):
         )
 
         # Final node update. [n_nodes, out_features]
-        out, _, _ = self.GN_out(x=full_node_representation, edge_index=edge_index, edge_attr=edge_attr,
-                                u=None, batch=None)
+        out = self.node_output(x=full_node_representation)
 
         return out, (h_node, h_edge)
-
