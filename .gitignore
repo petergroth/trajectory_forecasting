@@ -96,6 +96,7 @@ target/
 todo.txt
 /jobfiles/
 /jobfile_gmprnn/
+/jobfiles_nbody/
 *.err
 *.out
 /visualisations/
