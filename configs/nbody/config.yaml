@@ -16,6 +16,8 @@ misc:
   dm_type: SequentialNBodyDataModule
   regressor_type: SequentialModule
   train: True
+  validate: True
+  test: True
   log_freq: 10
 
 hydra:
