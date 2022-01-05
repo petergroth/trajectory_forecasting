@@ -5368,7 +5368,11 @@ def main(config):
     if config["misc"]["train"]:
         trainer.fit(model=regressor, datamodule=datamodule)
 
-    trainer.validate(regressor, datamodule=datamodule)
+    if config["misc"]["validate"]:
+        trainer.validate(regressor, datamodule=datamodule)
+
+    if config["misc"]["test"]:
+        trainer.test(regressor, datamodule=datamodule)
 
 
 if __name__ == "__main__":
