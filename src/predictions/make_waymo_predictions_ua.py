@@ -2,18 +2,19 @@ import argparse
 import os
 
 import hydra
+import matplotlib.colors as colors
 import matplotlib.pyplot as plt
 import numpy as np
 import pytorch_lightning as pl
 import torch
 import yaml
 # from models import ConstantModel
-from matplotlib.patches import Circle, Rectangle, Ellipse
-import matplotlib.colors as colors
+from matplotlib.patches import Circle, Ellipse, Rectangle
 from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning.utilities.seed import seed_everything
 
 from src.training_modules.train_waymo_UA import *
+
 
 def make_predictions(path: str, config: dict, n_steps: int = 51, sequence_idx: int = 0):
     # Set seed
@@ -39,12 +40,14 @@ def make_predictions(path: str, config: dict, n_steps: int = 51, sequence_idx: i
     batch.num_graphs = 1
 
     # Make and return predictions
-    y_hat, y_target, mask, Sigma = regressor.predict_step(batch, prediction_horizon=n_steps)
+    y_hat, y_target, mask, Sigma = regressor.predict_step(
+        batch, prediction_horizon=n_steps
+    )
     return y_hat.detach(), y_target, mask, batch, Sigma.detach()
 
 
 def eigsorted(cov):
-    # Source: 
+    # Source:
     # Ben from https://stackoverflow.com/questions/20126061/
     # creating-a-confidence-ellipses-in-a-sccatterplot-using-matplotlib?noredirect=1&lq=1
 
@@ -196,7 +199,16 @@ def main():
     fig, ax = plt.subplots(1, 2, figsize=(20, 10))
 
     # Plot each map channel separately using different colors/opacities
-    layer_colors = ["Greys", "Spectral", "Greys", "Greys", "bwr", "bwr", "Greys", "Reds"]
+    layer_colors = [
+        "Greys",
+        "Spectral",
+        "Greys",
+        "Greys",
+        "bwr",
+        "bwr",
+        "Greys",
+        "Reds",
+    ]
     layer_alphas = [0.2, 0.3, 0.5, 1, 0.5, 1, 1, 1]
     for layer_id in range(8):
         layer_mask = roadgraph[layer_id].astype(float)
@@ -208,7 +220,7 @@ def main():
                 norm=colors.Normalize(vmin=-2, vmax=1.0),
                 extent=extent,
                 origin="lower",
-                alpha=layer_mask*layer_alphas[layer_id],
+                alpha=layer_mask * layer_alphas[layer_id],
                 # interpolation="bessel"
             )
 
@@ -224,7 +236,7 @@ def main():
 
     # Main loop
     for t in range(n_steps - 1):
-        #Plot groundtruth
+        # Plot groundtruth
         ax[0] = plot_time_step(
             ax=ax[0],
             t=t,
@@ -234,7 +246,12 @@ def main():
             n_steps=n_steps,
         )
         ax[1] = plot_time_step(
-            ax=ax[1], t=t, states=y_hat, alpha=alphas[t], colors=agent_colors, n_steps=n_steps
+            ax=ax[1],
+            t=t,
+            states=y_hat,
+            alpha=alphas[t],
+            colors=agent_colors,
+            n_steps=n_steps,
         )
 
         # Visualise covariance matrices for all agents
@@ -243,10 +260,16 @@ def main():
             theta = np.degrees(np.arctan2(*vecs[:, 0][::-1]))
             w, h = 2 * nstd * np.sqrt(vals)
             loc = y_hat[t, agent, :2].numpy()
-            ell = Ellipse(xy=loc, width=w, height=h, angle=theta, color=agent_colors[agent], alpha=0.2)
+            ell = Ellipse(
+                xy=loc,
+                width=w,
+                height=h,
+                angle=theta,
+                color=agent_colors[agent],
+                alpha=0.2,
+            )
             ax[1].add_artist(ell)
             # print(Sigma[t, agent].detach().numpy())
-
 
         # ax[1] = plot_edges_single_agent(ax=ax[1], t=t, states=y_hat, alpha=alphas[t], agent=3, mask=mask)
         # ax[1] = plot_edges_all_agents(
@@ -273,4 +296,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

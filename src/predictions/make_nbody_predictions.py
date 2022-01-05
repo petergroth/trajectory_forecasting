@@ -4,20 +4,18 @@ import os
 import hydra
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib import rc
-from matplotlib.patches import Circle
 import pytorch_lightning as pl
 import torch
 import yaml
+from matplotlib import rc
 # from models import ConstantModel
 from matplotlib.patches import Circle, Rectangle
 from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning.utilities.seed import seed_everything
 
 from src.data.dataset_nbody import *
-from src.training_modules.train_nbody_model import (OneStepModule,
-                                                    SequentialModule,
-                                                    ConstantPhysicalBaselineModule)
+from src.training_modules.train_nbody_model import (
+    ConstantPhysicalBaselineModule, OneStepModule, SequentialModule)
 
 rc("text", usetex=True)
 rc("font", **{"family": "serif", "serif": ["Computer Modern Roman"]})
@@ -47,7 +45,7 @@ def make_predictions(path: str, config: dict, n_steps: int = 51, sequence_idx: i
     # Setup
     regressor.eval()
     datamodule.setup()
-    dataset = datamodule.val_dataset
+    dataset = datamodule.test_dataset
     # Extract batch and add missing attributes
     batch = dataset.__getitem__(sequence_idx)
     batch.batch = torch.zeros(batch.x.size(0)).type(torch.int64)
@@ -77,12 +75,11 @@ def main():
         sequence_idx=args.sequence_idx,
     )
 
-    n_steps, n_agents, n_features = y_hat.shape
+    n_agents, n_steps, n_features = y_hat.shape
 
     # Convert to numpy arrays
     y_hat = y_hat.detach().numpy()
     y_target = y_target.detach().numpy()
-
 
     # Extract boundaries
     x_min, x_max, y_min, y_max = (
@@ -91,6 +88,8 @@ def main():
         np.min(y_target[:, :, 1]) - 10,
         np.max(y_target[:, :, 1]) + 10,
     )
+
+    x_min, x_max, y_min, y_max = (-100, 70, -60, 110)
 
     # Setup plotting
     alphas = np.linspace(0.1, 1, n_steps)
@@ -118,20 +117,20 @@ def main():
             # Visualise each agent as a circle
             ax[0].add_patch(
                 Circle(
-                    positions[t, i],
-                    sizes[t, i],
+                    positions[i, t],
+                    sizes[i, t],
                     facecolor=colors[i],
                     alpha=alphas[t],
-                    edgecolor='k' if t in (n_steps - 1, 10) else None
+                    edgecolor="k" if t in (n_steps - 1, 10) else None,
                 )
             )
 
     # Show final velocities
     ax[0].quiver(
-        positions[n_steps-1, :, 0],
-        positions[n_steps-1, :, 1],
-        velocities[n_steps-1, :, 0],
-        velocities[n_steps-1, :, 1],
+        positions[:, -1, 0],
+        positions[:, -1, 1],
+        velocities[:, -1, 0],
+        velocities[:, -1, 1],
         width=0.003,
         headwidth=5,
         angles="xy",
@@ -150,20 +149,20 @@ def main():
             # Visualise each agent as a circle
             ax[1].add_patch(
                 Circle(
-                    positions[t, i],
-                    sizes[t, i],
+                    positions[i, t],
+                    sizes[i, t],
                     facecolor=colors[i],
                     alpha=alphas[t],
-                    edgecolor='k' if t in (n_steps - 1, 10) else None
+                    edgecolor="k" if t in (n_steps - 1, 10) else None,
                 )
             )
 
     # Show final velocities
     ax[1].quiver(
-        positions[n_steps-1, :, 0],
-        positions[n_steps-1, :, 1],
-        velocities[n_steps-1, :, 0],
-        velocities[n_steps-1, :, 1],
+        positions[:, -1, 0],
+        positions[:, -1, 1],
+        velocities[:, -1, 0],
+        velocities[:, -1, 1],
         width=0.003,
         headwidth=5,
         angles="xy",
@@ -172,8 +171,6 @@ def main():
         color="k",
         zorder=10,
     )
-
-
 
     # ax[0].axis("equal")
     # ax[0].set_xlim((x_min, x_max))
@@ -187,7 +184,9 @@ def main():
 
     plt.tight_layout()
     # plt.show()
-    # plt.savefig(f"../../thesis/graphics/synthetic/constant_example.pdf")
+    plt.savefig(
+        f"../../thesis/graphics/synthetic/{args.output_path}_{args.sequence_idx}.pdf"
+    )
 
 
 if __name__ == "__main__":

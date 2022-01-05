@@ -566,7 +566,9 @@ class node_gcn(nn.Module):
 
 
 class road_encoder(nn.Module):
-    def __init__(self, width: int = 300, hidden_size: int = 41, in_map_channels: int = 8):
+    def __init__(
+        self, width: int = 300, hidden_size: int = 41, in_map_channels: int = 8
+    ):
         super(road_encoder, self).__init__()
         hidden_channels = [20, 10, 5, 1]
         strides = [1, 1, 1, 1]

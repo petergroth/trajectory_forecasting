@@ -34,21 +34,16 @@ class Objective(object):
         hidden_size = trial.suggest_categorical(
             "hidden_size", [32, 64, 96, 128, 192, 256]
         )
-        latent_edge_features = trial.suggest_categorical(
-            "latent_edge_features", [32, 64, 96, 128]
-        )
-        rnn_size = trial.suggest_categorical("rnn_size", [8, 16, 24, 32, 64])
         dropout = trial.suggest_float("dropout", low=0.0, high=0.5)
-        num_layers = trial.suggest_categorical("num_layers", [1, 2])
-        rnn_type = trial.suggest_categorical("rnn_type", ["GRU", "LSTM"])
         aggregate = trial.suggest_categorical("aggregate", [True, False])
+        skip = trial.suggest_categorical("skip", [True, False])
 
         # Regressor
         weight_decay = trial.suggest_categorical(
             "weight_decay", [1e-4, 5e-4, 1e-3, 5e-3, 1e-2, 1e-1, 0, 1, 10]
         )
         training_horizon = trial.suggest_categorical(
-            "training_horizon", [25, 30, 40, 50, 70, 90]
+            "training_horizon", [12, 13, 14, 15, 20, 25, 30, 40, 50, 70, 90]
         )
         teacher_forcing_ratio = trial.suggest_float(
             "teacher_forcing_ratio", low=0.0, high=0.3, step=0.05
@@ -68,12 +63,9 @@ class Objective(object):
         # Pack regressor parameters together
         model_kwargs = {
             "hidden_size": hidden_size,
-            "latent_edge_features": latent_edge_features,
-            "rnn_size": rnn_size,
             "dropout": dropout,
-            "num_layers": num_layers,
-            "rnn_type": rnn_type,
             "aggregate": aggregate,
+            "skip": skip,
         }
         regressor_kwargs = {
             "weight_decay": weight_decay,
@@ -155,7 +147,7 @@ class Objective(object):
         return val_total_loss
 
 
-@hydra.main(config_path="../../configs/waymo/", config_name="config")
+@hydra.main(config_path="../../../configs/waymo/", config_name="config")
 def main(config):
     # pruner = optuna.pruners.MedianPruner()
     study = optuna.create_study(direction="minimize", study_name=config.logger.version)

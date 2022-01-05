@@ -19,7 +19,7 @@ from torch_geometric.data import Batch
 from src.data.dataset_waymo import (OneStepWaymoDataModule,
                                     SequentialWaymoDataModule)
 from src.models.model import *
-from src.models.train_waymo_model_reduced import *
+from src.models.train_waymo_model_angle_param import *
 
 
 class Objective(object):
@@ -32,47 +32,58 @@ class Objective(object):
 
         # Model
         hidden_size = trial.suggest_categorical(
-            "hidden_size", [16, 32, 64, 96, 128, 192, 256]
+            "hidden_size", [32, 64, 96, 128, 192, 256]
         )
-        dropout = trial.suggest_float("dropout", low=0.0, high=0.7, step=0.1)
-        skip = trial.suggest_categorical("skip", [True, False])
+        latent_edge_features = trial.suggest_categorical(
+            "latent_edge_features", [32, 64, 96, 128, 192, 256]
+        )
+        rnn_size = trial.suggest_categorical("rnn_size", [8, 16, 24, 32, 64])
 
         # Regressor
         weight_decay = trial.suggest_categorical(
-            "weight_decay", [1e-4, 5e-4, 1e-3, 5e-3, 1e-2, 1e-1, 0.0]
+            "weight_decay", [1e-4, 5e-4, 1e-3, 5e-3, 1e-2, 1e-1, 0, 1, 10]
         )
         training_horizon = trial.suggest_categorical(
-            "training_horizon", [12, 13, 14, 15, 25, 30, 40, 50, 70, 90]
+            "training_horizon", [12, 13, 14, 15, 20, 25, 30, 40, 50, 70, 90]
         )
         teacher_forcing_ratio = trial.suggest_float(
             "teacher_forcing_ratio", low=0.0, high=0.3, step=0.05
         )
-        min_dist = trial.suggest_float("min_dist", low=1.0, high=30.0, step=1.0)
-        fully_connected = trial.suggest_categorical("fully_connected", [True, False])
-        lr = trial.suggest_categorical("lr", [1e-5, 5e-5, 1e-4, 5e-4, 1e-3, 5e-3, 1e-2])
+        min_dist = trial.suggest_float("min_dist", low=1.0, high=20.0, step=1.0)
+        # n_neighbours = trial.suggest_int("n_neighbours", low=1, high=50)
+        lr = trial.suggest_categorical(
+            "lr", [1e-6, 5e-6, 1e-5, 5e-5, 1e-4, 5e-4, 1e-3, 5e-3, 1e-2]
+        )
+        # noise = trial.suggest_float("noise", low=0.0, high=1.0)
 
         # Datamodule
-        batch_size = trial.suggest_categorical("batch_size", [16, 32, 48, 64, 96, 128])
+        batch_size = trial.suggest_categorical(
+            "batch_size", [8, 16, 32, 48, 64, 96, 128]
+        )
 
         # Trainer
         # stochastic_weight_avg = trial.suggest_categorical("stochastic_weight_avg", ["True", "False"])
-        # gradient_clip_val = trial.suggest_float("gradient_clip_val", low=0.0, high=1.0)
+        gradient_clip_val = trial.suggest_float("gradient_clip_val", low=0.0, high=1.0)
 
         # Pack regressor parameters together
-        model_kwargs = {"hidden_size": hidden_size, "dropout": dropout, "skip": skip}
+        model_kwargs = {
+            "hidden_size": hidden_size,
+            "latent_edge_features": latent_edge_features,
+            "rnn_size": rnn_size,
+        }
         regressor_kwargs = {
             "weight_decay": weight_decay,
-            "fully_connected": fully_connected,
+            # "n_neighbours": n_neighbours,
             "min_dist": min_dist,
             "lr": lr,
             "training_horizon": training_horizon,
             "teacher_forcing_ratio": teacher_forcing_ratio,
             # "noise": noise
         }
-        # trainer_kwargs = {
-        #     "gradient_clip_val": gradient_clip_val,
-        #     # "stochastic_weight_avg": stochastic_weight_avg
-        # }
+        trainer_kwargs = {
+            "gradient_clip_val": gradient_clip_val,
+            # "stochastic_weight_avg": stochastic_weight_avg
+        }
 
         # Update model arguments
         self.config.datamodule.batch_size = batch_size
@@ -81,9 +92,9 @@ class Objective(object):
         regressor_dict.update(regressor_kwargs)
         self.config.regressor = DictConfig(regressor_dict)
 
-        # trainer_dict = dict(self.config.trainer)
-        # trainer_dict.update(trainer_kwargs)
-        # self.config.trainer = DictConfig(trainer_dict)
+        trainer_dict = dict(self.config.trainer)
+        trainer_dict.update(trainer_kwargs)
+        self.config.trainer = DictConfig(trainer_dict)
 
         model_dict = dict(self.config.model)
         model_dict.update(model_kwargs)
@@ -105,7 +116,7 @@ class Objective(object):
         )
 
         log_dict = regressor_kwargs
-        # log_dict.update(trainer_kwargs)
+        log_dict.update(trainer_kwargs)
         log_dict.update(model_kwargs)
         log_dict["batch_size"] = batch_size
 
@@ -135,16 +146,15 @@ class Objective(object):
         wandb_logger.log_metrics({"best_total_val_loss": val_total_loss})
         wandb_logger.finalize("0")
         wandb_logger.experiment.finish()
-        del trainer
 
         return val_total_loss
 
 
-@hydra.main(config_path="../../configs/waymo/", config_name="config")
+@hydra.main(config_path="../../../configs/waymo/", config_name="config")
 def main(config):
     # pruner = optuna.pruners.MedianPruner()
-    study = optuna.create_study(direction="minimize", study_name=config.logger.version)
-    study.optimize(Objective(config), n_trials=100, timeout=32000, gc_after_trial=True)
+    study = optuna.create_study(direction="minimize")
+    study.optimize(Objective(config), n_trials=50, timeout=6000)
 
 
 if __name__ == "__main__":

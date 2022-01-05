@@ -10,6 +10,7 @@ import torch
 from torch.nn.functional import one_hot
 from torch_geometric.data import Data, Dataset, InMemoryDataset
 from torch_geometric.loader import DataLoader
+
 from typing import Optional
 #from src.utils import parse_sequence
 
@@ -217,7 +218,6 @@ class SequentialWaymoTrainDataset(InMemoryDataset):
                     )
                     feature_matrix[:, 11:, j] = parsed["state/future/" + key].numpy()
 
-
                 roadgraph = parsed["roadgraph_samples/xyz"].numpy()
                 roadgraph_type = parsed["roadgraph_samples/type"].numpy()
                 roadgraph_mask = np.array(
@@ -238,25 +238,26 @@ class SequentialWaymoTrainDataset(InMemoryDataset):
                 center_x, center_y = np.mean(all_x), np.mean(all_y)
 
                 # channels = [1, 2, 3, 6, 7, 12, 15, 16, 17, 18, 19]
-                channel_dict = {"LaneCenterFreeway": 1,
-                                "LaneCenterSurfaceStreet": 2,
-                                "LaneCenterBikeLane": 3,
-                                "RoadLineBrokenSingleWhite": 6,
-                                "RoadLineSolidSingleWhite": 7,
-                                "RoadLineSolidDoubleWhite": 8,
-                                "RoadLineBrokenSingleYellow": 9,
-                                "RoadLineBrokenDoubleYellow": 10,
-                                "RoadlineSolidSingleYellow": 11,
-                                "RoadlineSolidDoubleYellow": 12,
-                                "RoadLinePassingDoubleYellow": 13,
-                                "RoadEdgeBoundary": 15,
-                                "RoadEdgeMedian": 16,
-                                "StopSign": 17,
-                                "Crosswalk": 18,
-                                "SpeedBump": 19
+                channel_dict = {
+                    "LaneCenterFreeway": 1,
+                    "LaneCenterSurfaceStreet": 2,
+                    "LaneCenterBikeLane": 3,
+                    "RoadLineBrokenSingleWhite": 6,
+                    "RoadLineSolidSingleWhite": 7,
+                    "RoadLineSolidDoubleWhite": 8,
+                    "RoadLineBrokenSingleYellow": 9,
+                    "RoadLineBrokenDoubleYellow": 10,
+                    "RoadlineSolidSingleYellow": 11,
+                    "RoadlineSolidDoubleYellow": 12,
+                    "RoadLinePassingDoubleYellow": 13,
+                    "RoadEdgeBoundary": 15,
+                    "RoadEdgeMedian": 16,
+                    "StopSign": 17,
+                    "Crosswalk": 18,
+                    "SpeedBump": 19,
                 }
                 # channels = np.arange(20)
-                u = np.zeros((len(channel_dict), width*2, width*2), dtype=np.byte)
+                u = np.zeros((len(channel_dict), width * 2, width * 2), dtype=np.byte)
                 for j, key in enumerate(channel_dict):
                     road_edge_mask = (roadgraph_type == channel_dict[key]).squeeze()
                     roadgraph_i = roadgraph[road_edge_mask]
@@ -277,7 +278,7 @@ class SequentialWaymoTrainDataset(InMemoryDataset):
                     u[j] = u_i.T
 
                 # Combine similar road features for smaller memory footprint
-                u_center = u[0]+u[1]
+                u_center = u[0] + u[1]
                 u_bikelane = u[2]
                 u_broken_white = u[3]
                 u_solid_white = u[4] + u[5]
@@ -286,14 +287,18 @@ class SequentialWaymoTrainDataset(InMemoryDataset):
                 u_edges = u[11] + u[12]
                 u_obstacles = u[13] + u[14] + u[15]
 
-                u = np.stack([u_center,
-                              u_bikelane,
-                              u_broken_white,
-                              u_solid_white,
-                              u_broken_yellow,
-                              u_solid_yellow,
-                              u_edges,
-                              u_obstacles])
+                u = np.stack(
+                    [
+                        u_center,
+                        u_bikelane,
+                        u_broken_white,
+                        u_solid_white,
+                        u_broken_yellow,
+                        u_solid_yellow,
+                        u_edges,
+                        u_obstacles,
+                    ]
+                )
 
                 # for i in range(u.shape[0]):
                 #     fig, ax = plt.subplots(1, 1, figsize=(10, 10))
@@ -456,23 +461,24 @@ class SequentialWaymoValDataset(InMemoryDataset):
                 center_x, center_y = np.mean(all_x), np.mean(all_y)
 
                 # channels = [1, 2, 3, 6, 7, 12, 15, 16, 17, 18, 19]
-                channel_dict = {"LaneCenterFreeway": 1,
-                                "LaneCenterSurfaceStreet": 2,
-                                "LaneCenterBikeLane": 3,
-                                "RoadLineBrokenSingleWhite": 6,
-                                "RoadLineSolidSingleWhite": 7,
-                                "RoadLineSolidDoubleWhite": 8,
-                                "RoadLineBrokenSingleYellow": 9,
-                                "RoadLineBrokenDoubleYellow": 10,
-                                "RoadlineSolidSingleYellow": 11,
-                                "RoadlineSolidDoubleYellow": 12,
-                                "RoadLinePassingDoubleYellow": 13,
-                                "RoadEdgeBoundary": 15,
-                                "RoadEdgeMedian": 16,
-                                "StopSign": 17,
-                                "Crosswalk": 18,
-                                "SpeedBump": 19
-                                }
+                channel_dict = {
+                    "LaneCenterFreeway": 1,
+                    "LaneCenterSurfaceStreet": 2,
+                    "LaneCenterBikeLane": 3,
+                    "RoadLineBrokenSingleWhite": 6,
+                    "RoadLineSolidSingleWhite": 7,
+                    "RoadLineSolidDoubleWhite": 8,
+                    "RoadLineBrokenSingleYellow": 9,
+                    "RoadLineBrokenDoubleYellow": 10,
+                    "RoadlineSolidSingleYellow": 11,
+                    "RoadlineSolidDoubleYellow": 12,
+                    "RoadLinePassingDoubleYellow": 13,
+                    "RoadEdgeBoundary": 15,
+                    "RoadEdgeMedian": 16,
+                    "StopSign": 17,
+                    "Crosswalk": 18,
+                    "SpeedBump": 19,
+                }
                 # channels = np.arange(20)
                 u = np.zeros((len(channel_dict), width * 2, width * 2), dtype=np.byte)
                 for j, key in enumerate(channel_dict):
@@ -504,14 +510,18 @@ class SequentialWaymoValDataset(InMemoryDataset):
                 u_edges = u[11] + u[12]
                 u_obstacles = u[13] + u[14] + u[15]
 
-                u = np.stack([u_center,
-                              u_bikelane,
-                              u_broken_white,
-                              u_solid_white,
-                              u_broken_yellow,
-                              u_solid_yellow,
-                              u_edges,
-                              u_obstacles])
+                u = np.stack(
+                    [
+                        u_center,
+                        u_bikelane,
+                        u_broken_white,
+                        u_solid_white,
+                        u_broken_yellow,
+                        u_solid_yellow,
+                        u_edges,
+                        u_obstacles,
+                    ]
+                )
 
                 # for i in range(u.shape[0]):
                 #     fig, ax = plt.subplots(1, 1, figsize=(10, 10))
@@ -673,23 +683,24 @@ class SequentialWaymoTestDataset(InMemoryDataset):
                 ]
                 center_x, center_y = np.mean(all_x), np.mean(all_y)
 
-                channel_dict = {"LaneCenterFreeway": 1,
-                                "LaneCenterSurfaceStreet": 2,
-                                "LaneCenterBikeLane": 3,
-                                "RoadLineBrokenSingleWhite": 6,
-                                "RoadLineSolidSingleWhite": 7,
-                                "RoadLineSolidDoubleWhite": 8,
-                                "RoadLineBrokenSingleYellow": 9,
-                                "RoadLineBrokenDoubleYellow": 10,
-                                "RoadlineSolidSingleYellow": 11,
-                                "RoadlineSolidDoubleYellow": 12,
-                                "RoadLinePassingDoubleYellow": 13,
-                                "RoadEdgeBoundary": 15,
-                                "RoadEdgeMedian": 16,
-                                "StopSign": 17,
-                                "Crosswalk": 18,
-                                "SpeedBump": 19
-                                }
+                channel_dict = {
+                    "LaneCenterFreeway": 1,
+                    "LaneCenterSurfaceStreet": 2,
+                    "LaneCenterBikeLane": 3,
+                    "RoadLineBrokenSingleWhite": 6,
+                    "RoadLineSolidSingleWhite": 7,
+                    "RoadLineSolidDoubleWhite": 8,
+                    "RoadLineBrokenSingleYellow": 9,
+                    "RoadLineBrokenDoubleYellow": 10,
+                    "RoadlineSolidSingleYellow": 11,
+                    "RoadlineSolidDoubleYellow": 12,
+                    "RoadLinePassingDoubleYellow": 13,
+                    "RoadEdgeBoundary": 15,
+                    "RoadEdgeMedian": 16,
+                    "StopSign": 17,
+                    "Crosswalk": 18,
+                    "SpeedBump": 19,
+                }
 
                 u = np.zeros((len(channel_dict), width * 2, width * 2), dtype=np.byte)
                 for j, key in enumerate(channel_dict):
@@ -720,14 +731,18 @@ class SequentialWaymoTestDataset(InMemoryDataset):
                 u_edges = u[11] + u[12]
                 u_obstacles = u[13] + u[14] + u[15]
 
-                u = np.stack([u_center,
-                              u_bikelane,
-                              u_broken_white,
-                              u_solid_white,
-                              u_broken_yellow,
-                              u_solid_yellow,
-                              u_edges,
-                              u_obstacles])
+                u = np.stack(
+                    [
+                        u_center,
+                        u_bikelane,
+                        u_broken_white,
+                        u_solid_white,
+                        u_broken_yellow,
+                        u_solid_yellow,
+                        u_edges,
+                        u_obstacles,
+                    ]
+                )
 
                 feature_matrix = torch.Tensor(feature_matrix)
 
@@ -864,4 +879,3 @@ class SequentialWaymoDataModule(pl.LightningDataModule):
             shuffle=False,
             num_workers=6,
         )
-

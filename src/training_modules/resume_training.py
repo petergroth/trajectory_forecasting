@@ -42,7 +42,9 @@ def main():
     datamodule = eval(config["misc"]["dm_type"])(**config["datamodule"])
 
     # Define LightningModule
-    regressor = eval(config["misc"]["regressor_type"]).load_from_checkpoint(args.ckpt_path)
+    regressor = eval(config["misc"]["regressor_type"]).load_from_checkpoint(
+        args.ckpt_path
+    )
 
     # Setup logging (using saved yaml file)
     wandb_logger = WandbLogger(
@@ -53,7 +55,10 @@ def main():
 
     # Setup callbacks
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
-        filename=config["logger"]["version"], monitor="val_total_loss", save_last=True, save_top_k=3
+        filename=config["logger"]["version"],
+        monitor="val_total_loss",
+        save_last=True,
+        save_top_k=3,
     )
     summary_callback = pl.callbacks.ModelSummary(max_depth=2)
 
