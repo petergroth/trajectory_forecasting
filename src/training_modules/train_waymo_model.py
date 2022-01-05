@@ -5236,9 +5236,6 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
         # Update input using prediction horizon
         batch.x = batch.x[:, : self.prediction_horizon]
 
-        # Limit to x, y, x_vel, y_vel
-        batch.x = batch.x[:, :, [0, 1, 3, 4, 10]]
-
         # Update mask
         mask = batch.x[:, :, -1].bool()
 
@@ -5343,9 +5340,6 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
         # Update input using prediction horizon
         batch.x = batch.x[:, : self.prediction_horizon]
 
-        # Limit to x, y, x_vel, y_vel
-        batch.x = batch.x[:, :, [0, 1, 3, 4, 10]]
-
         # Update mask
         mask = batch.x[:, :, -1].bool()
 
@@ -5419,7 +5413,7 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
 
         return ade_loss
 
-    def predict_step(self, batch, batch_idx=None):
+    def predict_step(self, batch, batch_idx=None, prediction_horizon: int = 91):
 
         ######################
         # Initialisation     #
@@ -5445,9 +5439,6 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
         # Update input using prediction horizon
         batch.x = batch.x[:, : self.prediction_horizon]
 
-        # Limit to x, y, x_vel, y_vel
-        batch.x = batch.x[:, :, [0, 1, 3, 4, 10]]
-
         # Update mask
         mask = batch.x[:, :, -1].bool()
 
@@ -5472,7 +5463,7 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
             predicted_graph = torch.cat([predicted_pos, last_vel], dim=-1)
             y_hat[t, mask_t, :] = predicted_graph
 
-        for t in range(11, 90):
+        for t in range(11, prediction_horizon-1):
             last_pos = predicted_pos
             predicted_pos = last_pos + delta_pos
             predicted_graph = torch.cat([predicted_pos, last_vel], dim=-1)
