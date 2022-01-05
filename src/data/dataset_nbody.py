@@ -7,7 +7,7 @@ import torch
 from torch_geometric.data import Data, Dataset, InMemoryDataset
 from torch_geometric.loader import DataLoader
 
-from src.utils import generate_fully_connected_edges, load_simulations
+# from src.utils import generate_fully_connected_edges, load_simulations
 
 
 class OneStepTrainDataset(InMemoryDataset):

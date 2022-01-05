@@ -13,7 +13,6 @@ from matplotlib.patches import Circle, Ellipse, Rectangle
 from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning.utilities.seed import seed_everything
 
-from src.data.dataset_waymo import OneStepWaymoDataModule
 from src.training_modules.train_waymo_UA import *
 
 
@@ -31,7 +30,7 @@ def make_predictions(path: str, config: dict, n_steps: int = 51, sequence_idx: i
         regressor = eval(config["misc"]["regressor_type"]).load_from_checkpoint(path)
     else:
         regressor = eval(config["misc"]["regressor_type"])(**config["regressor"])
-        # Setup
+    # Setup
     regressor.eval()
     datamodule.setup("test")
     dataset = datamodule.test_dataset
