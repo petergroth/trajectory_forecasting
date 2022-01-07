@@ -11,6 +11,21 @@ Project Organization
     ├── README.md                           <- The top-level README for developers using this project.
     ├── setup.py                            <- makes project pip installable (pip install -e .) 
     |                                          so src can be imported
+    ├── configs
+    |   ├── nbody
+    |   |   ├── datamodule                  <- Dir with yaml configuration files for datamodules
+    |   |   ├── model                       <- Dir with yaml configuration files for models
+    |   |   ├── regressor                   <- Dir with yaml configuration files for pl.LightningModules
+    |   |   ├── trainer                     <- Dir with yaml configuration files for pl.Trainer
+    |   |   └── config.yaml                 <- Default config file
+    |   |
+    |   └── waymo
+    |       ├── datamodule                  <- Dir with yaml configuration files for datamodules
+    |       ├── model                       <- Dir with yaml configuration files for models
+    |       ├── regressor                   <- Dir with yaml configuration files for pl.LightningModules
+    |       ├── trainer                     <- Dir with yaml configuration files for pl.Trainer
+    |       └── config.yaml                 <- Default config file
+    |    
     ├── src                                 <- Source code for use in this project.
     │   ├── __init__.py                     <- Makes src a Python module
     │   │
