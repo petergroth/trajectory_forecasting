@@ -142,6 +142,7 @@ class NodeRNN(nn.Module):
         self.dropout = dropout
         self.out_features = out_features
         self.num_layers = num_layers
+        self.rnn_edge_size = 0
 
         # Node history encoder.
         # Computes a node-wise representation which incorporates the nodes' respective histories.
@@ -165,13 +166,15 @@ class NodeRNN(nn.Module):
     def forward(
         self, x, edge_index=None, edge_attr=None, batch=None, u=None, hidden=None
     ):
+        # Discard hidden edge component since only node history is being encoded
+        hidden_node = hidden[0]
         # Forward pass
-        node_history, hidden = self.node_history_encoder(x=x, hidden=hidden)
+        node_history, hidden_node = self.node_history_encoder(x=x, hidden=hidden_node)
         # Skip connection
         out = torch.cat([x, node_history], dim=1)
         # Second pass
-        out = self.mlp_2(out)
-        return out, hidden
+        out = self.mlp(out)
+        return out, (hidden_node, hidden[1])
 
 
 class AttentionalGNN(nn.Module):

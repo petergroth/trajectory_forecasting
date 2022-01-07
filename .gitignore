@@ -99,4 +99,5 @@ todo.txt
 /jobfiles_nbody/
 *.err
 *.out
-/visualisations/
+/visualisations_old/
+/results/
