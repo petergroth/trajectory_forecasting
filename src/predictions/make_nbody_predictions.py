@@ -187,6 +187,9 @@ def main():
     plt.savefig(
         f"../../thesis/graphics/synthetic/{args.output_path}_{args.sequence_idx}.pdf"
     )
+    plt.savefig(
+        f"visualisations/nbody/{args.output_path}_{args.sequence_idx}.pdf"
+    )
 
 
 if __name__ == "__main__":
