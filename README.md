@@ -9,21 +9,27 @@ Project Organization
     ├── LICENSE
     ├── Makefile                            <- Makefile with commands like `make data` or `make train`
     ├── README.md                           <- The top-level README for developers using this project.
-    ├── setup.py                            <- makes project pip installable (pip install -e .) so src can be imported
+    ├── setup.py                            <- makes project pip installable (pip install -e .) 
+    |                                          so src can be imported
     ├── src                                 <- Source code for use in this project.
     │   ├── __init__.py                     <- Makes src a Python module
     │   │
     │   ├── data           
-    │   │   ├── dataset_nbody.py            <- Script containing n-body torch_geometric.InMemory datasets and pl.LightningDataModules 
-    |   |   ├── dataset_waymo.py            <- Script containing Waymo torch_geometric.InMemory datasets and pl.LightningDataModules 
+    │   │   ├── dataset_nbody.py            <- Script containing n-body torch_geometric.InMemory 
+    |   |   |                                  datasets and pl.LightningDataModules 
+    |   |   ├── dataset_waymo.py            <- Script containing Waymo torch_geometric.InMemory 
+    |   |   |                                  datasets and pl.LightningDataModules 
     |   |   ├── make_nbody_dataset.py       <- Script to generate nbody datasets and modules
     |   |   ├── make_waymo_dataset.py       <- Script to generate Waymo datasets and modules
     |   |   └── run_simulations.py          <- Script to run n-body simulations
     │   │
     │   ├── models          
-    │   │   ├── model.py                    <- Script containing all full models. Type: torch.nn.Module
-    │   │   ├── node_edge_blocks.py         <- Script containing node and edge update functions. Type: torch.nn.Module
-    │   │   └── unused_models.py            <- Script containing old/developmental node and edge update functions and full models. Type: torch.nn.Module
+    │   │   ├── model.py                    <- Script containing all full models. 
+    |   |   |                                  Type: torch.nn.Module
+    │   │   ├── node_edge_blocks.py         <- Script containing node and edge update functions.
+    |   |   |                                  Type: torch.nn.Module
+    │   │   └── unused_models.py            <- Script containing old/developmental node and edge 
+    |   |                                      update functions and full models. Type: torch.nn.Module
     │   │
     │   ├── predictions
     │   │   ├── evaluate_nbody.py           <- Script to validate and test n-body models
@@ -35,14 +41,15 @@ Project Organization
     │   │
     │   ├── training_modules
     │   │   ├── resume_training.py          <- Script to continue training of models. 
-    │   │   ├── training_nbody_model.py     <- Script to train/validate/test/predict nbody models. Type: pl.LightningModule
-    │   │   └── training_waymo_model.py     <- Script to train/validate/test/predict waymo models. Type: pl.LightningModule
-    │   │
+    │   │   ├── training_nbody_model.py     <- Script to train/validate/test/predict nbody models. 
+    |   |   |                                  Type: pl.LightningModule
+    │   │   └── training_waymo_model.py     <- Script to train/validate/test/predict waymo models. 
+    |   |                                      Type: pl.LightningModule
+    │   │   
     │   ├── visualization  
-    │   |   ├── visualise_normalisation.py
-    │   |   └── visualize_nbody_sequence.py
+    │   |   └── visualize_nbody_sequence.py <- Script to visualise 1 and 4 n-body simulations
     │   |
-    |   └── utils.py
+    |   └── utils.py                        <- Various helper functions in data generation
     |
     └── visualisations
         ├── nbody
