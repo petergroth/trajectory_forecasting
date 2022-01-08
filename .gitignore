@@ -102,6 +102,9 @@ todo.txt
 /visualisations_old/
 /results/
 /docs/
-/src/predictions/compile_nbodyr_results.py
+/src/predictions/compile_nbody_results.py
 /src/predictions/compile_waymo_results.py
 /src/visualization/visualise_normalisation.py
+*.ckpt
+/configs/waymo/old_configs/
+/configs/nbody/model/old_configs/

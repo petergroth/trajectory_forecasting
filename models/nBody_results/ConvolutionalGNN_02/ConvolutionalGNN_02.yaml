@@ -1,0 +1,51 @@
+datamodule:
+  batch_size: 32
+  shuffle: true
+  val_batch_size: 50
+model:
+  hidden_size: 128
+  edge_features: 1
+  skip: true
+  dropout: 0.5
+  node_features: 5
+  out_features: 2
+regressor:
+  noise: null
+  lr: 0.001
+  weight_decay: 0.0
+  min_dist: 30
+  n_neighbours: 6
+  edge_weight: true
+  grav_attraction: false
+  self_loop: false
+  undirected: false
+  teacher_forcing_ratio: 0.0
+  node_features: 5
+  edge_features: 1
+  out_features: 4
+  training_horizon: 51
+  fully_connected: false
+  edge_type: distance
+trainer:
+  check_val_every_n_epoch: 1
+  max_epochs: 200
+  deterministic: false
+  num_sanity_val_steps: 2
+  precision: 32
+  gpus: 0
+  default_root_dir: logs/nbody
+  detect_anomaly: false
+  gradient_clip_val: 5.0
+logger:
+  offline: false
+  version: ConvolutionalGNN_02
+  project: nBody_finalised_results
+misc:
+  seed: 1
+  model_type: ConvolutionalGNN
+  dm_type: SequentialNBodyDataModule
+  regressor_type: SequentialModule
+  train: true
+  validate: true
+  test: true
+  log_freq: 10
