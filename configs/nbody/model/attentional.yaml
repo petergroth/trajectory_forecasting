@@ -3,5 +3,6 @@ heads: 8
 node_features: 5
 middle_gat: True
 out_features: 2
-edge_features: 2
+edge_features: 1
 dropout: 0.5
+norm: False

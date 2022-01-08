@@ -19,7 +19,7 @@ from torch_geometric.data import Batch
 
 from src.data.dataset_waymo import (OneStepWaymoDataModule,
                                     SequentialWaymoDataModule)
-from src.training_modules.train_waymo_UA import *
+from src.training_modules.train_waymo_nodel import *
 
 
 def main():
@@ -66,7 +66,10 @@ def main():
     trainer = pl.Trainer(
         logger=wandb_logger, **config["trainer"], callbacks=[checkpoint_callback, summary_callback]
     )
+
     trainer.fit(model=regressor, datamodule=datamodule, ckpt_path=args.ckpt_path)
+    trainer.validate(regressor, datamodule=datamodule, ckpt_path="best")
+    trainer.test(datamodule=datamodule, ckpt_path="best")
 
 
 if __name__ == "__main__":

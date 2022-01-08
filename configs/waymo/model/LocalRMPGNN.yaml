@@ -1,6 +1,6 @@
 hidden_size: 128
 dropout: 0.0
-node_features: 15
+node_features: 7
 edge_features: 1
 rnn_size: 64
 rnn_edge_size: 32
