@@ -1736,9 +1736,9 @@ def main(config):
     if config["misc"]["train"]:
         trainer.fit(model=regressor, datamodule=datamodule)
     if config["misc"]["validate"]:
-        trainer.validate(regressor, datamodule=datamodule)
+        trainer.validate(regressor, datamodule=datamodule, ckpt_path="best")
     if config["misc"]["test"]:
-        trainer.test(datamodule=datamodule)
+        trainer.test(datamodule=datamodule, ckpt_path="best")
 
 
 if __name__ == "__main__":

@@ -34,7 +34,7 @@ def make_sampled_predictions(path, config, n_steps=51, sequence_idx=0, seed=0):
         # Setup
     regressor.eval()
     datamodule.setup()
-    dataset = datamodule.val_dataset
+    dataset = datamodule.test_dataset
     # Extract batch and add missing attributes
     batch = dataset.__getitem__(sequence_idx)
     batch.batch = torch.zeros(batch.x.size(0)).type(torch.int64)

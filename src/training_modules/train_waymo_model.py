@@ -5176,6 +5176,446 @@ class WaymoLocalUAModule(pl.LightningModule):
 
         return loss
 
+    def sample_trajectories(self, batch, batch_idx=None, prediction_horizon: int = 91):
+
+        ######################
+        # Initialisation     #
+        ######################
+
+        # Determine valid initialisations at t=11
+        mask = batch.x[:, :, -1]
+        valid_mask = mask[:, 10] > 0
+        batch.u[batch.u > 1] = 1
+        # Discard non-valid nodes as no initial trajectories will be known
+        batch.x = batch.x[valid_mask]
+        batch.batch = batch.batch[valid_mask]
+        batch.tracks_to_predict = batch.tracks_to_predict[valid_mask]
+        batch.type = batch.type[valid_mask]
+
+        # CARS
+        type_mask = batch.type[:, 1] == 1
+        batch.x = batch.x[type_mask]
+        batch.batch = batch.batch[type_mask]
+        batch.tracks_to_predict = batch.tracks_to_predict[type_mask]
+        batch.type = batch.type[type_mask]
+
+        batch.x = batch.x[:, :prediction_horizon]
+
+        # Update mask
+        mask = batch.x[:, :, -1].bool()
+
+        # Allocate target/prediction tensors
+        n_nodes = batch.num_nodes
+        y_hat = torch.zeros((prediction_horizon - 1, n_nodes, 7))
+        y_target = torch.zeros((prediction_horizon - 1, n_nodes, 7))
+        # Ensure device placement
+        y_hat = y_hat.type_as(batch.x)
+        y_target = y_target.type_as(batch.x)
+
+        batch.x = batch.x[:, :, :-1]
+        # static_features = torch.cat(
+        #     [batch.x[:, 10, self.out_features :], batch.type], dim=1
+        # )
+        static_features = batch.x[:, 10, 4:]
+        edge_attr = None
+
+        Sigma_vel = torch.eye(2).reshape(1, 2, 2).repeat(n_nodes, 1, 1)
+        Sigma_pos = (
+            torch.eye(2).reshape(1, 1, 2, 2).repeat(prediction_horizon, n_nodes, 1, 1)
+        )
+        Sigma_pos = Sigma_pos.type_as(batch.x)
+        Sigma_vel = Sigma_vel.type_as(batch.x)
+
+        # Initial hidden state
+        if self.rnn_type == "GRU":
+            h_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
+            h_edge = torch.zeros(
+                (self.model.num_layers, n_nodes, self.model.rnn_edge_size)
+            )
+            h_node = h_node.type_as(batch.x)
+            h_edge = h_edge.type_as(batch.x)
+            c_node, c_edge = None, None
+        else:
+            h_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
+            h_edge = torch.zeros(
+                (self.model.num_layers, n_nodes, self.model.rnn_edge_size)
+            )
+            h_node = h_node.type_as(batch.x)
+            h_edge = h_edge.type_as(batch.x)
+            c_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
+            c_edge = torch.zeros(
+                (self.model.num_layers, n_nodes, self.model.rnn_edge_size)
+            )
+            c_node = c_node.type_as(batch.x)
+            c_edge = c_edge.type_as(batch.x)
+
+        ######################
+        # Map preparation    #
+        ######################
+
+        # Zero pad each map for edge-cases
+        batch.u = nn.functional.pad(
+            batch.u,
+            (
+                self.local_map_resolution,
+                self.local_map_resolution,
+                self.local_map_resolution,
+                self.local_map_resolution,
+            ),
+        )
+        # Extract centre locations of each scene
+        center_values = batch.loc[:, :2]
+        # Compute x/y-ranges
+        map_ranges = torch.vstack(
+            [
+                center_values[:, 0] - 150 / 2,
+                center_values[:, 0] + 150 / 2,
+                center_values[:, 1] - 150 / 2,
+                center_values[:, 1] + 150 / 2,
+            ]
+        ).T
+        # Allocate and compute all values in x/y-ranges for localisation
+        interval_x = torch.zeros((batch.num_graphs, 150 * 2 + 1))
+        interval_y = torch.zeros((batch.num_graphs, 150 * 2 + 1))
+        interval_x = interval_x.type_as(batch.x)
+        interval_y = interval_y.type_as(batch.x)
+        for i in range(batch.num_graphs):
+            interval_x[i] = torch.linspace(
+                map_ranges[i, 0], map_ranges[i, 1], 150 * 2 + 1
+            )
+            interval_y[i] = torch.linspace(
+                map_ranges[i, 2], map_ranges[i, 3], 150 * 2 + 1
+            )
+
+        ######################
+        # History            #
+        ######################
+
+        for t in range(11):
+
+            ######################
+            # Graph construction #
+            ######################
+
+            mask_t = mask[:, t]
+            # x_t = torch.cat([batch.x[mask_t, t, :], batch.type[mask_t]], dim=1)
+            x_t = batch.x[mask_t, t, :]
+
+            # Construct edges
+            edge_index = torch_geometric.nn.radius_graph(
+                x=x_t[:, :2],
+                r=self.min_dist,
+                batch=batch.batch[mask_t],
+                loop=self.self_loop,
+                max_num_neighbors=self.n_neighbours,
+                flow="source_to_target",
+            )
+
+            # Remove duplicates and sort
+            edge_index = torch_geometric.utils.coalesce(
+                edge_index, num_nodes=x_t.shape[0]
+            )
+
+            # Create edge_attr if specified
+            if self.edge_weight:
+                # Encode distance between nodes as edge_attr
+                row, col = edge_index
+                edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
+                edge_attr = edge_attr.type_as(batch.x)
+
+            #######################
+            # Map encoding 1/2    #
+            #######################
+
+            # Allocate local maps
+            u_local = torch.zeros(
+                (
+                    x_t.size(0),
+                    batch.u.size(1),
+                    self.local_map_resolution + 1,
+                    self.local_map_resolution + 1,
+                )
+            )
+            u_local = u_local.type_as(batch.x)
+
+            # Find closest pixels in x and y directions
+            center_pixel_x = (
+                torch.argmax(
+                    (interval_x[batch.batch[mask_t]] > x_t[:, 0].unsqueeze(-1)).float(),
+                    dim=1,
+                ).type(torch.LongTensor)
+                - 1
+            )
+            center_pixel_y = (
+                torch.argmax(
+                    (interval_y[batch.batch[mask_t]] > x_t[:, 1].unsqueeze(-1)).float(),
+                    dim=1,
+                ).type(torch.LongTensor)
+                - 2
+            )
+
+            # Compute pixel boundaries
+            idx_x_low = center_pixel_y + self.local_map_resolution_half
+            idx_x_high = (
+                center_pixel_y
+                + self.local_map_resolution_half
+                + self.local_map_resolution
+                + 1
+            )
+            idx_y_low = center_pixel_x + self.local_map_resolution_half
+            idx_y_high = (
+                center_pixel_x
+                + self.local_map_resolution_half
+                + self.local_map_resolution
+                + 1
+            )
+
+            # Extract local maps for all agents in current time-step
+            for node_idx, graph_idx in enumerate(batch.batch[mask_t]):
+                if not (
+                    center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2
+                ):
+                    u_local[node_idx] = batch.u[
+                        graph_idx,
+                        :,
+                        idx_x_low[node_idx] : idx_x_high[node_idx],
+                        idx_y_low[node_idx] : idx_y_high[node_idx],
+                    ]
+
+            # Perform map encoding
+            u = self.map_encoder(u_local)
+
+            ######################
+            # Predictions 1/2    #
+            ######################
+
+            # Normalise input graph
+            if self.normalise:
+                # Center node positions
+                x_t[:, self.pos_index] -= batch.loc[batch.batch][mask_t][
+                    :, self.pos_index
+                ]
+                # Scale all features (except yaws) with global scaler
+                x_t[:, self.norm_index] /= self.global_scale
+                if edge_attr is not None:
+                    # Scale edge attributes
+                    edge_attr /= self.global_scale
+
+            # Obtain normalised predicted delta dynamics
+            if self.rnn_type == "GRU":
+                hidden_in = (h_node[:, mask_t], h_edge[:, mask_t])
+                delta_x, h_t = self.model(
+                    x=x_t,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    batch=batch.batch[mask_t],
+                    hidden=hidden_in,
+                    u=u,
+                )
+                # Update hidden states
+                h_node[:, mask_t] = h_t[0]
+                h_edge[:, mask_t] = h_t[1]
+
+            else:  # LSTM
+                hidden_in = (
+                    (h_node[:, mask_t], c_node[:, mask_t]),
+                    (h_edge[:, mask_t], c_edge[:, mask_t]),
+                )
+                delta_x, (h_node_out, h_edge_out) = self.model(
+                    x=x_t,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    batch=batch.batch[mask_t],
+                    hidden=hidden_in,
+                    u=u,
+                )
+                h_node[:, mask_t] = h_node_out[0]
+                c_node[:, mask_t] = h_node_out[1]
+                h_edge[:, mask_t] = h_edge_out[0]
+                c_edge[:, mask_t] = h_edge_out[1]
+
+            # Update current velocity covariance matrix
+            sigma_x = torch.exp(delta_x[:, 2])
+            sigma_y = torch.exp(delta_x[:, 3])
+            cov_xy = torch.tanh(delta_x[:, 4]) * sigma_x * sigma_y
+            Sigma_vel[mask_t, 0, 0] = sigma_x ** 2
+            Sigma_vel[mask_t, 1, 1] = sigma_y ** 2
+            Sigma_vel[mask_t, 1, 0] = cov_xy
+            Sigma_vel[mask_t, 0, 1] = cov_xy
+
+            # Update position covariance matrix
+            Sigma_pos[t + 1, mask_t] = Sigma_pos[t, mask_t] + 0.01 * Sigma_vel[mask_t]
+
+            # Sample velocities
+            vel = torch.distributions.MultivariateNormal(loc=delta_x[:, self.pos_index],
+                                                         covariance_matrix=Sigma_vel[mask_t]).sample()
+            pos = batch.x[mask_t, t][:, self.pos_index] + 0.1 * vel
+            predicted_graph = torch.cat([pos, vel, static_features[mask_t]], dim=-1)
+            predicted_graph = predicted_graph.type_as(batch.x)
+
+            # Save predictions and targets
+            y_hat[t, mask_t, :] = predicted_graph
+            # y_target[t, mask_t, :] = torch.cat(
+            #     [batch.x[mask_t, t + 1, :], batch.type[mask_t]], dim=1
+            # )
+            y_target[t, mask_t, :] = batch.x[mask_t, t + 1, :]
+
+        ######################
+        # Future             #
+        ######################
+
+        for t in range(11, (prediction_horizon - 1)):
+
+            ######################
+            # Graph construction #
+            ######################
+
+            x_t = predicted_graph.clone()
+
+            # Construct edges
+            edge_index = torch_geometric.nn.radius_graph(
+                x=x_t[:, :2],
+                r=self.min_dist,
+                batch=batch.batch,
+                loop=self.self_loop,
+                max_num_neighbors=self.n_neighbours,
+                flow="source_to_target",
+            )
+
+            # Remove duplicates and sort
+            edge_index = torch_geometric.utils.coalesce(
+                edge_index, num_nodes=x_t.shape[0]
+            )
+
+            # Create edge_attr if specified
+            if self.edge_weight:
+                # Encode distance between nodes as edge_attr
+                row, col = edge_index
+                edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
+                edge_attr = edge_attr.type_as(batch.x)
+
+            #######################
+            # Map encoding 2/2    #
+            #######################
+
+            # Allocate local maps
+            u_local = torch.zeros(
+                (
+                    x_t.size(0),
+                    batch.u.size(1),
+                    self.local_map_resolution + 1,
+                    self.local_map_resolution + 1,
+                )
+            )
+            u_local = u_local.type_as(batch.x)
+
+            # Find closest pixels in x and y directions
+            center_pixel_x = (
+                torch.argmax(
+                    (interval_x[batch.batch] > x_t[:, 0].unsqueeze(-1)).float(),
+                    dim=1,
+                ).type(torch.LongTensor)
+                - 1
+            )
+            center_pixel_y = (
+                torch.argmax(
+                    (interval_y[batch.batch] > x_t[:, 1].unsqueeze(-1)).float(),
+                    dim=1,
+                ).type(torch.LongTensor)
+                - 2
+            )
+
+            # Compute pixel boundaries
+            idx_x_low = center_pixel_y + self.local_map_resolution_half
+            idx_x_high = (
+                center_pixel_y
+                + self.local_map_resolution_half
+                + self.local_map_resolution
+                + 1
+            )
+            idx_y_low = center_pixel_x + self.local_map_resolution_half
+            idx_y_high = (
+                center_pixel_x
+                + self.local_map_resolution_half
+                + self.local_map_resolution
+                + 1
+            )
+
+            # Extract local maps for all agents in current time-step
+            for node_idx, graph_idx in enumerate(batch.batch):
+                if not (
+                    center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2
+                ):
+                    u_local[node_idx] = batch.u[
+                        graph_idx,
+                        :,
+                        idx_x_low[node_idx] : idx_x_high[node_idx],
+                        idx_y_low[node_idx] : idx_y_high[node_idx],
+                    ]
+
+            # Perform map encoding
+            u = self.map_encoder(u_local)
+
+            ######################
+            # Predictions 2/2    #
+            ######################
+
+            # Normalise input graph
+            if self.normalise:
+                # Center node positions
+                x_t[:, self.pos_index] -= batch.loc[batch.batch][:, self.pos_index]
+                # Scale all features (except yaws) with global scaler
+                x_t[:, self.norm_index] /= self.global_scale
+                if edge_attr is not None:
+                    # Scale edge attributes
+                    edge_attr /= self.global_scale
+
+            # Obtain normalised predicted delta dynamics
+            if self.rnn_type == "GRU":
+                delta_x, (h_node, h_edge) = self.model(
+                    x=x_t,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    batch=batch.batch,
+                    hidden=(h_node, h_edge),
+                    u=u,
+                )
+            else:
+                delta_x, ((h_node, c_node), (h_edge, c_edge)) = self.model(
+                    x=x_t,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    batch=batch.batch,
+                    hidden=((h_node, c_node), (h_edge, c_edge)),
+                    u=u,
+                )
+
+            # Update current velocity covariance matrix
+            sigma_x = torch.exp(delta_x[:, 2])
+            sigma_y = torch.exp(delta_x[:, 3])
+            cov_xy = torch.tanh(delta_x[:, 4]) * sigma_x * sigma_y
+            Sigma_vel[:, 0, 0] = sigma_x ** 2
+            Sigma_vel[:, 1, 1] = sigma_y ** 2
+            Sigma_vel[:, 1, 0] = cov_xy
+            Sigma_vel[:, 0, 1] = cov_xy
+
+            # Compute likelihood of current estimates
+            Sigma_pos[t + 1] = Sigma_pos[t] + 0.01 * Sigma_vel
+
+            # Sample velocities
+            vel = torch.distributions.MultivariateNormal(loc=delta_x[:, self.pos_index],
+                                                         covariance_matrix=Sigma_vel).sample()
+            pos = predicted_graph[:, self.pos_index] + 0.1 * vel
+            predicted_graph = torch.cat([pos, vel, static_features], dim=-1)
+            predicted_graph = predicted_graph.type_as(batch.x)
+
+            # Save prediction alongside true value (next time step state)
+            y_hat[t, :, :] = predicted_graph
+            # y_target[t, :, :] = torch.cat([batch.x[:, t + 1, :], batch.type], dim=1)
+            y_target[t, :, :] = batch.x[:, t + 1, :]
+
+        return y_hat, y_target, mask, Sigma_pos[1:]
+
     def configure_optimizers(self):
         return torch.optim.Adam(
             self.parameters(), lr=self.lr, weight_decay=self.weight_decay
@@ -5475,7 +5915,7 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
         return torch.optim.Adam(self.parameters(), lr=1e-4)
 
 
-@hydra.main(config_path="../../../configs/waymo/", config_name="config")
+@hydra.main(config_path="../../configs/waymo/", config_name="config")
 def main(config):
     # Print configuration for online monitoring
     print(OmegaConf.to_yaml(config))
@@ -5530,10 +5970,10 @@ def main(config):
         trainer.fit(model=regressor, datamodule=datamodule)
 
     if config["misc"]["validate"]:
-        trainer.validate(regressor, datamodule=datamodule)
+        trainer.validate(regressor, datamodule=datamodule, ckpt_path="best")
 
     if config["misc"]["test"]:
-        trainer.test(regressor, datamodule=datamodule)
+        trainer.test(regressor, datamodule=datamodule, ckpt_path="best")
 
 
 if __name__ == "__main__":

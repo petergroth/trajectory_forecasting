@@ -7,7 +7,7 @@ from torch import Tensor, nn
 from torch_geometric.nn import (GATConv, GatedGraphConv, GCNConv,
                                 MessagePassing, Sequential)
 from torch_geometric.nn.meta import MetaLayer
-from torch_geometric.nn.norm import BatchNorm
+from torch_geometric.nn.norm import BatchNorm, PairNorm
 # from src.data.dataset import SequentialNBodyDataModule, OneStepNBodyDataModule
 from torch_geometric.utils import dropout_adj
 from torch_scatter import scatter_add, scatter_mean
@@ -476,7 +476,6 @@ class node_rnn_simple(nn.Module):
 
 class node_gat_in(nn.Module):
     # Input node update function.
-    # Assumes edge attributes have been updated
     def __init__(
         self,
         node_features: int = 5,
@@ -484,9 +483,11 @@ class node_gat_in(nn.Module):
         out_features: int = 64,
         heads: int = 4,
         edge_features: int = 1,
+        norm: bool = False
     ):
         super(node_gat_in, self).__init__()
         self.dropout = dropout
+        self.norm = norm
         self.gat = GATConv(
             in_channels=node_features,
             out_channels=out_features,
@@ -495,11 +496,15 @@ class node_gat_in(nn.Module):
             concat=True,
             edge_dim=edge_features,
         )
+        if norm:
+            self.pairnorm = PairNorm(scale_individually=True)
 
     def forward(self, x, edge_index, edge_attr, u, batch):
         # Dropout + GAT
         out = F.dropout(x, p=self.dropout)
         out = F.elu(self.gat(x=out, edge_index=edge_index, edge_attr=edge_attr))
+        if self.norm:
+            out = self.pairnorm(out, batch)
         return out
 
 
@@ -553,13 +558,13 @@ class node_gcn(nn.Module):
 
     def forward(self, x, edge_index, edge_attr, u, batch):
         out = F.relu(
-            self.gcn_in(x=x, edge_index=edge_index, edge_weight=edge_attr.squeeze())
+            self.gcn_in(x=x, edge_index=edge_index, edge_weight=edge_attr.squeeze() if edge_attr is not None else None)
         )
         out = F.dropout(out, p=self.dropout)
         if self.skip:
             out = torch.cat([x, out], dim=-1)
         out = self.gcn_out(
-            x=out, edge_index=edge_index, edge_weight=edge_attr.squeeze()
+            x=out, edge_index=edge_index, edge_weight=edge_attr.squeeze() if edge_attr is not None else None
         )
 
         return out
