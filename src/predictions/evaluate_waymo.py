@@ -14,7 +14,7 @@ from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning.utilities.seed import seed_everything
 
 from src.data.dataset_waymo import OneStepWaymoDataModule
-from src.training_modules.train_waymo_UA import *
+from src.training_modules.train_waymo_model import *
 
 
 def main():

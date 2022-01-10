@@ -3768,7 +3768,7 @@ class WaymoLocalUAModule(pl.LightningModule):
 
         # Allocate prediction tensors
         n_nodes = batch.num_nodes
-
+        collision_tracker = torch.zeros(n_nodes)
         y_predictions = torch.zeros(
             (n_nodes, self.prediction_horizon - 11, self.out_features)
         )
@@ -4040,6 +4040,19 @@ class WaymoLocalUAModule(pl.LightningModule):
             # Latest prediction as input
             x_t = predicted_graph.clone()
 
+            # Detect collisions
+            edge_index_collisions = torch_geometric.nn.radius_graph(
+                x=x_t[:, :2],
+                r=1.0,
+                batch=batch.batch,
+                loop=False,
+                max_num_neighbors=100,
+                flow="source_to_target",
+            )
+
+            if edge_index_collisions.numel() > 0:
+                collision_tracker[edge_index_collisions[0]] = 1
+
             # Construct edges
             edge_index = torch_geometric.nn.radius_graph(
                 x=x_t[:, :2],
@@ -4231,6 +4244,10 @@ class WaymoLocalUAModule(pl.LightningModule):
         self.log("val_total_loss", loss, batch_size=val_mask.sum().item())
         self.log("val_fde_ttp_loss", fde_ttp_loss, batch_size=fde_ttp_mask.sum().item())
         self.log("val_ade_ttp_loss", ade_ttp_loss, batch_size=ade_ttp_mask.sum().item())
+
+        self.log("val_collision_counter", collision_tracker.sum(), reduce_fx=torch.sum)
+        self.log("val_trajectory_counter", n_nodes, reduce_fx=torch.sum)
+        self.log("val_collision/trajectory", collision_tracker.sum() / n_nodes)
 
         return loss
 
@@ -4707,6 +4724,7 @@ class WaymoLocalUAModule(pl.LightningModule):
 
         # Allocate prediction tensors
         n_nodes = batch.num_nodes
+        collision_tracker = torch.zeros(n_nodes)
 
         y_predictions = torch.zeros(
             (n_nodes, self.prediction_horizon - 11, self.out_features)
@@ -4979,6 +4997,19 @@ class WaymoLocalUAModule(pl.LightningModule):
             # Latest prediction as input
             x_t = predicted_graph.clone()
 
+            # Detect collisions
+            edge_index_collisions = torch_geometric.nn.radius_graph(
+                x=x_t[:, :2],
+                r=1.0,
+                batch=batch.batch,
+                loop=False,
+                max_num_neighbors=100,
+                flow="source_to_target",
+            )
+
+            if edge_index_collisions.numel() > 0:
+                collision_tracker[edge_index_collisions[0]] = 1
+
             # Construct edges
             edge_index = torch_geometric.nn.radius_graph(
                 x=x_t[:, :2],
@@ -5173,6 +5204,10 @@ class WaymoLocalUAModule(pl.LightningModule):
         self.log(
             "test_ade_ttp_loss", ade_ttp_loss, batch_size=ade_ttp_mask.sum().item()
         )
+
+        self.log("test_collision_counter", collision_tracker.sum(), reduce_fx=torch.sum)
+        self.log("test_trajectory_counter", n_nodes, reduce_fx=torch.sum)
+        self.log("test_collision/trajectory", collision_tracker.sum() / n_nodes)
 
         return loss
 
