@@ -16,16 +16,7 @@ from pytorch_lightning.utilities.seed import seed_everything
 from src.data.dataset_nbody import *
 from src.training_modules.train_nbody_model import (
     ConstantPhysicalBaselineModule, OneStepModule, SequentialModule)
-
-rc("text", usetex=True)
-rc("font", **{"family": "serif", "serif": ["Computer Modern Roman"]})
-
-ticksize = 30
-titlesize = 35
-plt.rcParams["axes.labelsize"] = titlesize
-plt.rcParams["axes.titlesize"] = titlesize
-plt.rcParams["xtick.labelsize"] = ticksize
-plt.rcParams["ytick.labelsize"] = ticksize
+from src.predictions.make_waymo_predictions import plot_edges_all_agents, plot_edges_single_agent
 
 
 def make_predictions(path: str, config: dict, n_steps: int = 51, sequence_idx: int = 0):
@@ -62,7 +53,19 @@ def main():
     parser.add_argument("ckpt_path")
     parser.add_argument("output_path")
     parser.add_argument("sequence_idx", type=int)
+    parser.add_argument("--edges", type=bool, default=False)
     args = parser.parse_args()
+
+    rc("text", usetex=True)
+    rc("font", **{"family": "serif", "serif": ["Computer Modern Roman"]})
+
+    ticksize = 30
+    titlesize = 35
+    plt.rcParams["axes.labelsize"] = titlesize
+    plt.rcParams["axes.titlesize"] = titlesize
+    plt.rcParams["xtick.labelsize"] = ticksize
+    plt.rcParams["ytick.labelsize"] = ticksize
+
 
     # Load yaml
     with open(args.config) as f:
@@ -156,21 +159,29 @@ def main():
                     edgecolor="k" if t in (n_steps - 1, 10) else None,
                 )
             )
+        if args.edges:
+            # ax[1] = plot_edges_all_agents(ax[1], t, torch.Tensor(positions).permute(1, 0, 2),
+            #                               dist=config["regressor"]["min_dist"],
+            #                               n_neighbours=config["regressor"]["n_neighbours"])
+            ax[1] = plot_edges_single_agent(ax[1], t, torch.Tensor(positions).permute(1, 0, 2), 2, torch.ones_like(torch.Tensor(positions))[:, :, 0],
+                                          dist=config["regressor"]["min_dist"],
+                                          n_neighbours=config["regressor"]["n_neighbours"])
 
     # Show final velocities
-    ax[1].quiver(
-        positions[:, -1, 0],
-        positions[:, -1, 1],
-        velocities[:, -1, 0],
-        velocities[:, -1, 1],
-        width=0.003,
-        headwidth=5,
-        angles="xy",
-        scale_units="xy",
-        scale=1.0,
-        color="k",
-        zorder=10,
-    )
+    if not args.edges:
+        ax[1].quiver(
+            positions[:, -1, 0],
+            positions[:, -1, 1],
+            velocities[:, -1, 0],
+            velocities[:, -1, 1],
+            width=0.003,
+            headwidth=5,
+            angles="xy",
+            scale_units="xy",
+            scale=1.0,
+            color="k",
+            zorder=10,
+        )
 
     # ax[0].axis("equal")
     # ax[0].set_xlim((x_min, x_max))

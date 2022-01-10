@@ -14,7 +14,7 @@ from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning.utilities.seed import seed_everything
 
 from src.data.dataset_waymo import OneStepWaymoDataModule
-from src.training_modules.train_waymo_gauss import *
+from src.training_modules.train_waymo_model import *
 
 
 def make_predictions(path, config, n_steps=51, sequence_idx=0):
@@ -34,7 +34,7 @@ def make_predictions(path, config, n_steps=51, sequence_idx=0):
         # Setup
     regressor.eval()
     datamodule.setup()
-    dataset = datamodule.val_dataset
+    dataset = datamodule.test_dataset
     # Extract batch and add missing attributes
     batch = dataset.__getitem__(sequence_idx)
     batch.batch = torch.zeros(batch.x.size(0)).type(torch.int64)
@@ -145,7 +145,7 @@ def plot_edges_all_agents(ax, t, states, dist, n_neighbours):
             xx[[i, i + edge_index.size(1)]],
             yy[[i, i + edge_index.size(1)]],
             color="k",
-            alpha=0.2,
+            alpha=0.1,
         )
 
     return ax
