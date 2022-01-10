@@ -13,7 +13,6 @@ from matplotlib.patches import Circle, Ellipse, Rectangle
 from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning.utilities.seed import seed_everything
 
-
 from src.training_modules.train_waymo_model import *
 
 

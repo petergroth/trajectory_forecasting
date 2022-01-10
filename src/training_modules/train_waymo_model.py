@@ -5198,7 +5198,8 @@ class WaymoLocalUAModule(pl.LightningModule):
 
         self.log("test_collision_counter", collision_tracker.sum(), reduce_fx=torch.sum)
         self.log("test_trajectory_counter", n_nodes, reduce_fx=torch.sum)
-        self.log("test_collision/trajectory", collision_tracker.sum()/ n_nodes)
+        self.log("test_collision/trajectory", collision_tracker.sum() / n_nodes)
+
 
         return loss
 
