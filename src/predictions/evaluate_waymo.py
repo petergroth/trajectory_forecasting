@@ -13,7 +13,6 @@ from matplotlib.patches import Circle, Ellipse, Rectangle
 from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning.utilities.seed import seed_everything
 
-from src.data.dataset_waymo import OneStepWaymoDataModule
 from src.training_modules.train_waymo_model import *
 
 
@@ -45,8 +44,8 @@ def main():
 
     # Load trainer
     trainer = pl.Trainer(**config["trainer"])
-    datamodule.setup("validate")
-    trainer.validate(regressor, ckpt_path=args.ckpt_path, datamodule=datamodule)
+    # datamodule.setup("validate")
+    # trainer.validate(regressor, ckpt_path=args.ckpt_path, datamodule=datamodule)
 
     # Test
     datamodule.setup("test")

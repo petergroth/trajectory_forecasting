@@ -445,6 +445,7 @@ class WaymoModule(pl.LightningModule):
 
         # Allocate target/prediction tensors
         n_nodes = batch.num_nodes
+        collision_tracker = torch.zeros(n_nodes)
         y_hat = torch.zeros((self.prediction_horizon - 11, n_nodes, self.out_features))
         y_hat = y_hat.type_as(batch.x)
         y_target = torch.zeros(
@@ -589,6 +590,19 @@ class WaymoModule(pl.LightningModule):
             # Latest prediction as input
             x_t = predicted_graph.clone()
 
+            # Detect collisions
+            edge_index_collisions = torch_geometric.nn.radius_graph(
+                x=x_t[:, :2],
+                r=1.0,
+                batch=batch.batch,
+                loop=False,
+                max_num_neighbors=100,
+                flow="source_to_target",
+            )
+
+            if edge_index_collisions.numel() > 0:
+                collision_tracker[edge_index_collisions[0]] = 1
+
             # Construct edges
             edge_index = torch_geometric.nn.radius_graph(
                 x=x_t[:, :2],
@@ -694,6 +708,10 @@ class WaymoModule(pl.LightningModule):
         self.log("val_fde_ttp_loss", fde_ttp_loss, batch_size=fde_ttp_mask.sum().item())
         self.log("val_ade_ttp_loss", ade_ttp_loss, batch_size=ade_ttp_mask.sum().item())
 
+        self.log("val_collision_counter", collision_tracker.sum(), reduce_fx=torch.sum)
+        self.log("val_trajectory_counter", n_nodes, reduce_fx=torch.sum)
+        self.log("val_collision/trajectory", collision_tracker.sum() / n_nodes)
+
         return loss
 
     def test_step(self, batch: Batch, batch_idx: int):
@@ -729,6 +747,8 @@ class WaymoModule(pl.LightningModule):
 
         # Allocate target/prediction tensors
         n_nodes = batch.num_nodes
+        collision_tracker = torch.zeros(n_nodes)
+
         y_hat = torch.zeros((self.prediction_horizon - 11, n_nodes, self.out_features))
         y_hat = y_hat.type_as(batch.x)
         y_target = torch.zeros(
@@ -873,6 +893,19 @@ class WaymoModule(pl.LightningModule):
             # Latest prediction as input
             x_t = predicted_graph.clone()
 
+            # Detect collisions
+            edge_index_collisions = torch_geometric.nn.radius_graph(
+                x=x_t[:, :2],
+                r=1.0,
+                batch=batch.batch,
+                loop=False,
+                max_num_neighbors=100,
+                flow="source_to_target",
+            )
+
+            if edge_index_collisions.numel() > 0:
+                collision_tracker[edge_index_collisions[0]] = 1
+
             # Construct edges
             edge_index = torch_geometric.nn.radius_graph(
                 x=x_t[:, :2],
@@ -981,6 +1014,10 @@ class WaymoModule(pl.LightningModule):
         self.log(
             "test_ade_ttp_loss", ade_ttp_loss, batch_size=ade_ttp_mask.sum().item()
         )
+
+        self.log("test_collision_counter", collision_tracker.sum(), reduce_fx=torch.sum)
+        self.log("test_trajectory_counter", n_nodes, reduce_fx=torch.sum)
+        self.log("test_collision/trajectory", collision_tracker.sum() / n_nodes)
 
         return loss
 
@@ -1424,6 +1461,15 @@ class WaymoLocalModule(pl.LightningModule):
                 map_ranges[i, 2], map_ranges[i, 3], 150 * 2 + 1
             )
 
+        # Allocate local map tensor
+        u_local = torch.zeros(
+            n_nodes,
+            batch.u.size(1),
+            self.local_map_resolution + 1,
+            self.local_map_resolution + 1
+        )
+        u_local = u_local.type_as(batch.x)
+
         ######################
         # History            #
         ######################
@@ -1477,17 +1523,6 @@ class WaymoLocalModule(pl.LightningModule):
             # Map encoding 1/2    #
             #######################
 
-            # Allocate local maps
-            u_local = torch.zeros(
-                (
-                    x_t.size(0),
-                    batch.u.size(1),
-                    self.local_map_resolution + 1,
-                    self.local_map_resolution + 1,
-                )
-            )
-            u_local = u_local.type_as(batch.x)
-
             # Find closest pixels in x and y directions
             center_pixel_x = (
                 torch.argmax(
@@ -1533,7 +1568,7 @@ class WaymoLocalModule(pl.LightningModule):
                     ]
 
             # Perform map encoding
-            u = self.map_encoder(u_local)
+            u = self.map_encoder(u_local[mask_t])
 
             #######################
             # Training 1/2        #
@@ -1641,17 +1676,6 @@ class WaymoLocalModule(pl.LightningModule):
             #######################
             # Map encoding 2/2    #
             #######################
-
-            # Allocate local maps
-            u_local = torch.zeros(
-                (
-                    x_t.size(0),
-                    batch.u.size(1),
-                    self.local_map_resolution + 1,
-                    self.local_map_resolution + 1,
-                )
-            )
-            u_local = u_local.type_as(batch.x)
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
@@ -1834,6 +1858,7 @@ class WaymoLocalModule(pl.LightningModule):
 
         # Allocate target/prediction tensors
         n_nodes = batch.num_nodes
+        collision_tracker = torch.zeros(n_nodes)
         y_hat = torch.zeros((self.prediction_horizon - 11, n_nodes, self.out_features))
         y_hat = y_hat.type_as(batch.x)
         y_target = torch.zeros(
@@ -1909,6 +1934,15 @@ class WaymoLocalModule(pl.LightningModule):
                 map_ranges[i, 2], map_ranges[i, 3], 150 * 2 + 1
             )
 
+        # Allocate local map tensor
+        u_local = torch.zeros(
+            n_nodes,
+            batch.u.size(1),
+            self.local_map_resolution + 1,
+            self.local_map_resolution + 1
+        )
+        u_local = u_local.type_as(batch.x)
+
         ######################
         # History            #
         ######################
@@ -1949,17 +1983,6 @@ class WaymoLocalModule(pl.LightningModule):
             #######################
             # Map encoding 1/2    #
             #######################
-
-            # Allocate local maps
-            u_local = torch.zeros(
-                (
-                    x_t.size(0),
-                    batch.u.size(1),
-                    self.local_map_resolution + 1,
-                    self.local_map_resolution + 1,
-                )
-            )
-            u_local = u_local.type_as(batch.x)
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
@@ -2006,7 +2029,7 @@ class WaymoLocalModule(pl.LightningModule):
                     ]
 
             # Perform map encoding
-            u = self.map_encoder(u_local)
+            u = self.map_encoder(u_local[mask_t])
 
             ######################
             # Validation 1/2     #
@@ -2080,6 +2103,19 @@ class WaymoLocalModule(pl.LightningModule):
             # Latest prediction as input
             x_t = predicted_graph.clone()
 
+            # Detect collisions
+            edge_index_collisions = torch_geometric.nn.radius_graph(
+                x=x_t[:, :2],
+                r=1.0,
+                batch=batch.batch,
+                loop=False,
+                max_num_neighbors=100,
+                flow="source_to_target",
+            )
+
+            if edge_index_collisions.numel() > 0:
+                collision_tracker[edge_index_collisions[0]] = 1
+
             # Construct edges
             edge_index = torch_geometric.nn.radius_graph(
                 x=x_t[:, :2],
@@ -2105,17 +2141,6 @@ class WaymoLocalModule(pl.LightningModule):
             #######################
             # Map encoding 2/2    #
             #######################
-
-            # Allocate local maps
-            u_local = torch.zeros(
-                (
-                    x_t.size(0),
-                    batch.u.size(1),
-                    self.local_map_resolution + 1,
-                    self.local_map_resolution + 1,
-                )
-            )
-            u_local = u_local.type_as(batch.x)
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
@@ -2249,6 +2274,10 @@ class WaymoLocalModule(pl.LightningModule):
         self.log("val_fde_ttp_loss", fde_ttp_loss, batch_size=fde_ttp_mask.sum().item())
         self.log("val_ade_ttp_loss", ade_ttp_loss, batch_size=ade_ttp_mask.sum().item())
 
+        self.log("val_collision_counter", collision_tracker.sum(), reduce_fx=torch.sum)
+        self.log("val_trajectory_counter", n_nodes, reduce_fx=torch.sum)
+        self.log("val_collision/trajectory", collision_tracker.sum() / n_nodes)
+
         return loss
 
     def test_step(self, batch: Batch, batch_idx: int):
@@ -2284,6 +2313,7 @@ class WaymoLocalModule(pl.LightningModule):
 
         # Allocate target/prediction tensors
         n_nodes = batch.num_nodes
+        collision_tracker = torch.zeros(n_nodes)
         y_hat = torch.zeros((self.prediction_horizon - 11, n_nodes, self.out_features))
         y_hat = y_hat.type_as(batch.x)
         y_target = torch.zeros(
@@ -2359,6 +2389,15 @@ class WaymoLocalModule(pl.LightningModule):
                 map_ranges[i, 2], map_ranges[i, 3], 150 * 2 + 1
             )
 
+        # Allocate local map tensor
+        u_local = torch.zeros(
+            n_nodes,
+            batch.u.size(1),
+            self.local_map_resolution + 1,
+            self.local_map_resolution + 1
+        )
+        u_local = u_local.type_as(batch.x)
+
         ######################
         # History            #
         ######################
@@ -2399,18 +2438,6 @@ class WaymoLocalModule(pl.LightningModule):
             #######################
             # Map encoding 1/2    #
             #######################
-
-            # Allocate local maps
-            # Allocate local maps
-            u_local = torch.zeros(
-                (
-                    x_t.size(0),
-                    batch.u.size(1),
-                    self.local_map_resolution + 1,
-                    self.local_map_resolution + 1,
-                )
-            )
-            u_local = u_local.type_as(batch.x)
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
@@ -2457,10 +2484,10 @@ class WaymoLocalModule(pl.LightningModule):
                     ]
 
             # Perform map encoding
-            u = self.map_encoder(u_local)
+            u = self.map_encoder(u_local[mask_t])
 
             ######################
-            # Validation 1/2     #
+            # Testing 1/2        #
             ######################
 
             # Normalise input graph
@@ -2531,6 +2558,19 @@ class WaymoLocalModule(pl.LightningModule):
             # Latest prediction as input
             x_t = predicted_graph.clone()
 
+            # Detect collisions
+            edge_index_collisions = torch_geometric.nn.radius_graph(
+                x=x_t[:, :2],
+                r=1.0,
+                batch=batch.batch,
+                loop=False,
+                max_num_neighbors=100,
+                flow="source_to_target",
+            )
+
+            if edge_index_collisions.numel() > 0:
+                collision_tracker[edge_index_collisions[0]] = 1
+
             # Construct edges
             edge_index = torch_geometric.nn.radius_graph(
                 x=x_t[:, :2],
@@ -2556,17 +2596,6 @@ class WaymoLocalModule(pl.LightningModule):
             #######################
             # Map encoding 2/2    #
             #######################
-
-            # Allocate local maps
-            u_local = torch.zeros(
-                (
-                    x_t.size(0),
-                    batch.u.size(1),
-                    self.local_map_resolution + 1,
-                    self.local_map_resolution + 1,
-                )
-            )
-            u_local = u_local.type_as(batch.x)
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
@@ -2616,7 +2645,7 @@ class WaymoLocalModule(pl.LightningModule):
             u = self.map_encoder(u_local)
 
             ######################
-            # Validation 2/2     #
+            # Testing 2/2        #
             ######################
 
             # Normalise input graph
@@ -2703,6 +2732,10 @@ class WaymoLocalModule(pl.LightningModule):
         self.log(
             "test_ade_ttp_loss", ade_ttp_loss, batch_size=ade_ttp_mask.sum().item()
         )
+
+        self.log("test_collision_counter", collision_tracker.sum(), reduce_fx=torch.sum)
+        self.log("test_trajectory_counter", n_nodes, reduce_fx=torch.sum)
+        self.log("test_collision/trajectory", collision_tracker.sum() / n_nodes)
 
         return loss
 
@@ -2810,6 +2843,15 @@ class WaymoLocalModule(pl.LightningModule):
                 map_ranges[i, 2], map_ranges[i, 3], 150 * 2 + 1
             )
 
+        # Allocate local map tensor
+        u_local = torch.zeros(
+            n_nodes,
+            batch.u.size(1),
+            self.local_map_resolution + 1,
+            self.local_map_resolution + 1
+        )
+        u_local = u_local.type_as(batch.x)
+
         ######################
         # History            #
         ######################
@@ -2849,17 +2891,6 @@ class WaymoLocalModule(pl.LightningModule):
             #######################
             # Map encoding 1/2    #
             #######################
-
-            # Allocate local maps
-            u_local = torch.zeros(
-                (
-                    x_t.size(0),
-                    batch.u.size(1),
-                    self.local_map_resolution + 1,
-                    self.local_map_resolution + 1,
-                )
-            )
-            u_local = u_local.type_as(batch.x)
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
@@ -2906,7 +2937,7 @@ class WaymoLocalModule(pl.LightningModule):
                     ]
 
             # Perform map encoding
-            u = self.map_encoder(u_local)
+            u = self.map_encoder(u_local[mask_t])
 
             ######################
             # Predictions 1/2    #
@@ -3006,17 +3037,6 @@ class WaymoLocalModule(pl.LightningModule):
             #######################
             # Map encoding 2/2    #
             #######################
-
-            # Allocate local maps
-            u_local = torch.zeros(
-                (
-                    x_t.size(0),
-                    batch.u.size(1),
-                    self.local_map_resolution + 1,
-                    self.local_map_resolution + 1,
-                )
-            )
-            u_local = u_local.type_as(batch.x)
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
@@ -3139,6 +3159,7 @@ class WaymoLocalUAModule(pl.LightningModule):
         prediction_horizon: int = 91,
         local_map_resolution: int = 40,
         map_channels: int = 8,
+        types: bool = False
     ):
         super().__init__()
         # Training metrics
@@ -3184,6 +3205,7 @@ class WaymoLocalUAModule(pl.LightningModule):
         self.pos_index = [0, 1]
         self.edge_dropout = edge_dropout
         self.prediction_horizon = prediction_horizon
+        self.types = types
 
         # Model parameters
         self.rnn_type = model_dict["rnn_type"]
@@ -3216,12 +3238,12 @@ class WaymoLocalUAModule(pl.LightningModule):
         batch.tracks_to_predict = batch.tracks_to_predict[valid_mask]
         batch.type = batch.type[valid_mask]
 
-        # CARS
-        type_mask = batch.type[:, 1] == 1
-        batch.x = batch.x[type_mask]
-        batch.batch = batch.batch[type_mask]
-        batch.tracks_to_predict = batch.tracks_to_predict[type_mask]
-        batch.type = batch.type[type_mask]
+        if not self.types:
+            type_mask = batch.type[:, 1] == 1
+            batch.x = batch.x[type_mask]
+            batch.batch = batch.batch[type_mask]
+            batch.tracks_to_predict = batch.tracks_to_predict[type_mask]
+            batch.type = batch.type[type_mask]
 
         # Discard future values not used for training
         batch.x = batch.x[:, : (self.training_horizon + 1)]
@@ -3231,10 +3253,12 @@ class WaymoLocalUAModule(pl.LightningModule):
 
         # Discard masks and extract static features
         batch.x = batch.x[:, :, :-1]
-        # static_features = torch.cat(
-        #     [batch.x[:, 10, self.out_features :], batch.type], dim=1
-        # )
-        static_features = batch.x[:, 10, 4:]
+        if self.types:
+            static_features = torch.cat(
+                [batch.x[:, 10, self.out_features :], batch.type], dim=1
+            )
+        else:
+            static_features = batch.x[:, 10, 4:]
         static_features = static_features.type_as(batch.x)
         edge_attr = None
         n_nodes = batch.num_nodes
@@ -3314,6 +3338,15 @@ class WaymoLocalUAModule(pl.LightningModule):
                 map_ranges[i, 2], map_ranges[i, 3], 150 * 2 + 1
             )
 
+        # Allocate local map tensor
+        u_local = torch.zeros(
+            n_nodes,
+            batch.u.size(1),
+            self.local_map_resolution + 1,
+            self.local_map_resolution + 1
+        )
+        u_local = u_local.type_as(batch.x)
+
         ######################
         # History            #
         ######################
@@ -3322,8 +3355,10 @@ class WaymoLocalUAModule(pl.LightningModule):
 
             # Extract current input
             mask_t = mask[:, t]
-            # x_t = torch.cat([batch.x[mask_t, t, :], batch.type[mask_t]], dim=1)
-            x_t = batch.x[mask_t, t, :]
+            if self.types:
+                x_t = torch.cat([batch.x[mask_t, t, :], batch.type[mask_t]], dim=1)
+            else:
+                x_t = batch.x[mask_t, t, :]
             x_t = x_t.type_as(batch.x)
 
             # Add noise if specified
@@ -3366,17 +3401,6 @@ class WaymoLocalUAModule(pl.LightningModule):
             #######################
             # Map encoding 1/2    #
             #######################
-
-            # Allocate local maps
-            u_local = torch.zeros(
-                (
-                    x_t.size(0),
-                    batch.u.size(1),
-                    self.local_map_resolution + 1,
-                    self.local_map_resolution + 1,
-                )
-            )
-            u_local = u_local.type_as(batch.x)
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
@@ -3423,7 +3447,7 @@ class WaymoLocalUAModule(pl.LightningModule):
                     ]
 
             # Perform map encoding
-            u = self.map_encoder(u_local)
+            u = self.map_encoder(u_local[mask_t])
 
             #######################
             # Training 1/2        #
@@ -3548,17 +3572,6 @@ class WaymoLocalUAModule(pl.LightningModule):
             #######################
             # Map encoding 2/2    #
             #######################
-
-            # Allocate local maps
-            u_local = torch.zeros(
-                (
-                    x_t.size(0),
-                    batch.u.size(1),
-                    self.local_map_resolution + 1,
-                    self.local_map_resolution + 1,
-                )
-            )
-            u_local = u_local.type_as(batch.x)
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
@@ -3753,12 +3766,12 @@ class WaymoLocalUAModule(pl.LightningModule):
         batch.tracks_to_predict = batch.tracks_to_predict[valid_mask]
         batch.type = batch.type[valid_mask]
 
-        # CARS
-        type_mask = batch.type[:, 1] == 1
-        batch.x = batch.x[type_mask]
-        batch.batch = batch.batch[type_mask]
-        batch.tracks_to_predict = batch.tracks_to_predict[type_mask]
-        batch.type = batch.type[type_mask]
+        if not self.types:
+            type_mask = batch.type[:, 1] == 1
+            batch.x = batch.x[type_mask]
+            batch.batch = batch.batch[type_mask]
+            batch.tracks_to_predict = batch.tracks_to_predict[type_mask]
+            batch.type = batch.type[type_mask]
 
         # Update input using prediction horizon
         batch.x = batch.x[:, : self.prediction_horizon]
@@ -3779,10 +3792,12 @@ class WaymoLocalUAModule(pl.LightningModule):
         y_target = y_target.type_as(batch.x)
 
         batch.x = batch.x[:, :, :-1]
-        # static_features = torch.cat(
-        #     [batch.x[:, 10, self.out_features :], batch.type], dim=1
-        # )
-        static_features = batch.x[:, 10, 4:]
+        if self.types:
+            static_features = torch.cat(
+                [batch.x[:, 10, self.out_features :], batch.type], dim=1
+            )
+        else:
+            static_features = batch.x[:, 10, 4:]
         static_features = static_features.type_as(batch.x)
         edge_attr = None
 
@@ -3855,6 +3870,15 @@ class WaymoLocalUAModule(pl.LightningModule):
                 map_ranges[i, 2], map_ranges[i, 3], 150 * 2 + 1
             )
 
+        # Allocate local map tensor
+        u_local = torch.zeros(
+            n_nodes,
+            batch.u.size(1),
+            self.local_map_resolution + 1,
+            self.local_map_resolution + 1
+        )
+        u_local = u_local.type_as(batch.x)
+
         ######################
         # History            #
         ######################
@@ -3866,8 +3890,10 @@ class WaymoLocalUAModule(pl.LightningModule):
             ######################
 
             mask_t = mask[:, t]
-            # x_t = torch.cat([batch.x[mask_t, t, :], batch.type[mask_t]], dim=1)
-            x_t = batch.x[mask_t, t, :]
+            if self.types:
+                x_t = torch.cat([batch.x[mask_t, t, :], batch.type[mask_t]], dim=1)
+            else:
+                x_t = batch.x[mask_t, t, :]
             x_t = x_t.type_as(batch.x)
 
             # Construct edges
@@ -3895,17 +3921,6 @@ class WaymoLocalUAModule(pl.LightningModule):
             #######################
             # Map encoding 1/2    #
             #######################
-
-            # Allocate local maps
-            u_local = torch.zeros(
-                (
-                    x_t.size(0),
-                    batch.u.size(1),
-                    self.local_map_resolution + 1,
-                    self.local_map_resolution + 1,
-                )
-            )
-            u_local = u_local.type_as(batch.x)
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
@@ -3952,7 +3967,7 @@ class WaymoLocalUAModule(pl.LightningModule):
                     ]
 
             # Perform map encoding
-            u = self.map_encoder(u_local)
+            u = self.map_encoder(u_local[mask_t])
 
             ######################
             # Validation 1/2     #
@@ -4079,17 +4094,6 @@ class WaymoLocalUAModule(pl.LightningModule):
             # Map encoding 2/2    #
             #######################
 
-            # Allocate local maps
-            u_local = torch.zeros(
-                (
-                    x_t.size(0),
-                    batch.u.size(1),
-                    self.local_map_resolution + 1,
-                    self.local_map_resolution + 1,
-                )
-            )
-            u_local = u_local.type_as(batch.x)
-
             # Find closest pixels in x and y directions
             center_pixel_x = (
                 torch.argmax(
@@ -4145,7 +4149,7 @@ class WaymoLocalUAModule(pl.LightningModule):
             if self.normalise:
                 # Center node positions
                 x_t[:, self.pos_index] -= batch.loc[batch.batch][:, self.pos_index]
-                # Scale all features (except yaws) with global scaler
+                # Scale all features with global scaler
                 x_t[:, self.norm_index] /= self.global_scale
                 if edge_attr is not None:
                     # Scale edge attributes
@@ -4267,12 +4271,12 @@ class WaymoLocalUAModule(pl.LightningModule):
         batch.tracks_to_predict = batch.tracks_to_predict[valid_mask]
         batch.type = batch.type[valid_mask]
 
-        # CARS
-        type_mask = batch.type[:, 1] == 1
-        batch.x = batch.x[type_mask]
-        batch.batch = batch.batch[type_mask]
-        batch.tracks_to_predict = batch.tracks_to_predict[type_mask]
-        batch.type = batch.type[type_mask]
+        if not self.types:
+            type_mask = batch.type[:, 1] == 1
+            batch.x = batch.x[type_mask]
+            batch.batch = batch.batch[type_mask]
+            batch.tracks_to_predict = batch.tracks_to_predict[type_mask]
+            batch.type = batch.type[type_mask]
 
         batch.x = batch.x[:, :prediction_horizon]
 
@@ -4282,20 +4286,21 @@ class WaymoLocalUAModule(pl.LightningModule):
         # Allocate target/prediction tensors
         n_nodes = batch.num_nodes
         y_hat = torch.zeros((prediction_horizon - 1, n_nodes, 7))
-        y_target = torch.zeros((prediction_horizon - 1, n_nodes, 7))
+        y_target = torch.zeros((prediction_horizon - 1, n_nodes, 7 if not self.types else 12))
         # Ensure device placement
         y_hat = y_hat.type_as(batch.x)
         y_target = y_target.type_as(batch.x)
 
         batch.x = batch.x[:, :, :-1]
-        # static_features = torch.cat(
-        #     [batch.x[:, 10, self.out_features :], batch.type], dim=1
-        # )
-        static_features = batch.x[:, 10, 4:]
+        if self.types:
+            static_features = torch.cat(
+                [batch.x[:, 10, self.out_features :], batch.type], dim=1
+            )
+        else:
+            static_features = batch.x[:, 10, 4:]
         edge_attr = None
 
         # Allocate likelihood tensor and covariance matrices
-        # likelihoods = torch.zeros((n_nodes, self.training_horizon))
         Sigma_vel = torch.eye(2).reshape(1, 2, 2).repeat(n_nodes, 1, 1)
         Sigma_pos = (
             torch.eye(2).reshape(1, 1, 2, 2).repeat(prediction_horizon, n_nodes, 1, 1)
@@ -4364,6 +4369,15 @@ class WaymoLocalUAModule(pl.LightningModule):
                 map_ranges[i, 2], map_ranges[i, 3], 150 * 2 + 1
             )
 
+        # Allocate local map tensor
+        u_local = torch.zeros(
+            n_nodes,
+            batch.u.size(1),
+            self.local_map_resolution + 1,
+            self.local_map_resolution + 1
+        )
+        u_local = u_local.type_as(batch.x)
+
         ######################
         # History            #
         ######################
@@ -4375,8 +4389,10 @@ class WaymoLocalUAModule(pl.LightningModule):
             ######################
 
             mask_t = mask[:, t]
-            # x_t = torch.cat([batch.x[mask_t, t, :], batch.type[mask_t]], dim=1)
-            x_t = batch.x[mask_t, t, :]
+            if self.types:
+                x_t = torch.cat([batch.x[mask_t, t, :], batch.type[mask_t]], dim=1)
+            else:
+                x_t = batch.x[mask_t, t, :]
 
             # Construct edges
             edge_index = torch_geometric.nn.radius_graph(
@@ -4403,17 +4419,6 @@ class WaymoLocalUAModule(pl.LightningModule):
             #######################
             # Map encoding 1/2    #
             #######################
-
-            # Allocate local maps
-            u_local = torch.zeros(
-                (
-                    x_t.size(0),
-                    batch.u.size(1),
-                    self.local_map_resolution + 1,
-                    self.local_map_resolution + 1,
-                )
-            )
-            u_local = u_local.type_as(batch.x)
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
@@ -4460,7 +4465,7 @@ class WaymoLocalUAModule(pl.LightningModule):
                     ]
 
             # Perform map encoding
-            u = self.map_encoder(u_local)
+            u = self.map_encoder(u_local[mask_t])
 
             ######################
             # Predictions 1/2    #
@@ -4530,10 +4535,12 @@ class WaymoLocalUAModule(pl.LightningModule):
 
             # Save predictions and targets
             y_hat[t, mask_t, :] = predicted_graph
-            # y_target[t, mask_t, :] = torch.cat(
-            #     [batch.x[mask_t, t + 1, :], batch.type[mask_t]], dim=1
-            # )
-            y_target[t, mask_t, :] = batch.x[mask_t, t + 1, :]
+            if self.types:
+                y_target[t, mask_t, :] = torch.cat(
+                    [batch.x[mask_t, t + 1, :], batch.type[mask_t]], dim=1
+                )
+            else:
+                y_target[t, mask_t, :] = batch.x[mask_t, t + 1, :]
 
         ######################
         # Future             #
@@ -4572,17 +4579,6 @@ class WaymoLocalUAModule(pl.LightningModule):
             #######################
             # Map encoding 2/2    #
             #######################
-
-            # Allocate local maps
-            u_local = torch.zeros(
-                (
-                    x_t.size(0),
-                    batch.u.size(1),
-                    self.local_map_resolution + 1,
-                    self.local_map_resolution + 1,
-                )
-            )
-            u_local = u_local.type_as(batch.x)
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
@@ -4684,8 +4680,10 @@ class WaymoLocalUAModule(pl.LightningModule):
 
             # Save prediction alongside true value (next time step state)
             y_hat[t, :, :] = predicted_graph
-            # y_target[t, :, :] = torch.cat([batch.x[:, t + 1, :], batch.type], dim=1)
-            y_target[t, :, :] = batch.x[:, t + 1, :]
+            if self.types:
+                y_target[t, :, :] = torch.cat([batch.x[:, t + 1, :], batch.type], dim=1)
+            else:
+                y_target[t, :, :] = batch.x[:, t + 1, :]
 
         return y_hat, y_target, mask, Sigma_pos[1:]
 
@@ -4709,12 +4707,12 @@ class WaymoLocalUAModule(pl.LightningModule):
         batch.tracks_to_predict = batch.tracks_to_predict[valid_mask]
         batch.type = batch.type[valid_mask]
 
-        # CARS
-        type_mask = batch.type[:, 1] == 1
-        batch.x = batch.x[type_mask]
-        batch.batch = batch.batch[type_mask]
-        batch.tracks_to_predict = batch.tracks_to_predict[type_mask]
-        batch.type = batch.type[type_mask]
+        if not self.types:
+            type_mask = batch.type[:, 1] == 1
+            batch.x = batch.x[type_mask]
+            batch.batch = batch.batch[type_mask]
+            batch.tracks_to_predict = batch.tracks_to_predict[type_mask]
+            batch.type = batch.type[type_mask]
 
         # Update input using prediction horizon
         batch.x = batch.x[:, : self.prediction_horizon]
@@ -4736,10 +4734,12 @@ class WaymoLocalUAModule(pl.LightningModule):
         y_target = y_target.type_as(batch.x)
 
         batch.x = batch.x[:, :, :-1]
-        # static_features = torch.cat(
-        #     [batch.x[:, 10, self.out_features :], batch.type], dim=1
-        # )
-        static_features = batch.x[:, 10, 4:]
+        if self.types:
+            static_features = torch.cat(
+                [batch.x[:, 10, self.out_features :], batch.type], dim=1
+            )
+        else:
+            static_features = batch.x[:, 10, 4:]
         static_features = static_features.type_as(batch.x)
         edge_attr = None
 
@@ -4812,6 +4812,17 @@ class WaymoLocalUAModule(pl.LightningModule):
                 map_ranges[i, 2], map_ranges[i, 3], 150 * 2 + 1
             )
 
+        # Allocate local maps
+        u_local = torch.zeros(
+            (
+                n_nodes,
+                batch.u.size(1),
+                self.local_map_resolution + 1,
+                self.local_map_resolution + 1,
+            )
+        )
+        u_local = u_local.type_as(batch.x)
+
         ######################
         # History            #
         ######################
@@ -4823,8 +4834,10 @@ class WaymoLocalUAModule(pl.LightningModule):
             ######################
 
             mask_t = mask[:, t]
-            # x_t = torch.cat([batch.x[mask_t, t, :], batch.type[mask_t]], dim=1)
-            x_t = batch.x[mask_t, t, :]
+            if self.types:
+                x_t = torch.cat([batch.x[mask_t, t, :], batch.type[mask_t]], dim=1)
+            else:
+                x_t = batch.x[mask_t, t, :]
             x_t = x_t.type_as(batch.x)
 
             # Construct edges
@@ -4852,17 +4865,6 @@ class WaymoLocalUAModule(pl.LightningModule):
             #######################
             # Map encoding 1/2    #
             #######################
-
-            # Allocate local maps
-            u_local = torch.zeros(
-                (
-                    x_t.size(0),
-                    batch.u.size(1),
-                    self.local_map_resolution + 1,
-                    self.local_map_resolution + 1,
-                )
-            )
-            u_local = u_local.type_as(batch.x)
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
@@ -4909,10 +4911,10 @@ class WaymoLocalUAModule(pl.LightningModule):
                     ]
 
             # Perform map encoding
-            u = self.map_encoder(u_local)
+            u = self.map_encoder(u_local[mask_t])
 
             ######################
-            # Validation 1/2     #
+            # Testing 1/2        #
             ######################
 
             # Normalise input graph
@@ -5036,17 +5038,6 @@ class WaymoLocalUAModule(pl.LightningModule):
             # Map encoding 2/2    #
             #######################
 
-            # Allocate local maps
-            u_local = torch.zeros(
-                (
-                    x_t.size(0),
-                    batch.u.size(1),
-                    self.local_map_resolution + 1,
-                    self.local_map_resolution + 1,
-                )
-            )
-            u_local = u_local.type_as(batch.x)
-
             # Find closest pixels in x and y directions
             center_pixel_x = (
                 torch.argmax(
@@ -5095,7 +5086,7 @@ class WaymoLocalUAModule(pl.LightningModule):
             u = self.map_encoder(u_local)
 
             ######################
-            # Validation 2/2     #
+            # Testing 2/2        #
             ######################
 
             # Normalise input graph
@@ -5208,6 +5199,7 @@ class WaymoLocalUAModule(pl.LightningModule):
         self.log("test_collision_counter", collision_tracker.sum(), reduce_fx=torch.sum)
         self.log("test_trajectory_counter", n_nodes, reduce_fx=torch.sum)
         self.log("test_collision/trajectory", collision_tracker.sum() / n_nodes)
+
 
         return loss
 
@@ -5322,6 +5314,15 @@ class WaymoLocalUAModule(pl.LightningModule):
                 map_ranges[i, 2], map_ranges[i, 3], 150 * 2 + 1
             )
 
+        # Allocate local map tensor
+        u_local = torch.zeros(
+            n_nodes,
+            batch.u.size(1),
+            self.local_map_resolution + 1,
+            self.local_map_resolution + 1
+        )
+        u_local = u_local.type_as(batch.x)
+
         ######################
         # History            #
         ######################
@@ -5361,17 +5362,6 @@ class WaymoLocalUAModule(pl.LightningModule):
             #######################
             # Map encoding 1/2    #
             #######################
-
-            # Allocate local maps
-            u_local = torch.zeros(
-                (
-                    x_t.size(0),
-                    batch.u.size(1),
-                    self.local_map_resolution + 1,
-                    self.local_map_resolution + 1,
-                )
-            )
-            u_local = u_local.type_as(batch.x)
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
@@ -5418,7 +5408,7 @@ class WaymoLocalUAModule(pl.LightningModule):
                     ]
 
             # Perform map encoding
-            u = self.map_encoder(u_local)
+            u = self.map_encoder(u_local[mask_t])
 
             ######################
             # Predictions 1/2    #
@@ -5532,17 +5522,6 @@ class WaymoLocalUAModule(pl.LightningModule):
             #######################
             # Map encoding 2/2    #
             #######################
-
-            # Allocate local maps
-            u_local = torch.zeros(
-                (
-                    x_t.size(0),
-                    batch.u.size(1),
-                    self.local_map_resolution + 1,
-                    self.local_map_resolution + 1,
-                )
-            )
-            u_local = u_local.type_as(batch.x)
 
             # Find closest pixels in x and y directions
             center_pixel_x = (

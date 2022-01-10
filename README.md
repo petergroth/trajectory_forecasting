@@ -1,4 +1,4 @@
-trajectory_forecasting
+Trajectory Forecasting with Graph Neural Networks
 ==============================
 
 Master's Thesis in Mathematical Modelling and Computation (MSc.) at the Technical University of Denmark
@@ -7,50 +7,68 @@ Project Organization
 ------------
 
     ├── LICENSE
-    ├── Makefile           <- Makefile with commands like `make data` or `make train`
-    ├── README.md          <- The top-level README for developers using this project.
-    ├── data
-    │   ├── external       <- Data from third party sources.
-    │   ├── interim        <- Intermediate data that has been transformed.
-    │   ├── processed      <- The final, canonical data sets for modeling.
-    │   └── raw            <- The original, immutable data dump.
-    │
-    ├── docs               <- A default Sphinx project; see sphinx-doc.org for details
-    │
-    ├── models             <- Trained and serialized models, model predictions, or model summaries
-    │
-    ├── notebooks          <- Jupyter notebooks. Naming convention is a number (for ordering),
-    │                         the creator's initials, and a short `-` delimited description, e.g.
-    │                         `1.0-jqp-initial-data-exploration`.
-    │
-    ├── references         <- Data dictionaries, manuals, and all other explanatory materials.
-    │
-    ├── reports            <- Generated analysis as HTML, PDF, LaTeX, etc.
-    │   └── figures        <- Generated graphics and figures to be used in reporting
-    │
-    ├── requirements.txt   <- The requirements file for reproducing the analysis environment, e.g.
-    │                         generated with `pip freeze > requirements.txt`
-    │
-    ├── setup.py           <- makes project pip installable (pip install -e .) so src can be imported
-    ├── src                <- Source code for use in this project.
-    │   ├── __init__.py    <- Makes src a Python module
+    ├── Makefile                            <- Makefile with commands like `make data` or `make train`
+    ├── README.md                           <- The top-level README for developers using this project.
+    ├── setup.py                            <- makes project pip installable (pip install -e .) 
+    |                                          so src can be imported
+    ├── configs
+    |   ├── nbody
+    |   |   ├── datamodule                  <- Dir with yaml configuration files for datamodules
+    |   |   ├── model                       <- Dir with yaml configuration files for models
+    |   |   ├── regressor                   <- Dir with yaml configuration files for pl.LightningModules
+    |   |   ├── trainer                     <- Dir with yaml configuration files for pl.Trainer
+    |   |   └── config.yaml                 <- Default config file
+    |   |
+    |   └── waymo
+    |       ├── datamodule                  <- Dir with yaml configuration files for datamodules
+    |       ├── model                       <- Dir with yaml configuration files for models
+    |       ├── regressor                   <- Dir with yaml configuration files for pl.LightningModules
+    |       ├── trainer                     <- Dir with yaml configuration files for pl.Trainer
+    |       └── config.yaml                 <- Default config file
+    |    
+    ├── src                                 <- Source code for use in this project.
+    │   ├── __init__.py                     <- Makes src a Python module
     │   │
-    │   ├── data           <- Scripts to download or generate data
-    │   │   └── make_dataset.py
+    │   ├── data           
+    │   │   ├── dataset_nbody.py            <- Script containing n-body torch_geometric.InMemory 
+    |   |   |                                  datasets and pl.LightningDataModules 
+    |   |   ├── dataset_waymo.py            <- Script containing Waymo torch_geometric.InMemory 
+    |   |   |                                  datasets and pl.LightningDataModules 
+    |   |   ├── make_nbody_dataset.py       <- Script to generate nbody datasets and modules
+    |   |   ├── make_waymo_dataset.py       <- Script to generate Waymo datasets and modules
+    |   |   └── run_simulations.py          <- Script to run n-body simulations
     │   │
-    │   ├── features       <- Scripts to turn raw data into features for modeling
-    │   │   └── build_features.py
+    │   ├── models          
+    │   │   ├── model.py                    <- Script containing all full models. 
+    |   |   |                                  Type: torch.nn.Module
+    │   │   ├── node_edge_blocks.py         <- Script containing node and edge update functions.
+    |   |   |                                  Type: torch.nn.Module
+    │   │   └── unused_models.py            <- Script containing old/developmental node and edge 
+    |   |                                      update functions and full models. Type: torch.nn.Module
     │   │
-    │   ├── models         <- Scripts to train models and then use trained models to make
-    │   │   │                 predictions
-    │   │   ├── predict_model.py
-    │   │   └── train_model.py
+    │   ├── predictions
+    │   │   ├── evaluate_nbody.py           <- Script to validate and test n-body models
+    │   │   ├── evaluate_waymo.py           <- Script to validate and test Waymo models
+    │   │   ├── make_nbody_predictions.py   <- Script to predict and visualise n-body models
+    │   │   ├── make_waymo_predictions.py   <- Script to predict and visualise Waymo models
+    │   │   ├── make_waymo_predictions_sampled.py   <- Script to predict and visualise Waymo models
+    │   │   └── make_waymo_predictions_ua.py <- Script to predict and visualise Waymo models
     │   │
-    │   └── visualization  <- Scripts to create exploratory and results oriented visualizations
-    │       └── visualize.py
-    │
-    └── tox.ini            <- tox file with settings for running tox; see tox.readthedocs.io
-
+    │   ├── training_modules
+    │   │   ├── resume_training.py          <- Script to continue training of models. 
+    │   │   ├── training_nbody_model.py     <- Script to train/validate/test/predict nbody models. 
+    |   |   |                                  Type: pl.LightningModule
+    │   │   └── training_waymo_model.py     <- Script to train/validate/test/predict waymo models. 
+    |   |                                      Type: pl.LightningModule
+    │   │   
+    │   ├── visualization  
+    │   |   └── visualize_nbody_sequence.py <- Script to visualise 1 and 4 n-body simulations
+    │   |
+    |   └── utils.py                        <- Various helper functions in data generation
+    |
+    └── visualisations
+        ├── nbody
+        └── waymo    
 
 --------
 
