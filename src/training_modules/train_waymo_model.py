@@ -1461,6 +1461,15 @@ class WaymoLocalModule(pl.LightningModule):
                 map_ranges[i, 2], map_ranges[i, 3], 150 * 2 + 1
             )
 
+        # Allocate local map tensor
+        u_local = torch.zeros(
+            n_nodes,
+            batch.u.size(1),
+            self.local_map_resolution + 1,
+            self.local_map_resolution + 1
+        )
+        u_local = u_local.type_as(batch.x)
+
         ######################
         # History            #
         ######################
@@ -1514,17 +1523,6 @@ class WaymoLocalModule(pl.LightningModule):
             # Map encoding 1/2    #
             #######################
 
-            # Allocate local maps
-            u_local = torch.zeros(
-                (
-                    x_t.size(0),
-                    batch.u.size(1),
-                    self.local_map_resolution + 1,
-                    self.local_map_resolution + 1,
-                )
-            )
-            u_local = u_local.type_as(batch.x)
-
             # Find closest pixels in x and y directions
             center_pixel_x = (
                 torch.argmax(
@@ -1570,7 +1568,7 @@ class WaymoLocalModule(pl.LightningModule):
                     ]
 
             # Perform map encoding
-            u = self.map_encoder(u_local)
+            u = self.map_encoder(u_local[mask_t])
 
             #######################
             # Training 1/2        #
@@ -1678,17 +1676,6 @@ class WaymoLocalModule(pl.LightningModule):
             #######################
             # Map encoding 2/2    #
             #######################
-
-            # Allocate local maps
-            u_local = torch.zeros(
-                (
-                    x_t.size(0),
-                    batch.u.size(1),
-                    self.local_map_resolution + 1,
-                    self.local_map_resolution + 1,
-                )
-            )
-            u_local = u_local.type_as(batch.x)
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
@@ -1947,6 +1934,15 @@ class WaymoLocalModule(pl.LightningModule):
                 map_ranges[i, 2], map_ranges[i, 3], 150 * 2 + 1
             )
 
+        # Allocate local map tensor
+        u_local = torch.zeros(
+            n_nodes,
+            batch.u.size(1),
+            self.local_map_resolution + 1,
+            self.local_map_resolution + 1
+        )
+        u_local = u_local.type_as(batch.x)
+
         ######################
         # History            #
         ######################
@@ -1987,17 +1983,6 @@ class WaymoLocalModule(pl.LightningModule):
             #######################
             # Map encoding 1/2    #
             #######################
-
-            # Allocate local maps
-            u_local = torch.zeros(
-                (
-                    x_t.size(0),
-                    batch.u.size(1),
-                    self.local_map_resolution + 1,
-                    self.local_map_resolution + 1,
-                )
-            )
-            u_local = u_local.type_as(batch.x)
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
@@ -2044,7 +2029,7 @@ class WaymoLocalModule(pl.LightningModule):
                     ]
 
             # Perform map encoding
-            u = self.map_encoder(u_local)
+            u = self.map_encoder(u_local[mask_t])
 
             ######################
             # Validation 1/2     #
@@ -2156,17 +2141,6 @@ class WaymoLocalModule(pl.LightningModule):
             #######################
             # Map encoding 2/2    #
             #######################
-
-            # Allocate local maps
-            u_local = torch.zeros(
-                (
-                    x_t.size(0),
-                    batch.u.size(1),
-                    self.local_map_resolution + 1,
-                    self.local_map_resolution + 1,
-                )
-            )
-            u_local = u_local.type_as(batch.x)
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
@@ -2415,6 +2389,15 @@ class WaymoLocalModule(pl.LightningModule):
                 map_ranges[i, 2], map_ranges[i, 3], 150 * 2 + 1
             )
 
+        # Allocate local map tensor
+        u_local = torch.zeros(
+            n_nodes,
+            batch.u.size(1),
+            self.local_map_resolution + 1,
+            self.local_map_resolution + 1
+        )
+        u_local = u_local.type_as(batch.x)
+
         ######################
         # History            #
         ######################
@@ -2455,18 +2438,6 @@ class WaymoLocalModule(pl.LightningModule):
             #######################
             # Map encoding 1/2    #
             #######################
-
-            # Allocate local maps
-            # Allocate local maps
-            u_local = torch.zeros(
-                (
-                    x_t.size(0),
-                    batch.u.size(1),
-                    self.local_map_resolution + 1,
-                    self.local_map_resolution + 1,
-                )
-            )
-            u_local = u_local.type_as(batch.x)
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
@@ -2513,10 +2484,10 @@ class WaymoLocalModule(pl.LightningModule):
                     ]
 
             # Perform map encoding
-            u = self.map_encoder(u_local)
+            u = self.map_encoder(u_local[mask_t])
 
             ######################
-            # Validation 1/2     #
+            # Testing 1/2        #
             ######################
 
             # Normalise input graph
@@ -2626,17 +2597,6 @@ class WaymoLocalModule(pl.LightningModule):
             # Map encoding 2/2    #
             #######################
 
-            # Allocate local maps
-            u_local = torch.zeros(
-                (
-                    x_t.size(0),
-                    batch.u.size(1),
-                    self.local_map_resolution + 1,
-                    self.local_map_resolution + 1,
-                )
-            )
-            u_local = u_local.type_as(batch.x)
-
             # Find closest pixels in x and y directions
             center_pixel_x = (
                 torch.argmax(
@@ -2685,7 +2645,7 @@ class WaymoLocalModule(pl.LightningModule):
             u = self.map_encoder(u_local)
 
             ######################
-            # Validation 2/2     #
+            # Testing 2/2        #
             ######################
 
             # Normalise input graph
@@ -2883,6 +2843,15 @@ class WaymoLocalModule(pl.LightningModule):
                 map_ranges[i, 2], map_ranges[i, 3], 150 * 2 + 1
             )
 
+        # Allocate local map tensor
+        u_local = torch.zeros(
+            n_nodes,
+            batch.u.size(1),
+            self.local_map_resolution + 1,
+            self.local_map_resolution + 1
+        )
+        u_local = u_local.type_as(batch.x)
+
         ######################
         # History            #
         ######################
@@ -2922,17 +2891,6 @@ class WaymoLocalModule(pl.LightningModule):
             #######################
             # Map encoding 1/2    #
             #######################
-
-            # Allocate local maps
-            u_local = torch.zeros(
-                (
-                    x_t.size(0),
-                    batch.u.size(1),
-                    self.local_map_resolution + 1,
-                    self.local_map_resolution + 1,
-                )
-            )
-            u_local = u_local.type_as(batch.x)
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
@@ -2979,7 +2937,7 @@ class WaymoLocalModule(pl.LightningModule):
                     ]
 
             # Perform map encoding
-            u = self.map_encoder(u_local)
+            u = self.map_encoder(u_local[mask_t])
 
             ######################
             # Predictions 1/2    #
@@ -3079,17 +3037,6 @@ class WaymoLocalModule(pl.LightningModule):
             #######################
             # Map encoding 2/2    #
             #######################
-
-            # Allocate local maps
-            u_local = torch.zeros(
-                (
-                    x_t.size(0),
-                    batch.u.size(1),
-                    self.local_map_resolution + 1,
-                    self.local_map_resolution + 1,
-                )
-            )
-            u_local = u_local.type_as(batch.x)
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
