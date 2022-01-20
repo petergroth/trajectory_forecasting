@@ -3,19 +3,16 @@ datamodule:
   shuffle: true
   val_batch_size: 8
 model:
-  hidden_size: 96
+  hidden_size: 128
   dropout: 0.0
+  latent_edge_features: 16
   node_features: 7
   edge_features: 1
-  rnn_size: 32
-  rnn_edge_size: 16
-  out_features: 5
-  num_layers: 1
-  rnn_type: LSTM
-  latent_edge_features: 16
-  map_encoding_size: 32
+  skip: true
+  aggregate: false
+  out_features: 2
 regressor:
-  out_features: 7
+  out_features: 4
   noise: null
   lr: 0.001
   weight_decay: 0.0
@@ -29,10 +26,9 @@ regressor:
   prediction_horizon: 51
   training_horizon: 50
   edge_dropout: 0.0
-  local_map_resolution: 40
 trainer:
   check_val_every_n_epoch: 1
-  max_epochs: -1
+  max_epochs: 70
   deterministic: false
   num_sanity_val_steps: 2
   precision: 32
@@ -40,19 +36,18 @@ trainer:
   gpus: 1
   default_root_dir: logs
   detect_anomaly: false
-  max_time: 00:23:00:00
   gradient_clip_val: 5.0
 logger:
   offline: false
-  version: LocalRMPGNN_UA_02
+  version: MPGNN_02
   project: Waymo_finalised_results
-  name: LocalRMPGNN_UA_02
+  name: MPGNN_02
 misc:
   seed: 1
-  model_type: LocalRMPGNN
+  model_type: MPGNN
   dm_type: SequentialWaymoDataModule
-  regressor_type: WaymoLocalUAModule
+  regressor_type: WaymoModule
   train: true
-  validate: false
-  test: false
+  validate: true
+  test: true
   log_freq: 10
