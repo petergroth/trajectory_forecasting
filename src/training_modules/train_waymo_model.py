@@ -23,24 +23,24 @@ from src.models.node_edge_blocks import road_encoder
 
 class WaymoModule(pl.LightningModule):
     def __init__(
-        self,
-        model_type: Union[None, str],
-        model_dict: Union[None, dict],
-        lr: float = 1e-4,
-        weight_decay: float = 0.0,
-        noise: Union[None, float] = None,
-        teacher_forcing_ratio: float = 0.0,
-        min_dist: int = 0,
-        n_neighbours: int = 30,
-        edge_weight: bool = False,
-        self_loop: bool = False,
-        out_features: int = 6,
-        node_features: int = 9,
-        edge_features: int = 1,
-        normalise: bool = True,
-        training_horizon: int = 90,
-        edge_dropout: float = 0,
-        prediction_horizon: int = 91,
+            self,
+            model_type: Union[None, str],
+            model_dict: Union[None, dict],
+            lr: float = 1e-4,
+            weight_decay: float = 0.0,
+            noise: Union[None, float] = None,
+            teacher_forcing_ratio: float = 0.0,
+            min_dist: int = 0,
+            n_neighbours: int = 30,
+            edge_weight: bool = False,
+            self_loop: bool = False,
+            out_features: int = 6,
+            node_features: int = 9,
+            edge_features: int = 1,
+            normalise: bool = True,
+            training_horizon: int = 90,
+            edge_dropout: float = 0,
+            prediction_horizon: int = 91,
     ):
         super().__init__()
         # Training metrics
@@ -79,7 +79,7 @@ class WaymoModule(pl.LightningModule):
         self.prediction_horizon = prediction_horizon
 
         # Model parameters
-        self.rnn_type = model_dict["rnn_type"]
+        self.rnn_type = model_dict["rnn_type"] if "rnn_type" in model_dict else None
         self.out_features = out_features
         self.edge_features = edge_features
         self.node_features = node_features
@@ -126,7 +126,7 @@ class WaymoModule(pl.LightningModule):
         # static_features = torch.cat(
         #     [batch.x[:, 10, self.out_features :], batch.type], dim=1
         # )
-        static_features = batch.x[:, 10, self.out_features :]
+        static_features = batch.x[:, 10, self.out_features:]
         static_features = static_features.type_as(batch.x)
         edge_attr = None
         # Extract dimensions and allocate predictions
@@ -135,7 +135,7 @@ class WaymoModule(pl.LightningModule):
         y_predictions = y_predictions.type_as(batch.x)
 
         # Tensor of position and velocity targets
-        y_target = batch.x[:, 1 : (self.training_horizon + 1), : self.out_featuers]
+        y_target = batch.x[:, 1: (self.training_horizon + 1), : self.out_features]
         y_target = y_target.type_as(batch.x)
 
         assert y_target.shape == y_predictions.shape
@@ -149,7 +149,7 @@ class WaymoModule(pl.LightningModule):
             h_node = h_node.type_as(batch.x)
             h_edge = h_edge.type_as(batch.x)
             c_node, c_edge = None, None
-        else:
+        elif self.rnn_type == "LSTM":
             h_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
             h_edge = torch.zeros(
                 (self.model.num_layers, n_nodes, self.model.rnn_edge_size)
@@ -162,6 +162,8 @@ class WaymoModule(pl.LightningModule):
             )
             c_node = c_node.type_as(batch.x)
             c_edge = c_edge.type_as(batch.x)
+        else:
+            h_node, h_edge, c_node, c_edge = None, None, None, None
 
         ######################
         # History            #
@@ -220,8 +222,8 @@ class WaymoModule(pl.LightningModule):
             if self.normalise:
                 # Center node positions
                 x_t[:, self.pos_index] -= batch.loc[batch.batch][mask_t][
-                    :, self.pos_index
-                ]
+                                          :, self.pos_index
+                                          ]
                 # Scale all features (except yaws) with global scaler
                 x_t[:, self.norm_index] /= self.global_scale
                 if edge_attr is not None:
@@ -242,7 +244,7 @@ class WaymoModule(pl.LightningModule):
                 h_node[:, mask_t] = h_t[0]
                 h_edge[:, mask_t] = h_t[1]
 
-            else:  # LSTM
+            elif self.rnn_type == "LSTM":
                 hidden_in = (
                     (h_node[:, mask_t], c_node[:, mask_t]),
                     (h_edge[:, mask_t], c_edge[:, mask_t]),
@@ -259,6 +261,13 @@ class WaymoModule(pl.LightningModule):
                 c_node[:, mask_t] = h_node_out[1]
                 h_edge[:, mask_t] = h_edge_out[0]
                 c_edge[:, mask_t] = h_edge_out[1]
+            else:
+                delta_x = self.model(
+                    x=x_t,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    batch=batch.batch[mask_t],
+                )
 
             vel = delta_x[:, [0, 1]]
             pos = batch.x[mask_t, t][:, self.pos_index] + 0.1 * vel
@@ -336,13 +345,20 @@ class WaymoModule(pl.LightningModule):
                     batch=batch.batch,
                     hidden=(h_node, h_edge),
                 )
-            else:
+            elif self.rnn_type == "LSTM":
                 delta_x, ((h_node, c_node), (h_edge, c_edge)) = self.model(
                     x=x_t,
                     edge_index=edge_index,
                     edge_attr=edge_attr,
                     batch=batch.batch,
                     hidden=((h_node, c_node), (h_edge, c_edge)),
+                )
+            else:
+                delta_x = self.model(
+                    x=x_t,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    batch=batch.batch,
                 )
 
             vel = delta_x[:, [0, 1]]
@@ -354,8 +370,8 @@ class WaymoModule(pl.LightningModule):
             y_predictions[:, t, :] = x_t[:, : self.out_features]
 
         # Determine valid input and target pairs. Compute loss mask as their intersection
-        loss_mask_target = mask[:, 1 : (self.training_horizon + 1)]
-        loss_mask_input = mask[:, 0 : self.training_horizon]
+        loss_mask_target = mask[:, 1: (self.training_horizon + 1)]
+        loss_mask_input = mask[:, 0: self.training_horizon]
         loss_mask = torch.logical_and(loss_mask_input, loss_mask_target)
 
         # Determine valid end-points
@@ -456,7 +472,7 @@ class WaymoModule(pl.LightningModule):
         # static_features = torch.cat(
         #     [batch.x[:, 10, self.out_features :], batch.type], dim=1
         # )
-        static_features = batch.x[:, 10, self.out_features :]
+        static_features = batch.x[:, 10, self.out_features:]
         static_features = static_features.type_as(batch.x)
         edge_attr = None
 
@@ -469,7 +485,7 @@ class WaymoModule(pl.LightningModule):
             h_node = h_node.type_as(batch.x)
             h_edge = h_edge.type_as(batch.x)
             c_node, c_edge = None, None
-        else:
+        elif self.rnn_type == "LSTM":
             h_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
             h_edge = torch.zeros(
                 (self.model.num_layers, n_nodes, self.model.rnn_edge_size)
@@ -482,6 +498,8 @@ class WaymoModule(pl.LightningModule):
             )
             c_node = c_node.type_as(batch.x)
             c_edge = c_edge.type_as(batch.x)
+        else:
+            h_node, h_edge, c_node, c_edge = None, None, None, None
 
         ######################
         # History            #
@@ -528,8 +546,8 @@ class WaymoModule(pl.LightningModule):
             if self.normalise:
                 # Center node positions
                 x_t[:, self.pos_index] -= batch.loc[batch.batch][mask_t][
-                    :, self.pos_index
-                ]
+                                          :, self.pos_index
+                                          ]
                 # Scale all features (except yaws) with global scaler
                 x_t[:, self.norm_index] /= self.global_scale
                 if edge_attr is not None:
@@ -550,7 +568,7 @@ class WaymoModule(pl.LightningModule):
                 h_node[:, mask_t] = h_t[0]
                 h_edge[:, mask_t] = h_t[1]
 
-            else:  # LSTM
+            elif self.rnn_type == "LSTM":
                 hidden_in = (
                     (h_node[:, mask_t], c_node[:, mask_t]),
                     (h_edge[:, mask_t], c_edge[:, mask_t]),
@@ -566,6 +584,13 @@ class WaymoModule(pl.LightningModule):
                 c_node[:, mask_t] = h_node_out[1]
                 h_edge[:, mask_t] = h_edge_out[0]
                 c_edge[:, mask_t] = h_edge_out[1]
+            else:
+                delta_x = self.model(
+                    x=x_t,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    batch=batch.batch[mask_t]
+                )
 
             if t == 10:
                 vel = delta_x[:, [0, 1]]
@@ -648,7 +673,7 @@ class WaymoModule(pl.LightningModule):
                     batch=batch.batch,
                     hidden=(h_node, h_edge),
                 )
-            else:
+            elif self.rnn_type == "LSTM":
                 delta_x, ((h_node, c_node), (h_edge, c_edge)) = self.model(
                     x=x_t,
                     edge_index=edge_index,
@@ -656,6 +681,14 @@ class WaymoModule(pl.LightningModule):
                     batch=batch.batch,
                     hidden=((h_node, c_node), (h_edge, c_edge)),
                 )
+            else:
+                delta_x = self.model(
+                    x=x_t,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    batch=batch.batch
+                )
+
 
             vel = delta_x[:, [0, 1]]
             pos = predicted_graph[:, [0, 1]] + 0.1 * vel
@@ -748,7 +781,6 @@ class WaymoModule(pl.LightningModule):
         # Allocate target/prediction tensors
         n_nodes = batch.num_nodes
         collision_tracker = torch.zeros(n_nodes)
-
         y_hat = torch.zeros((self.prediction_horizon - 11, n_nodes, self.out_features))
         y_hat = y_hat.type_as(batch.x)
         y_target = torch.zeros(
@@ -759,7 +791,7 @@ class WaymoModule(pl.LightningModule):
         # static_features = torch.cat(
         #     [batch.x[:, 10, self.out_features :], batch.type], dim=1
         # )
-        static_features = batch.x[:, 10, self.out_features :]
+        static_features = batch.x[:, 10, self.out_features:]
         static_features = static_features.type_as(batch.x)
         edge_attr = None
 
@@ -772,7 +804,7 @@ class WaymoModule(pl.LightningModule):
             h_node = h_node.type_as(batch.x)
             h_edge = h_edge.type_as(batch.x)
             c_node, c_edge = None, None
-        else:
+        elif self.rnn_type == "LSTM":
             h_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
             h_edge = torch.zeros(
                 (self.model.num_layers, n_nodes, self.model.rnn_edge_size)
@@ -785,6 +817,8 @@ class WaymoModule(pl.LightningModule):
             )
             c_node = c_node.type_as(batch.x)
             c_edge = c_edge.type_as(batch.x)
+        else:
+            h_node, h_edge, c_node, c_edge = None, None, None, None
 
         ######################
         # History            #
@@ -831,8 +865,8 @@ class WaymoModule(pl.LightningModule):
             if self.normalise:
                 # Center node positions
                 x_t[:, self.pos_index] -= batch.loc[batch.batch][mask_t][
-                    :, self.pos_index
-                ]
+                                          :, self.pos_index
+                                          ]
                 # Scale all features (except yaws) with global scaler
                 x_t[:, self.norm_index] /= self.global_scale
                 if edge_attr is not None:
@@ -853,7 +887,7 @@ class WaymoModule(pl.LightningModule):
                 h_node[:, mask_t] = h_t[0]
                 h_edge[:, mask_t] = h_t[1]
 
-            else:  # LSTM
+            elif self.rnn_type == "LSTM":
                 hidden_in = (
                     (h_node[:, mask_t], c_node[:, mask_t]),
                     (h_edge[:, mask_t], c_edge[:, mask_t]),
@@ -869,6 +903,14 @@ class WaymoModule(pl.LightningModule):
                 c_node[:, mask_t] = h_node_out[1]
                 h_edge[:, mask_t] = h_edge_out[0]
                 c_edge[:, mask_t] = h_edge_out[1]
+            else:
+                delta_x = self.model(
+                    x=x_t,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    batch=batch.batch[mask_t],
+                )
+
 
             if t == 10:
                 vel = delta_x[:, [0, 1]]
@@ -951,13 +993,20 @@ class WaymoModule(pl.LightningModule):
                     batch=batch.batch,
                     hidden=(h_node, h_edge),
                 )
-            else:
+            elif self.rnn_type == "LSTM":
                 delta_x, ((h_node, c_node), (h_edge, c_edge)) = self.model(
                     x=x_t,
                     edge_index=edge_index,
                     edge_attr=edge_attr,
                     batch=batch.batch,
                     hidden=((h_node, c_node), (h_edge, c_edge)),
+                )
+            else:
+                delta_x = self.model(
+                    x=x_t,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    batch=batch.batch,
                 )
 
             vel = delta_x[:, [0, 1]]
@@ -1021,7 +1070,7 @@ class WaymoModule(pl.LightningModule):
 
         return loss
 
-    def predict_step(self, batch, batch_idx=None, prediction_horizon: int = 91):
+    def predict_step(self, batch, batch_idx=None, prediction_horizon: int = 91, remove_edges: bool = False):
 
         ######################
         # Initialisation     #
@@ -1044,9 +1093,6 @@ class WaymoModule(pl.LightningModule):
         batch.tracks_to_predict = batch.tracks_to_predict[type_mask]
         batch.type = batch.type[type_mask]
 
-        # Reduction: Limit to x/y
-        batch.x = batch.x[:, :, self.node_indices]
-
         batch.x = batch.x[:, :prediction_horizon]
 
         # Update mask
@@ -1064,7 +1110,7 @@ class WaymoModule(pl.LightningModule):
         # static_features = torch.cat(
         #     [batch.x[:, 10, self.out_features :], batch.type], dim=1
         # )
-        static_features = batch.x[:, 10, self.out_features :]
+        static_features = batch.x[:, 10, self.out_features:]
         edge_attr = None
 
         # Initial hidden state
@@ -1076,7 +1122,7 @@ class WaymoModule(pl.LightningModule):
             h_node = h_node.type_as(batch.x)
             h_edge = h_edge.type_as(batch.x)
             c_node, c_edge = None, None
-        else:
+        elif self.rnn_type == "LSTM":
             h_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
             h_edge = torch.zeros(
                 (self.model.num_layers, n_nodes, self.model.rnn_edge_size)
@@ -1089,6 +1135,8 @@ class WaymoModule(pl.LightningModule):
             )
             c_node = c_node.type_as(batch.x)
             c_edge = c_edge.type_as(batch.x)
+        else:
+            h_node, h_edge, c_node, c_edge = None, None, None, None
 
         ######################
         # History            #
@@ -1107,7 +1155,7 @@ class WaymoModule(pl.LightningModule):
             # Construct edges
             edge_index = torch_geometric.nn.radius_graph(
                 x=x_t[:, :2],
-                r=self.min_dist,
+                r=self.min_dist if not remove_edges else 0.001,
                 batch=batch.batch[mask_t],
                 loop=self.self_loop,
                 max_num_neighbors=self.n_neighbours,
@@ -1134,8 +1182,8 @@ class WaymoModule(pl.LightningModule):
             if self.normalise:
                 # Center node positions
                 x_t[:, self.pos_index] -= batch.loc[batch.batch][mask_t][
-                    :, self.pos_index
-                ]
+                                          :, self.pos_index
+                                          ]
                 # Scale all features (except yaws) with global scaler
                 x_t[:, self.norm_index] /= self.global_scale
                 if edge_attr is not None:
@@ -1156,7 +1204,7 @@ class WaymoModule(pl.LightningModule):
                 h_node[:, mask_t] = h_t[0]
                 h_edge[:, mask_t] = h_t[1]
 
-            else:  # LSTM
+            elif self.rnn_type == "LSTM":
                 hidden_in = (
                     (h_node[:, mask_t], c_node[:, mask_t]),
                     (h_edge[:, mask_t], c_edge[:, mask_t]),
@@ -1172,6 +1220,13 @@ class WaymoModule(pl.LightningModule):
                 c_node[:, mask_t] = h_node_out[1]
                 h_edge[:, mask_t] = h_edge_out[0]
                 c_edge[:, mask_t] = h_edge_out[1]
+            else:
+                delta_x = self.model(
+                    x=x_t,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    batch=batch.batch[mask_t],
+                )
 
             vel = delta_x[:, self.pos_index]
             pos = batch.x[mask_t, t][:, self.pos_index] + 0.1 * vel
@@ -1200,13 +1255,13 @@ class WaymoModule(pl.LightningModule):
             # Construct edges
             edge_index = torch_geometric.nn.radius_graph(
                 x=x_t[:, :2],
-                r=self.min_dist,
+                r=self.min_dist if not remove_edges else 0.001,
                 batch=batch.batch,
                 loop=self.self_loop,
                 max_num_neighbors=self.n_neighbours,
                 flow="source_to_target",
             )
-
+            
             # Remove duplicates and sort
             edge_index = torch_geometric.utils.coalesce(
                 edge_index, num_nodes=x_t.shape[0]
@@ -1242,13 +1297,20 @@ class WaymoModule(pl.LightningModule):
                     batch=batch.batch,
                     hidden=(h_node, h_edge),
                 )
-            else:
+            elif self.rnn_type == "LSTM":
                 delta_x, ((h_node, c_node), (h_edge, c_edge)) = self.model(
                     x=x_t,
                     edge_index=edge_index,
                     edge_attr=edge_attr,
                     batch=batch.batch,
                     hidden=((h_node, c_node), (h_edge, c_edge)),
+                )
+            else:
+                delta_x = self.model(
+                    x=x_t,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    batch=batch.batch,
                 )
 
             vel = delta_x[:, self.pos_index]
@@ -1271,26 +1333,26 @@ class WaymoModule(pl.LightningModule):
 
 class WaymoLocalModule(pl.LightningModule):
     def __init__(
-        self,
-        model_type: Union[None, str],
-        model_dict: Union[None, dict],
-        lr: float = 1e-4,
-        weight_decay: float = 0.0,
-        noise: Union[None, float] = None,
-        teacher_forcing_ratio: float = 0.0,
-        min_dist: int = 0,
-        n_neighbours: int = 30,
-        edge_weight: bool = False,
-        self_loop: bool = False,
-        out_features: int = 6,
-        node_features: int = 9,
-        edge_features: int = 1,
-        normalise: bool = True,
-        training_horizon: int = 90,
-        edge_dropout: float = 0,
-        prediction_horizon: int = 91,
-        local_map_resolution: int = 40,
-        map_channels: int = 8,
+            self,
+            model_type: Union[None, str],
+            model_dict: Union[None, dict],
+            lr: float = 1e-4,
+            weight_decay: float = 0.0,
+            noise: Union[None, float] = None,
+            teacher_forcing_ratio: float = 0.0,
+            min_dist: int = 0,
+            n_neighbours: int = 30,
+            edge_weight: bool = False,
+            self_loop: bool = False,
+            out_features: int = 6,
+            node_features: int = 9,
+            edge_features: int = 1,
+            normalise: bool = True,
+            training_horizon: int = 90,
+            edge_dropout: float = 0,
+            prediction_horizon: int = 91,
+            local_map_resolution: int = 40,
+            map_channels: int = 8,
     ):
         super().__init__()
         # Training metrics
@@ -1386,7 +1448,7 @@ class WaymoLocalModule(pl.LightningModule):
         # static_features = torch.cat(
         #     [batch.x[:, 10, self.out_features :], batch.type], dim=1
         # )
-        static_features = batch.x[:, 10, self.out_features :]
+        static_features = batch.x[:, 10, self.out_features:]
         static_features = static_features.type_as(batch.x)
         edge_attr = None
         # Extract dimensions and allocate predictions
@@ -1395,7 +1457,7 @@ class WaymoLocalModule(pl.LightningModule):
         y_predictions = y_predictions.type_as(batch.x)
 
         # Tensor of position and velocity targets
-        y_target = batch.x[:, 1 : (self.training_horizon + 1), : self.out_featuers]
+        y_target = batch.x[:, 1: (self.training_horizon + 1), : self.out_features]
         y_target = y_target.type_as(batch.x)
 
         assert y_target.shape == y_predictions.shape
@@ -1461,7 +1523,7 @@ class WaymoLocalModule(pl.LightningModule):
                 map_ranges[i, 2], map_ranges[i, 3], 150 * 2 + 1
             )
 
-        ######################
+            ######################
         # History            #
         ######################
 
@@ -1525,47 +1587,47 @@ class WaymoLocalModule(pl.LightningModule):
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
-                torch.argmax(
-                    (interval_x[batch.batch[mask_t]] > x_t[:, 0].unsqueeze(-1)).float(),
-                    dim=1,
-                ).type(torch.LongTensor)
-                - 1
+                    torch.argmax(
+                        (interval_x[batch.batch[mask_t]] > x_t[:, 0].unsqueeze(-1)).float(),
+                        dim=1,
+                    ).type(torch.LongTensor)
+                    - 1
             )
             center_pixel_y = (
-                torch.argmax(
-                    (interval_y[batch.batch[mask_t]] > x_t[:, 1].unsqueeze(-1)).float(),
-                    dim=1,
-                ).type(torch.LongTensor)
-                - 2
+                    torch.argmax(
+                        (interval_y[batch.batch[mask_t]] > x_t[:, 1].unsqueeze(-1)).float(),
+                        dim=1,
+                    ).type(torch.LongTensor)
+                    - 2
             )
 
             # Compute pixel boundaries
             idx_x_low = center_pixel_y + self.local_map_resolution_half
             idx_x_high = (
-                center_pixel_y
-                + self.local_map_resolution_half
-                + self.local_map_resolution
-                + 1
+                    center_pixel_y
+                    + self.local_map_resolution_half
+                    + self.local_map_resolution
+                    + 1
             )
             idx_y_low = center_pixel_x + self.local_map_resolution_half
             idx_y_high = (
-                center_pixel_x
-                + self.local_map_resolution_half
-                + self.local_map_resolution
-                + 1
+                    center_pixel_x
+                    + self.local_map_resolution_half
+                    + self.local_map_resolution
+                    + 1
             )
 
             # Extract local maps for all agents in current time-step
             for node_idx, graph_idx in enumerate(batch.batch[mask_t]):
                 if not (
-                    center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2
+                        center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2
                 ):
                     u_local[node_idx] = batch.u[
-                        graph_idx,
-                        :,
-                        idx_x_low[node_idx] : idx_x_high[node_idx],
-                        idx_y_low[node_idx] : idx_y_high[node_idx],
-                    ]
+                                        graph_idx,
+                                        :,
+                                        idx_x_low[node_idx]: idx_x_high[node_idx],
+                                        idx_y_low[node_idx]: idx_y_high[node_idx],
+                                        ]
 
             # Perform map encoding
             u = self.map_encoder(u_local)
@@ -1578,8 +1640,8 @@ class WaymoLocalModule(pl.LightningModule):
             if self.normalise:
                 # Center node positions
                 x_t[:, self.pos_index] -= batch.loc[batch.batch][mask_t][
-                    :, self.pos_index
-                ]
+                                          :, self.pos_index
+                                          ]
                 # Scale all features (except yaws) with global scaler
                 x_t[:, self.norm_index] /= self.global_scale
                 if edge_attr is not None:
@@ -1688,47 +1750,47 @@ class WaymoLocalModule(pl.LightningModule):
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
-                torch.argmax(
-                    (interval_x[batch.batch[mask_t]] > x_t[:, 0].unsqueeze(-1)).float(),
-                    dim=1,
-                ).type(torch.LongTensor)
-                - 1
+                    torch.argmax(
+                        (interval_x[batch.batch[mask_t]] > x_t[:, 0].unsqueeze(-1)).float(),
+                        dim=1,
+                    ).type(torch.LongTensor)
+                    - 1
             )
             center_pixel_y = (
-                torch.argmax(
-                    (interval_y[batch.batch[mask_t]] > x_t[:, 1].unsqueeze(-1)).float(),
-                    dim=1,
-                ).type(torch.LongTensor)
-                - 2
+                    torch.argmax(
+                        (interval_y[batch.batch[mask_t]] > x_t[:, 1].unsqueeze(-1)).float(),
+                        dim=1,
+                    ).type(torch.LongTensor)
+                    - 2
             )
 
             # Compute pixel boundaries
             idx_x_low = center_pixel_y + self.local_map_resolution_half
             idx_x_high = (
-                center_pixel_y
-                + self.local_map_resolution_half
-                + self.local_map_resolution
-                + 1
+                    center_pixel_y
+                    + self.local_map_resolution_half
+                    + self.local_map_resolution
+                    + 1
             )
             idx_y_low = center_pixel_x + self.local_map_resolution_half
             idx_y_high = (
-                center_pixel_x
-                + self.local_map_resolution_half
-                + self.local_map_resolution
-                + 1
+                    center_pixel_x
+                    + self.local_map_resolution_half
+                    + self.local_map_resolution
+                    + 1
             )
 
             # Extract local maps for all agents in current time-step
             for node_idx, graph_idx in enumerate(batch.batch[mask_t]):
                 if not (
-                    center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2
+                        center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2
                 ):
                     u_local[node_idx] = batch.u[
-                        graph_idx,
-                        :,
-                        idx_x_low[node_idx] : idx_x_high[node_idx],
-                        idx_y_low[node_idx] : idx_y_high[node_idx],
-                    ]
+                                        graph_idx,
+                                        :,
+                                        idx_x_low[node_idx]: idx_x_high[node_idx],
+                                        idx_y_low[node_idx]: idx_y_high[node_idx],
+                                        ]
 
             # Perform map encoding
             u = self.map_encoder(u_local)
@@ -1776,8 +1838,8 @@ class WaymoLocalModule(pl.LightningModule):
             y_predictions[:, t, :] = x_t[:, : self.out_features]
 
         # Determine valid input and target pairs. Compute loss mask as their intersection
-        loss_mask_target = mask[:, 1 : (self.training_horizon + 1)]
-        loss_mask_input = mask[:, 0 : self.training_horizon]
+        loss_mask_target = mask[:, 1: (self.training_horizon + 1)]
+        loss_mask_input = mask[:, 0: self.training_horizon]
         loss_mask = torch.logical_and(loss_mask_input, loss_mask_target)
 
         # Determine valid end-points
@@ -1878,7 +1940,7 @@ class WaymoLocalModule(pl.LightningModule):
         # static_features = torch.cat(
         #     [batch.x[:, 10, self.out_features :], batch.type], dim=1
         # )
-        static_features = batch.x[:, 10, self.out_features :]
+        static_features = batch.x[:, 10, self.out_features:]
         static_features = static_features.type_as(batch.x)
         edge_attr = None
 
@@ -1995,47 +2057,47 @@ class WaymoLocalModule(pl.LightningModule):
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
-                torch.argmax(
-                    (interval_x[batch.batch[mask_t]] > x_t[:, 0].unsqueeze(-1)).float(),
-                    dim=1,
-                ).type(torch.LongTensor)
-                - 1
+                    torch.argmax(
+                        (interval_x[batch.batch[mask_t]] > x_t[:, 0].unsqueeze(-1)).float(),
+                        dim=1,
+                    ).type(torch.LongTensor)
+                    - 1
             )
             center_pixel_y = (
-                torch.argmax(
-                    (interval_y[batch.batch[mask_t]] > x_t[:, 1].unsqueeze(-1)).float(),
-                    dim=1,
-                ).type(torch.LongTensor)
-                - 2
+                    torch.argmax(
+                        (interval_y[batch.batch[mask_t]] > x_t[:, 1].unsqueeze(-1)).float(),
+                        dim=1,
+                    ).type(torch.LongTensor)
+                    - 2
             )
 
             # Compute pixel boundaries
             idx_x_low = center_pixel_y + self.local_map_resolution_half
             idx_x_high = (
-                center_pixel_y
-                + self.local_map_resolution_half
-                + self.local_map_resolution
-                + 1
+                    center_pixel_y
+                    + self.local_map_resolution_half
+                    + self.local_map_resolution
+                    + 1
             )
             idx_y_low = center_pixel_x + self.local_map_resolution_half
             idx_y_high = (
-                center_pixel_x
-                + self.local_map_resolution_half
-                + self.local_map_resolution
-                + 1
+                    center_pixel_x
+                    + self.local_map_resolution_half
+                    + self.local_map_resolution
+                    + 1
             )
 
             # Extract local maps for all agents in current time-step
             for node_idx, graph_idx in enumerate(batch.batch[mask_t]):
                 if not (
-                    center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2
+                        center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2
                 ):
                     u_local[node_idx] = batch.u[
-                        graph_idx,
-                        :,
-                        idx_x_low[node_idx] : idx_x_high[node_idx],
-                        idx_y_low[node_idx] : idx_y_high[node_idx],
-                    ]
+                                        graph_idx,
+                                        :,
+                                        idx_x_low[node_idx]: idx_x_high[node_idx],
+                                        idx_y_low[node_idx]: idx_y_high[node_idx],
+                                        ]
 
             # Perform map encoding
             u = self.map_encoder(u_local[mask_t])
@@ -2048,8 +2110,8 @@ class WaymoLocalModule(pl.LightningModule):
             if self.normalise:
                 # Center node positions
                 x_t[:, self.pos_index] -= batch.loc[batch.batch][mask_t][
-                    :, self.pos_index
-                ]
+                                          :, self.pos_index
+                                          ]
                 # Scale all features (except yaws) with global scaler
                 x_t[:, self.norm_index] /= self.global_scale
                 if edge_attr is not None:
@@ -2153,47 +2215,47 @@ class WaymoLocalModule(pl.LightningModule):
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
-                torch.argmax(
-                    (interval_x[batch.batch[mask_t]] > x_t[:, 0].unsqueeze(-1)).float(),
-                    dim=1,
-                ).type(torch.LongTensor)
-                - 1
+                    torch.argmax(
+                        (interval_x[batch.batch[mask_t]] > x_t[:, 0].unsqueeze(-1)).float(),
+                        dim=1,
+                    ).type(torch.LongTensor)
+                    - 1
             )
             center_pixel_y = (
-                torch.argmax(
-                    (interval_y[batch.batch[mask_t]] > x_t[:, 1].unsqueeze(-1)).float(),
-                    dim=1,
-                ).type(torch.LongTensor)
-                - 2
+                    torch.argmax(
+                        (interval_y[batch.batch[mask_t]] > x_t[:, 1].unsqueeze(-1)).float(),
+                        dim=1,
+                    ).type(torch.LongTensor)
+                    - 2
             )
 
             # Compute pixel boundaries
             idx_x_low = center_pixel_y + self.local_map_resolution_half
             idx_x_high = (
-                center_pixel_y
-                + self.local_map_resolution_half
-                + self.local_map_resolution
-                + 1
+                    center_pixel_y
+                    + self.local_map_resolution_half
+                    + self.local_map_resolution
+                    + 1
             )
             idx_y_low = center_pixel_x + self.local_map_resolution_half
             idx_y_high = (
-                center_pixel_x
-                + self.local_map_resolution_half
-                + self.local_map_resolution
-                + 1
+                    center_pixel_x
+                    + self.local_map_resolution_half
+                    + self.local_map_resolution
+                    + 1
             )
 
             # Extract local maps for all agents in current time-step
             for node_idx, graph_idx in enumerate(batch.batch[mask_t]):
                 if not (
-                    center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2
+                        center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2
                 ):
                     u_local[node_idx] = batch.u[
-                        graph_idx,
-                        :,
-                        idx_x_low[node_idx] : idx_x_high[node_idx],
-                        idx_y_low[node_idx] : idx_y_high[node_idx],
-                    ]
+                                        graph_idx,
+                                        :,
+                                        idx_x_low[node_idx]: idx_x_high[node_idx],
+                                        idx_y_low[node_idx]: idx_y_high[node_idx],
+                                        ]
 
             # Perform map encoding
             u = self.map_encoder(u_local)
@@ -2333,7 +2395,7 @@ class WaymoLocalModule(pl.LightningModule):
         # static_features = torch.cat(
         #     [batch.x[:, 10, self.out_features :], batch.type], dim=1
         # )
-        static_features = batch.x[:, 10, self.out_features :]
+        static_features = batch.x[:, 10, self.out_features:]
         static_features = static_features.type_as(batch.x)
         edge_attr = None
 
@@ -2450,47 +2512,47 @@ class WaymoLocalModule(pl.LightningModule):
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
-                torch.argmax(
-                    (interval_x[batch.batch[mask_t]] > x_t[:, 0].unsqueeze(-1)).float(),
-                    dim=1,
-                ).type(torch.LongTensor)
-                - 1
+                    torch.argmax(
+                        (interval_x[batch.batch[mask_t]] > x_t[:, 0].unsqueeze(-1)).float(),
+                        dim=1,
+                    ).type(torch.LongTensor)
+                    - 1
             )
             center_pixel_y = (
-                torch.argmax(
-                    (interval_y[batch.batch[mask_t]] > x_t[:, 1].unsqueeze(-1)).float(),
-                    dim=1,
-                ).type(torch.LongTensor)
-                - 2
+                    torch.argmax(
+                        (interval_y[batch.batch[mask_t]] > x_t[:, 1].unsqueeze(-1)).float(),
+                        dim=1,
+                    ).type(torch.LongTensor)
+                    - 2
             )
 
             # Compute pixel boundaries
             idx_x_low = center_pixel_y + self.local_map_resolution_half
             idx_x_high = (
-                center_pixel_y
-                + self.local_map_resolution_half
-                + self.local_map_resolution
-                + 1
+                    center_pixel_y
+                    + self.local_map_resolution_half
+                    + self.local_map_resolution
+                    + 1
             )
             idx_y_low = center_pixel_x + self.local_map_resolution_half
             idx_y_high = (
-                center_pixel_x
-                + self.local_map_resolution_half
-                + self.local_map_resolution
-                + 1
+                    center_pixel_x
+                    + self.local_map_resolution_half
+                    + self.local_map_resolution
+                    + 1
             )
 
             # Extract local maps for all agents in current time-step
             for node_idx, graph_idx in enumerate(batch.batch[mask_t]):
                 if not (
-                    center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2
+                        center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2
                 ):
                     u_local[node_idx] = batch.u[
-                        graph_idx,
-                        :,
-                        idx_x_low[node_idx] : idx_x_high[node_idx],
-                        idx_y_low[node_idx] : idx_y_high[node_idx],
-                    ]
+                                        graph_idx,
+                                        :,
+                                        idx_x_low[node_idx]: idx_x_high[node_idx],
+                                        idx_y_low[node_idx]: idx_y_high[node_idx],
+                                        ]
 
             # Perform map encoding
             u = self.map_encoder(u_local[mask_t])
@@ -2503,8 +2565,8 @@ class WaymoLocalModule(pl.LightningModule):
             if self.normalise:
                 # Center node positions
                 x_t[:, self.pos_index] -= batch.loc[batch.batch][mask_t][
-                    :, self.pos_index
-                ]
+                                          :, self.pos_index
+                                          ]
                 # Scale all features (except yaws) with global scaler
                 x_t[:, self.norm_index] /= self.global_scale
                 if edge_attr is not None:
@@ -2608,47 +2670,47 @@ class WaymoLocalModule(pl.LightningModule):
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
-                torch.argmax(
-                    (interval_x[batch.batch[mask_t]] > x_t[:, 0].unsqueeze(-1)).float(),
-                    dim=1,
-                ).type(torch.LongTensor)
-                - 1
+                    torch.argmax(
+                        (interval_x[batch.batch[mask_t]] > x_t[:, 0].unsqueeze(-1)).float(),
+                        dim=1,
+                    ).type(torch.LongTensor)
+                    - 1
             )
             center_pixel_y = (
-                torch.argmax(
-                    (interval_y[batch.batch[mask_t]] > x_t[:, 1].unsqueeze(-1)).float(),
-                    dim=1,
-                ).type(torch.LongTensor)
-                - 2
+                    torch.argmax(
+                        (interval_y[batch.batch[mask_t]] > x_t[:, 1].unsqueeze(-1)).float(),
+                        dim=1,
+                    ).type(torch.LongTensor)
+                    - 2
             )
 
             # Compute pixel boundaries
             idx_x_low = center_pixel_y + self.local_map_resolution_half
             idx_x_high = (
-                center_pixel_y
-                + self.local_map_resolution_half
-                + self.local_map_resolution
-                + 1
+                    center_pixel_y
+                    + self.local_map_resolution_half
+                    + self.local_map_resolution
+                    + 1
             )
             idx_y_low = center_pixel_x + self.local_map_resolution_half
             idx_y_high = (
-                center_pixel_x
-                + self.local_map_resolution_half
-                + self.local_map_resolution
-                + 1
+                    center_pixel_x
+                    + self.local_map_resolution_half
+                    + self.local_map_resolution
+                    + 1
             )
 
             # Extract local maps for all agents in current time-step
             for node_idx, graph_idx in enumerate(batch.batch[mask_t]):
                 if not (
-                    center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2
+                        center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2
                 ):
                     u_local[node_idx] = batch.u[
-                        graph_idx,
-                        :,
-                        idx_x_low[node_idx] : idx_x_high[node_idx],
-                        idx_y_low[node_idx] : idx_y_high[node_idx],
-                    ]
+                                        graph_idx,
+                                        :,
+                                        idx_x_low[node_idx]: idx_x_high[node_idx],
+                                        idx_y_low[node_idx]: idx_y_high[node_idx],
+                                        ]
 
             # Perform map encoding
             u = self.map_encoder(u_local)
@@ -2788,7 +2850,7 @@ class WaymoLocalModule(pl.LightningModule):
         # static_features = torch.cat(
         #     [batch.x[:, 10, self.out_features :], batch.type], dim=1
         # )
-        static_features = batch.x[:, 10, self.out_features :]
+        static_features = batch.x[:, 10, self.out_features:]
         edge_attr = None
 
         # Initial hidden state
@@ -2903,47 +2965,47 @@ class WaymoLocalModule(pl.LightningModule):
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
-                torch.argmax(
-                    (interval_x[batch.batch[mask_t]] > x_t[:, 0].unsqueeze(-1)).float(),
-                    dim=1,
-                ).type(torch.LongTensor)
-                - 1
+                    torch.argmax(
+                        (interval_x[batch.batch[mask_t]] > x_t[:, 0].unsqueeze(-1)).float(),
+                        dim=1,
+                    ).type(torch.LongTensor)
+                    - 1
             )
             center_pixel_y = (
-                torch.argmax(
-                    (interval_y[batch.batch[mask_t]] > x_t[:, 1].unsqueeze(-1)).float(),
-                    dim=1,
-                ).type(torch.LongTensor)
-                - 2
+                    torch.argmax(
+                        (interval_y[batch.batch[mask_t]] > x_t[:, 1].unsqueeze(-1)).float(),
+                        dim=1,
+                    ).type(torch.LongTensor)
+                    - 2
             )
 
             # Compute pixel boundaries
             idx_x_low = center_pixel_y + self.local_map_resolution_half
             idx_x_high = (
-                center_pixel_y
-                + self.local_map_resolution_half
-                + self.local_map_resolution
-                + 1
+                    center_pixel_y
+                    + self.local_map_resolution_half
+                    + self.local_map_resolution
+                    + 1
             )
             idx_y_low = center_pixel_x + self.local_map_resolution_half
             idx_y_high = (
-                center_pixel_x
-                + self.local_map_resolution_half
-                + self.local_map_resolution
-                + 1
+                    center_pixel_x
+                    + self.local_map_resolution_half
+                    + self.local_map_resolution
+                    + 1
             )
 
             # Extract local maps for all agents in current time-step
             for node_idx, graph_idx in enumerate(batch.batch[mask_t]):
                 if not (
-                    center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2
+                        center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2
                 ):
                     u_local[node_idx] = batch.u[
-                        graph_idx,
-                        :,
-                        idx_x_low[node_idx] : idx_x_high[node_idx],
-                        idx_y_low[node_idx] : idx_y_high[node_idx],
-                    ]
+                                        graph_idx,
+                                        :,
+                                        idx_x_low[node_idx]: idx_x_high[node_idx],
+                                        idx_y_low[node_idx]: idx_y_high[node_idx],
+                                        ]
 
             # Perform map encoding
             u = self.map_encoder(u_local[mask_t])
@@ -2956,8 +3018,8 @@ class WaymoLocalModule(pl.LightningModule):
             if self.normalise:
                 # Center node positions
                 x_t[:, self.pos_index] -= batch.loc[batch.batch][mask_t][
-                    :, self.pos_index
-                ]
+                                          :, self.pos_index
+                                          ]
                 # Scale all features (except yaws) with global scaler
                 x_t[:, self.norm_index] /= self.global_scale
                 if edge_attr is not None:
@@ -3049,47 +3111,47 @@ class WaymoLocalModule(pl.LightningModule):
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
-                torch.argmax(
-                    (interval_x[batch.batch[mask_t]] > x_t[:, 0].unsqueeze(-1)).float(),
-                    dim=1,
-                ).type(torch.LongTensor)
-                - 1
+                    torch.argmax(
+                        (interval_x[batch.batch[mask_t]] > x_t[:, 0].unsqueeze(-1)).float(),
+                        dim=1,
+                    ).type(torch.LongTensor)
+                    - 1
             )
             center_pixel_y = (
-                torch.argmax(
-                    (interval_y[batch.batch[mask_t]] > x_t[:, 1].unsqueeze(-1)).float(),
-                    dim=1,
-                ).type(torch.LongTensor)
-                - 2
+                    torch.argmax(
+                        (interval_y[batch.batch[mask_t]] > x_t[:, 1].unsqueeze(-1)).float(),
+                        dim=1,
+                    ).type(torch.LongTensor)
+                    - 2
             )
 
             # Compute pixel boundaries
             idx_x_low = center_pixel_y + self.local_map_resolution_half
             idx_x_high = (
-                center_pixel_y
-                + self.local_map_resolution_half
-                + self.local_map_resolution
-                + 1
+                    center_pixel_y
+                    + self.local_map_resolution_half
+                    + self.local_map_resolution
+                    + 1
             )
             idx_y_low = center_pixel_x + self.local_map_resolution_half
             idx_y_high = (
-                center_pixel_x
-                + self.local_map_resolution_half
-                + self.local_map_resolution
-                + 1
+                    center_pixel_x
+                    + self.local_map_resolution_half
+                    + self.local_map_resolution
+                    + 1
             )
 
             # Extract local maps for all agents in current time-step
             for node_idx, graph_idx in enumerate(batch.batch[mask_t]):
                 if not (
-                    center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2
+                        center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2
                 ):
                     u_local[node_idx] = batch.u[
-                        graph_idx,
-                        :,
-                        idx_x_low[node_idx] : idx_x_high[node_idx],
-                        idx_y_low[node_idx] : idx_y_high[node_idx],
-                    ]
+                                        graph_idx,
+                                        :,
+                                        idx_x_low[node_idx]: idx_x_high[node_idx],
+                                        idx_y_low[node_idx]: idx_y_high[node_idx],
+                                        ]
 
             # Perform map encoding
             u = self.map_encoder(u_local)
@@ -3148,27 +3210,27 @@ class WaymoLocalModule(pl.LightningModule):
 
 class WaymoLocalUAModule(pl.LightningModule):
     def __init__(
-        self,
-        model_type: Union[None, str],
-        model_dict: Union[None, dict],
-        lr: float = 1e-4,
-        weight_decay: float = 0.0,
-        noise: Union[None, float] = None,
-        teacher_forcing_ratio: float = 0.0,
-        min_dist: int = 0,
-        n_neighbours: int = 30,
-        edge_weight: bool = False,
-        self_loop: bool = False,
-        out_features: int = 6,
-        node_features: int = 9,
-        edge_features: int = 1,
-        normalise: bool = True,
-        training_horizon: int = 90,
-        edge_dropout: float = 0,
-        prediction_horizon: int = 91,
-        local_map_resolution: int = 40,
-        map_channels: int = 8,
-        types: bool = False
+            self,
+            model_type: Union[None, str],
+            model_dict: Union[None, dict],
+            lr: float = 1e-4,
+            weight_decay: float = 0.0,
+            noise: Union[None, float] = None,
+            teacher_forcing_ratio: float = 0.0,
+            min_dist: int = 0,
+            n_neighbours: int = 30,
+            edge_weight: bool = False,
+            self_loop: bool = False,
+            out_features: int = 6,
+            node_features: int = 9,
+            edge_features: int = 1,
+            normalise: bool = True,
+            training_horizon: int = 90,
+            edge_dropout: float = 0,
+            prediction_horizon: int = 91,
+            local_map_resolution: int = 40,
+            map_channels: int = 8,
+            types: bool = False
     ):
         super().__init__()
         # Training metrics
@@ -3264,7 +3326,7 @@ class WaymoLocalUAModule(pl.LightningModule):
         batch.x = batch.x[:, :, :-1]
         if self.types:
             static_features = torch.cat(
-                [batch.x[:, 10, self.out_features :], batch.type], dim=1
+                [batch.x[:, 10, self.out_features:], batch.type], dim=1
             )
         else:
             static_features = batch.x[:, 10, 4:]
@@ -3276,7 +3338,7 @@ class WaymoLocalUAModule(pl.LightningModule):
         y_predictions = y_predictions.type_as(batch.x)
 
         # Tensor of position and velocity targets
-        y_target = batch.x[:, 1 : (self.training_horizon + 1), :4]
+        y_target = batch.x[:, 1: (self.training_horizon + 1), :4]
         y_target = y_target.type_as(batch.x)
 
         likelihoods = torch.zeros((n_nodes, self.training_horizon))
@@ -3413,47 +3475,47 @@ class WaymoLocalUAModule(pl.LightningModule):
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
-                torch.argmax(
-                    (interval_x[batch.batch[mask_t]] > x_t[:, 0].unsqueeze(-1)).float(),
-                    dim=1,
-                ).type(torch.LongTensor)
-                - 1
+                    torch.argmax(
+                        (interval_x[batch.batch[mask_t]] > x_t[:, 0].unsqueeze(-1)).float(),
+                        dim=1,
+                    ).type(torch.LongTensor)
+                    - 1
             )
             center_pixel_y = (
-                torch.argmax(
-                    (interval_y[batch.batch[mask_t]] > x_t[:, 1].unsqueeze(-1)).float(),
-                    dim=1,
-                ).type(torch.LongTensor)
-                - 2
+                    torch.argmax(
+                        (interval_y[batch.batch[mask_t]] > x_t[:, 1].unsqueeze(-1)).float(),
+                        dim=1,
+                    ).type(torch.LongTensor)
+                    - 2
             )
 
             # Compute pixel boundaries
             idx_x_low = center_pixel_y + self.local_map_resolution_half
             idx_x_high = (
-                center_pixel_y
-                + self.local_map_resolution_half
-                + self.local_map_resolution
-                + 1
+                    center_pixel_y
+                    + self.local_map_resolution_half
+                    + self.local_map_resolution
+                    + 1
             )
             idx_y_low = center_pixel_x + self.local_map_resolution_half
             idx_y_high = (
-                center_pixel_x
-                + self.local_map_resolution_half
-                + self.local_map_resolution
-                + 1
+                    center_pixel_x
+                    + self.local_map_resolution_half
+                    + self.local_map_resolution
+                    + 1
             )
 
             # Extract local maps for all agents in current time-step
             for node_idx, graph_idx in enumerate(batch.batch[mask_t]):
                 if not (
-                    center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2
+                        center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2
                 ):
                     u_local[node_idx] = batch.u[
-                        graph_idx,
-                        :,
-                        idx_x_low[node_idx] : idx_x_high[node_idx],
-                        idx_y_low[node_idx] : idx_y_high[node_idx],
-                    ]
+                                        graph_idx,
+                                        :,
+                                        idx_x_low[node_idx]: idx_x_high[node_idx],
+                                        idx_y_low[node_idx]: idx_y_high[node_idx],
+                                        ]
 
             # Perform map encoding
             u = self.map_encoder(u_local)
@@ -3466,8 +3528,8 @@ class WaymoLocalUAModule(pl.LightningModule):
             if self.normalise:
                 # Center node positions
                 x_t[:, self.pos_index] -= batch.loc[batch.batch][mask_t][
-                    :, self.pos_index
-                ]
+                                          :, self.pos_index
+                                          ]
                 # Scale all features (except yaws) with global scaler
                 x_t[:, self.norm_index] /= self.global_scale
                 if edge_attr is not None:
@@ -3593,47 +3655,47 @@ class WaymoLocalUAModule(pl.LightningModule):
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
-                torch.argmax(
-                    (interval_x[batch.batch] > x_t[:, 0].unsqueeze(-1)).float(),
-                    dim=1,
-                ).type(torch.LongTensor)
-                - 1
+                    torch.argmax(
+                        (interval_x[batch.batch] > x_t[:, 0].unsqueeze(-1)).float(),
+                        dim=1,
+                    ).type(torch.LongTensor)
+                    - 1
             )
             center_pixel_y = (
-                torch.argmax(
-                    (interval_y[batch.batch] > x_t[:, 1].unsqueeze(-1)).float(),
-                    dim=1,
-                ).type(torch.LongTensor)
-                - 2
+                    torch.argmax(
+                        (interval_y[batch.batch] > x_t[:, 1].unsqueeze(-1)).float(),
+                        dim=1,
+                    ).type(torch.LongTensor)
+                    - 2
             )
 
             # Compute pixel boundaries
             idx_x_low = center_pixel_y + self.local_map_resolution_half
             idx_x_high = (
-                center_pixel_y
-                + self.local_map_resolution_half
-                + self.local_map_resolution
-                + 1
+                    center_pixel_y
+                    + self.local_map_resolution_half
+                    + self.local_map_resolution
+                    + 1
             )
             idx_y_low = center_pixel_x + self.local_map_resolution_half
             idx_y_high = (
-                center_pixel_x
-                + self.local_map_resolution_half
-                + self.local_map_resolution
-                + 1
+                    center_pixel_x
+                    + self.local_map_resolution_half
+                    + self.local_map_resolution
+                    + 1
             )
 
             # Extract local maps for all agents in current time-step
             for node_idx, graph_idx in enumerate(batch.batch):
                 if not (
-                    center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2
+                        center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2
                 ):
                     u_local[node_idx] = batch.u[
-                        graph_idx,
-                        :,
-                        idx_x_low[node_idx] : idx_x_high[node_idx],
-                        idx_y_low[node_idx] : idx_y_high[node_idx],
-                    ]
+                                        graph_idx,
+                                        :,
+                                        idx_x_low[node_idx]: idx_x_high[node_idx],
+                                        idx_y_low[node_idx]: idx_y_high[node_idx],
+                                        ]
 
             # Perform map encoding
             u = self.map_encoder(u_local)
@@ -3698,8 +3760,8 @@ class WaymoLocalUAModule(pl.LightningModule):
             y_predictions[:, t, 2:] = delta_x
 
         # Determine valid input and target pairs. Compute loss mask as their intersection
-        loss_mask_target = mask[:, 1 : (self.training_horizon + 1)]
-        loss_mask_input = mask[:, 0 : self.training_horizon]
+        loss_mask_target = mask[:, 1: (self.training_horizon + 1)]
+        loss_mask_input = mask[:, 0: self.training_horizon]
         loss_mask = torch.logical_and(loss_mask_input, loss_mask_target)
 
         # Determine valid end-points
@@ -3812,7 +3874,7 @@ class WaymoLocalUAModule(pl.LightningModule):
         batch.x = batch.x[:, :, :-1]
         if self.types:
             static_features = torch.cat(
-                [batch.x[:, 10, self.out_features :], batch.type], dim=1
+                [batch.x[:, 10, self.out_features:], batch.type], dim=1
             )
         else:
             static_features = batch.x[:, 10, 4:]
@@ -3942,47 +4004,47 @@ class WaymoLocalUAModule(pl.LightningModule):
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
-                torch.argmax(
-                    (interval_x[batch.batch[mask_t]] > x_t[:, 0].unsqueeze(-1)).float(),
-                    dim=1,
-                ).type(torch.LongTensor)
-                - 1
+                    torch.argmax(
+                        (interval_x[batch.batch[mask_t]] > x_t[:, 0].unsqueeze(-1)).float(),
+                        dim=1,
+                    ).type(torch.LongTensor)
+                    - 1
             )
             center_pixel_y = (
-                torch.argmax(
-                    (interval_y[batch.batch[mask_t]] > x_t[:, 1].unsqueeze(-1)).float(),
-                    dim=1,
-                ).type(torch.LongTensor)
-                - 2
+                    torch.argmax(
+                        (interval_y[batch.batch[mask_t]] > x_t[:, 1].unsqueeze(-1)).float(),
+                        dim=1,
+                    ).type(torch.LongTensor)
+                    - 2
             )
 
             # Compute pixel boundaries
             idx_x_low = center_pixel_y + self.local_map_resolution_half
             idx_x_high = (
-                center_pixel_y
-                + self.local_map_resolution_half
-                + self.local_map_resolution
-                + 1
+                    center_pixel_y
+                    + self.local_map_resolution_half
+                    + self.local_map_resolution
+                    + 1
             )
             idx_y_low = center_pixel_x + self.local_map_resolution_half
             idx_y_high = (
-                center_pixel_x
-                + self.local_map_resolution_half
-                + self.local_map_resolution
-                + 1
+                    center_pixel_x
+                    + self.local_map_resolution_half
+                    + self.local_map_resolution
+                    + 1
             )
 
             # Extract local maps for all agents in current time-step
             for node_idx, graph_idx in enumerate(batch.batch[mask_t]):
                 if not (
-                    center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2
+                        center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2
                 ):
                     u_local[node_idx] = batch.u[
-                        graph_idx,
-                        :,
-                        idx_x_low[node_idx] : idx_x_high[node_idx],
-                        idx_y_low[node_idx] : idx_y_high[node_idx],
-                    ]
+                                        graph_idx,
+                                        :,
+                                        idx_x_low[node_idx]: idx_x_high[node_idx],
+                                        idx_y_low[node_idx]: idx_y_high[node_idx],
+                                        ]
 
             # Perform map encoding
             u = self.map_encoder(u_local[mask_t])
@@ -3995,8 +4057,8 @@ class WaymoLocalUAModule(pl.LightningModule):
             if self.normalise:
                 # Center node positions
                 x_t[:, self.pos_index] -= batch.loc[batch.batch][mask_t][
-                    :, self.pos_index
-                ]
+                                          :, self.pos_index
+                                          ]
                 # Scale all features (except yaws) with global scaler
                 x_t[:, self.norm_index] /= self.global_scale
                 if edge_attr is not None:
@@ -4114,47 +4176,47 @@ class WaymoLocalUAModule(pl.LightningModule):
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
-                torch.argmax(
-                    (interval_x[batch.batch] > x_t[:, 0].unsqueeze(-1)).float(),
-                    dim=1,
-                ).type(torch.LongTensor)
-                - 1
+                    torch.argmax(
+                        (interval_x[batch.batch] > x_t[:, 0].unsqueeze(-1)).float(),
+                        dim=1,
+                    ).type(torch.LongTensor)
+                    - 1
             )
             center_pixel_y = (
-                torch.argmax(
-                    (interval_y[batch.batch] > x_t[:, 1].unsqueeze(-1)).float(),
-                    dim=1,
-                ).type(torch.LongTensor)
-                - 2
+                    torch.argmax(
+                        (interval_y[batch.batch] > x_t[:, 1].unsqueeze(-1)).float(),
+                        dim=1,
+                    ).type(torch.LongTensor)
+                    - 2
             )
 
             # Compute pixel boundaries
             idx_x_low = center_pixel_y + self.local_map_resolution_half
             idx_x_high = (
-                center_pixel_y
-                + self.local_map_resolution_half
-                + self.local_map_resolution
-                + 1
+                    center_pixel_y
+                    + self.local_map_resolution_half
+                    + self.local_map_resolution
+                    + 1
             )
             idx_y_low = center_pixel_x + self.local_map_resolution_half
             idx_y_high = (
-                center_pixel_x
-                + self.local_map_resolution_half
-                + self.local_map_resolution
-                + 1
+                    center_pixel_x
+                    + self.local_map_resolution_half
+                    + self.local_map_resolution
+                    + 1
             )
 
             # Extract local maps for all agents in current time-step
             for node_idx, graph_idx in enumerate(batch.batch):
                 if not (
-                    center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2
+                        center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2
                 ):
                     u_local[node_idx] = batch.u[
-                        graph_idx,
-                        :,
-                        idx_x_low[node_idx] : idx_x_high[node_idx],
-                        idx_y_low[node_idx] : idx_y_high[node_idx],
-                    ]
+                                        graph_idx,
+                                        :,
+                                        idx_x_low[node_idx]: idx_x_high[node_idx],
+                                        idx_y_low[node_idx]: idx_y_high[node_idx],
+                                        ]
 
             # Perform map encoding
             u = self.map_encoder(u_local)
@@ -4247,6 +4309,14 @@ class WaymoLocalUAModule(pl.LightningModule):
             y_target[:, :, [0, 1]][ade_ttp_mask],
         )
 
+        # Compute likelihoods over tracks_to_predict
+        mean_nllh_ttp = torch.mean(-likelihoods[ade_ttp_mask])
+        self.log(
+            "val_ttp_mean_nllh",
+            mean_nllh_ttp,
+            batch_size=ade_ttp_mask.sum().item(),
+        )
+
         # Compute likelihoods of all agents at all times
         mean_nllh = torch.mean(-likelihoods[val_mask])
         self.log(
@@ -4254,6 +4324,7 @@ class WaymoLocalUAModule(pl.LightningModule):
             mean_nllh,
             batch_size=val_mask.sum().item(),
         )
+
 
         ######################
         # Logging            #
@@ -4312,7 +4383,7 @@ class WaymoLocalUAModule(pl.LightningModule):
         batch.x = batch.x[:, :, :-1]
         if self.types:
             static_features = torch.cat(
-                [batch.x[:, 10, self.out_features :], batch.type], dim=1
+                [batch.x[:, 10, self.out_features:], batch.type], dim=1
             )
         else:
             static_features = batch.x[:, 10, 4:]
@@ -4440,47 +4511,47 @@ class WaymoLocalUAModule(pl.LightningModule):
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
-                torch.argmax(
-                    (interval_x[batch.batch[mask_t]] > x_t[:, 0].unsqueeze(-1)).float(),
-                    dim=1,
-                ).type(torch.LongTensor)
-                - 1
+                    torch.argmax(
+                        (interval_x[batch.batch[mask_t]] > x_t[:, 0].unsqueeze(-1)).float(),
+                        dim=1,
+                    ).type(torch.LongTensor)
+                    - 1
             )
             center_pixel_y = (
-                torch.argmax(
-                    (interval_y[batch.batch[mask_t]] > x_t[:, 1].unsqueeze(-1)).float(),
-                    dim=1,
-                ).type(torch.LongTensor)
-                - 2
+                    torch.argmax(
+                        (interval_y[batch.batch[mask_t]] > x_t[:, 1].unsqueeze(-1)).float(),
+                        dim=1,
+                    ).type(torch.LongTensor)
+                    - 2
             )
 
             # Compute pixel boundaries
             idx_x_low = center_pixel_y + self.local_map_resolution_half
             idx_x_high = (
-                center_pixel_y
-                + self.local_map_resolution_half
-                + self.local_map_resolution
-                + 1
+                    center_pixel_y
+                    + self.local_map_resolution_half
+                    + self.local_map_resolution
+                    + 1
             )
             idx_y_low = center_pixel_x + self.local_map_resolution_half
             idx_y_high = (
-                center_pixel_x
-                + self.local_map_resolution_half
-                + self.local_map_resolution
-                + 1
+                    center_pixel_x
+                    + self.local_map_resolution_half
+                    + self.local_map_resolution
+                    + 1
             )
 
             # Extract local maps for all agents in current time-step
             for node_idx, graph_idx in enumerate(batch.batch[mask_t]):
                 if not (
-                    center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2
+                        center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2
                 ):
                     u_local[node_idx] = batch.u[
-                        graph_idx,
-                        :,
-                        idx_x_low[node_idx] : idx_x_high[node_idx],
-                        idx_y_low[node_idx] : idx_y_high[node_idx],
-                    ]
+                                        graph_idx,
+                                        :,
+                                        idx_x_low[node_idx]: idx_x_high[node_idx],
+                                        idx_y_low[node_idx]: idx_y_high[node_idx],
+                                        ]
 
             # Perform map encoding
             u = self.map_encoder(u_local[mask_t])
@@ -4493,8 +4564,8 @@ class WaymoLocalUAModule(pl.LightningModule):
             if self.normalise:
                 # Center node positions
                 x_t[:, self.pos_index] -= batch.loc[batch.batch][mask_t][
-                    :, self.pos_index
-                ]
+                                          :, self.pos_index
+                                          ]
                 # Scale all features (except yaws) with global scaler
                 x_t[:, self.norm_index] /= self.global_scale
                 if edge_attr is not None:
@@ -4600,47 +4671,47 @@ class WaymoLocalUAModule(pl.LightningModule):
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
-                torch.argmax(
-                    (interval_x[batch.batch] > x_t[:, 0].unsqueeze(-1)).float(),
-                    dim=1,
-                ).type(torch.LongTensor)
-                - 1
+                    torch.argmax(
+                        (interval_x[batch.batch] > x_t[:, 0].unsqueeze(-1)).float(),
+                        dim=1,
+                    ).type(torch.LongTensor)
+                    - 1
             )
             center_pixel_y = (
-                torch.argmax(
-                    (interval_y[batch.batch] > x_t[:, 1].unsqueeze(-1)).float(),
-                    dim=1,
-                ).type(torch.LongTensor)
-                - 2
+                    torch.argmax(
+                        (interval_y[batch.batch] > x_t[:, 1].unsqueeze(-1)).float(),
+                        dim=1,
+                    ).type(torch.LongTensor)
+                    - 2
             )
 
             # Compute pixel boundaries
             idx_x_low = center_pixel_y + self.local_map_resolution_half
             idx_x_high = (
-                center_pixel_y
-                + self.local_map_resolution_half
-                + self.local_map_resolution
-                + 1
+                    center_pixel_y
+                    + self.local_map_resolution_half
+                    + self.local_map_resolution
+                    + 1
             )
             idx_y_low = center_pixel_x + self.local_map_resolution_half
             idx_y_high = (
-                center_pixel_x
-                + self.local_map_resolution_half
-                + self.local_map_resolution
-                + 1
+                    center_pixel_x
+                    + self.local_map_resolution_half
+                    + self.local_map_resolution
+                    + 1
             )
 
             # Extract local maps for all agents in current time-step
             for node_idx, graph_idx in enumerate(batch.batch):
                 if not (
-                    center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2
+                        center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2
                 ):
                     u_local[node_idx] = batch.u[
-                        graph_idx,
-                        :,
-                        idx_x_low[node_idx] : idx_x_high[node_idx],
-                        idx_y_low[node_idx] : idx_y_high[node_idx],
-                    ]
+                                        graph_idx,
+                                        :,
+                                        idx_x_low[node_idx]: idx_x_high[node_idx],
+                                        idx_y_low[node_idx]: idx_y_high[node_idx],
+                                        ]
 
             # Perform map encoding
             u = self.map_encoder(u_local)
@@ -4754,7 +4825,7 @@ class WaymoLocalUAModule(pl.LightningModule):
         batch.x = batch.x[:, :, :-1]
         if self.types:
             static_features = torch.cat(
-                [batch.x[:, 10, self.out_features :], batch.type], dim=1
+                [batch.x[:, 10, self.out_features:], batch.type], dim=1
             )
         else:
             static_features = batch.x[:, 10, 4:]
@@ -4886,47 +4957,47 @@ class WaymoLocalUAModule(pl.LightningModule):
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
-                torch.argmax(
-                    (interval_x[batch.batch[mask_t]] > x_t[:, 0].unsqueeze(-1)).float(),
-                    dim=1,
-                ).type(torch.LongTensor)
-                - 1
+                    torch.argmax(
+                        (interval_x[batch.batch[mask_t]] > x_t[:, 0].unsqueeze(-1)).float(),
+                        dim=1,
+                    ).type(torch.LongTensor)
+                    - 1
             )
             center_pixel_y = (
-                torch.argmax(
-                    (interval_y[batch.batch[mask_t]] > x_t[:, 1].unsqueeze(-1)).float(),
-                    dim=1,
-                ).type(torch.LongTensor)
-                - 2
+                    torch.argmax(
+                        (interval_y[batch.batch[mask_t]] > x_t[:, 1].unsqueeze(-1)).float(),
+                        dim=1,
+                    ).type(torch.LongTensor)
+                    - 2
             )
 
             # Compute pixel boundaries
             idx_x_low = center_pixel_y + self.local_map_resolution_half
             idx_x_high = (
-                center_pixel_y
-                + self.local_map_resolution_half
-                + self.local_map_resolution
-                + 1
+                    center_pixel_y
+                    + self.local_map_resolution_half
+                    + self.local_map_resolution
+                    + 1
             )
             idx_y_low = center_pixel_x + self.local_map_resolution_half
             idx_y_high = (
-                center_pixel_x
-                + self.local_map_resolution_half
-                + self.local_map_resolution
-                + 1
+                    center_pixel_x
+                    + self.local_map_resolution_half
+                    + self.local_map_resolution
+                    + 1
             )
 
             # Extract local maps for all agents in current time-step
             for node_idx, graph_idx in enumerate(batch.batch[mask_t]):
                 if not (
-                    center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2
+                        center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2
                 ):
                     u_local[node_idx] = batch.u[
-                        graph_idx,
-                        :,
-                        idx_x_low[node_idx] : idx_x_high[node_idx],
-                        idx_y_low[node_idx] : idx_y_high[node_idx],
-                    ]
+                                        graph_idx,
+                                        :,
+                                        idx_x_low[node_idx]: idx_x_high[node_idx],
+                                        idx_y_low[node_idx]: idx_y_high[node_idx],
+                                        ]
 
             # Perform map encoding
             u = self.map_encoder(u_local[mask_t])
@@ -4939,8 +5010,8 @@ class WaymoLocalUAModule(pl.LightningModule):
             if self.normalise:
                 # Center node positions
                 x_t[:, self.pos_index] -= batch.loc[batch.batch][mask_t][
-                    :, self.pos_index
-                ]
+                                          :, self.pos_index
+                                          ]
                 # Scale all features (except yaws) with global scaler
                 x_t[:, self.norm_index] /= self.global_scale
                 if edge_attr is not None:
@@ -5058,47 +5129,47 @@ class WaymoLocalUAModule(pl.LightningModule):
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
-                torch.argmax(
-                    (interval_x[batch.batch] > x_t[:, 0].unsqueeze(-1)).float(),
-                    dim=1,
-                ).type(torch.LongTensor)
-                - 1
+                    torch.argmax(
+                        (interval_x[batch.batch] > x_t[:, 0].unsqueeze(-1)).float(),
+                        dim=1,
+                    ).type(torch.LongTensor)
+                    - 1
             )
             center_pixel_y = (
-                torch.argmax(
-                    (interval_y[batch.batch] > x_t[:, 1].unsqueeze(-1)).float(),
-                    dim=1,
-                ).type(torch.LongTensor)
-                - 2
+                    torch.argmax(
+                        (interval_y[batch.batch] > x_t[:, 1].unsqueeze(-1)).float(),
+                        dim=1,
+                    ).type(torch.LongTensor)
+                    - 2
             )
 
             # Compute pixel boundaries
             idx_x_low = center_pixel_y + self.local_map_resolution_half
             idx_x_high = (
-                center_pixel_y
-                + self.local_map_resolution_half
-                + self.local_map_resolution
-                + 1
+                    center_pixel_y
+                    + self.local_map_resolution_half
+                    + self.local_map_resolution
+                    + 1
             )
             idx_y_low = center_pixel_x + self.local_map_resolution_half
             idx_y_high = (
-                center_pixel_x
-                + self.local_map_resolution_half
-                + self.local_map_resolution
-                + 1
+                    center_pixel_x
+                    + self.local_map_resolution_half
+                    + self.local_map_resolution
+                    + 1
             )
 
             # Extract local maps for all agents in current time-step
             for node_idx, graph_idx in enumerate(batch.batch):
                 if not (
-                    center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2
+                        center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2
                 ):
                     u_local[node_idx] = batch.u[
-                        graph_idx,
-                        :,
-                        idx_x_low[node_idx] : idx_x_high[node_idx],
-                        idx_y_low[node_idx] : idx_y_high[node_idx],
-                    ]
+                                        graph_idx,
+                                        :,
+                                        idx_x_low[node_idx]: idx_x_high[node_idx],
+                                        idx_y_low[node_idx]: idx_y_high[node_idx],
+                                        ]
 
             # Perform map encoding
             u = self.map_encoder(u_local)
@@ -5191,6 +5262,14 @@ class WaymoLocalUAModule(pl.LightningModule):
             y_target[:, :, [0, 1]][ade_ttp_mask],
         )
 
+        # Compute likelihoods over tracks_to_predict
+        mean_nllh_ttp = torch.mean(-likelihoods[ade_ttp_mask])
+        self.log(
+            "test_ttp_mean_nllh",
+            mean_nllh_ttp,
+            batch_size=ade_ttp_mask.sum().item(),
+        )
+
         # Compute likelihoods of all agents at all times
         mean_nllh = torch.mean(-likelihoods[val_mask])
         self.log(
@@ -5218,10 +5297,9 @@ class WaymoLocalUAModule(pl.LightningModule):
         self.log("test_trajectory_counter", n_nodes, reduce_fx=torch.sum)
         self.log("test_collision/trajectory", collision_tracker.sum() / n_nodes)
 
-
         return loss
 
-    def sample_trajectories(self, batch, batch_idx=None, prediction_horizon: int = 91):
+    def sample_trajectories(self, batch, batch_idx=None, prediction_horizon: int = 91, n_trajectories: int = 10):
 
         ######################
         # Initialisation     #
@@ -5251,7 +5329,7 @@ class WaymoLocalUAModule(pl.LightningModule):
 
         # Allocate target/prediction tensors
         n_nodes = batch.num_nodes
-        y_hat = torch.zeros((prediction_horizon - 1, n_nodes, 7))
+        y_hat = torch.zeros((prediction_horizon - 1, n_trajectories, n_nodes, 7))
         y_target = torch.zeros((prediction_horizon - 1, n_nodes, 7))
         # Ensure device placement
         y_hat = y_hat.type_as(batch.x)
@@ -5263,36 +5341,6 @@ class WaymoLocalUAModule(pl.LightningModule):
         # )
         static_features = batch.x[:, 10, 4:]
         edge_attr = None
-
-        Sigma_vel = torch.eye(2).reshape(1, 2, 2).repeat(n_nodes, 1, 1)
-        Sigma_pos = (
-            torch.eye(2).reshape(1, 1, 2, 2).repeat(prediction_horizon, n_nodes, 1, 1)
-        )
-        Sigma_pos = Sigma_pos.type_as(batch.x)
-        Sigma_vel = Sigma_vel.type_as(batch.x)
-
-        # Initial hidden state
-        if self.rnn_type == "GRU":
-            h_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
-            h_edge = torch.zeros(
-                (self.model.num_layers, n_nodes, self.model.rnn_edge_size)
-            )
-            h_node = h_node.type_as(batch.x)
-            h_edge = h_edge.type_as(batch.x)
-            c_node, c_edge = None, None
-        else:
-            h_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
-            h_edge = torch.zeros(
-                (self.model.num_layers, n_nodes, self.model.rnn_edge_size)
-            )
-            h_node = h_node.type_as(batch.x)
-            h_edge = h_edge.type_as(batch.x)
-            c_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
-            c_edge = torch.zeros(
-                (self.model.num_layers, n_nodes, self.model.rnn_edge_size)
-            )
-            c_node = c_node.type_as(batch.x)
-            c_edge = c_edge.type_as(batch.x)
 
         ######################
         # Map preparation    #
@@ -5341,312 +5389,344 @@ class WaymoLocalUAModule(pl.LightningModule):
         )
         u_local = u_local.type_as(batch.x)
 
-        ######################
-        # History            #
-        ######################
-
-        for t in range(11):
-
-            ######################
-            # Graph construction #
-            ######################
-
-            mask_t = mask[:, t]
-            # x_t = torch.cat([batch.x[mask_t, t, :], batch.type[mask_t]], dim=1)
-            x_t = batch.x[mask_t, t, :]
-
-            # Construct edges
-            edge_index = torch_geometric.nn.radius_graph(
-                x=x_t[:, :2],
-                r=self.min_dist,
-                batch=batch.batch[mask_t],
-                loop=self.self_loop,
-                max_num_neighbors=self.n_neighbours,
-                flow="source_to_target",
+        for n in range(n_trajectories):
+            Sigma_vel = torch.eye(2).reshape(1, 2, 2).repeat(n_nodes, 1, 1)
+            Sigma_pos = (
+                torch.eye(2).reshape(1, 1, 2, 2).repeat(prediction_horizon, n_nodes, 1, 1)
             )
+            Sigma_pos = Sigma_pos.type_as(batch.x)
+            Sigma_vel = Sigma_vel.type_as(batch.x)
 
-            # Remove duplicates and sort
-            edge_index = torch_geometric.utils.coalesce(
-                edge_index, num_nodes=x_t.shape[0]
-            )
-
-            # Create edge_attr if specified
-            if self.edge_weight:
-                # Encode distance between nodes as edge_attr
-                row, col = edge_index
-                edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
-                edge_attr = edge_attr.type_as(batch.x)
-
-            #######################
-            # Map encoding 1/2    #
-            #######################
-
-            # Find closest pixels in x and y directions
-            center_pixel_x = (
-                torch.argmax(
-                    (interval_x[batch.batch[mask_t]] > x_t[:, 0].unsqueeze(-1)).float(),
-                    dim=1,
-                ).type(torch.LongTensor)
-                - 1
-            )
-            center_pixel_y = (
-                torch.argmax(
-                    (interval_y[batch.batch[mask_t]] > x_t[:, 1].unsqueeze(-1)).float(),
-                    dim=1,
-                ).type(torch.LongTensor)
-                - 2
-            )
-
-            # Compute pixel boundaries
-            idx_x_low = center_pixel_y + self.local_map_resolution_half
-            idx_x_high = (
-                center_pixel_y
-                + self.local_map_resolution_half
-                + self.local_map_resolution
-                + 1
-            )
-            idx_y_low = center_pixel_x + self.local_map_resolution_half
-            idx_y_high = (
-                center_pixel_x
-                + self.local_map_resolution_half
-                + self.local_map_resolution
-                + 1
-            )
-
-            # Extract local maps for all agents in current time-step
-            for node_idx, graph_idx in enumerate(batch.batch[mask_t]):
-                if not (
-                    center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2
-                ):
-                    u_local[node_idx] = batch.u[
-                        graph_idx,
-                        :,
-                        idx_x_low[node_idx] : idx_x_high[node_idx],
-                        idx_y_low[node_idx] : idx_y_high[node_idx],
-                    ]
-
-            # Perform map encoding
-            u = self.map_encoder(u_local[mask_t])
-
-            ######################
-            # Predictions 1/2    #
-            ######################
-
-            # Normalise input graph
-            if self.normalise:
-                # Center node positions
-                x_t[:, self.pos_index] -= batch.loc[batch.batch][mask_t][
-                    :, self.pos_index
-                ]
-                # Scale all features (except yaws) with global scaler
-                x_t[:, self.norm_index] /= self.global_scale
-                if edge_attr is not None:
-                    # Scale edge attributes
-                    edge_attr /= self.global_scale
-
-            # Obtain normalised predicted delta dynamics
+            # Initial hidden state
             if self.rnn_type == "GRU":
-                hidden_in = (h_node[:, mask_t], h_edge[:, mask_t])
-                delta_x, h_t = self.model(
-                    x=x_t,
-                    edge_index=edge_index,
-                    edge_attr=edge_attr,
-                    batch=batch.batch[mask_t],
-                    hidden=hidden_in,
-                    u=u,
+                h_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
+                h_edge = torch.zeros(
+                    (self.model.num_layers, n_nodes, self.model.rnn_edge_size)
                 )
-                # Update hidden states
-                h_node[:, mask_t] = h_t[0]
-                h_edge[:, mask_t] = h_t[1]
-
-            else:  # LSTM
-                hidden_in = (
-                    (h_node[:, mask_t], c_node[:, mask_t]),
-                    (h_edge[:, mask_t], c_edge[:, mask_t]),
-                )
-                delta_x, (h_node_out, h_edge_out) = self.model(
-                    x=x_t,
-                    edge_index=edge_index,
-                    edge_attr=edge_attr,
-                    batch=batch.batch[mask_t],
-                    hidden=hidden_in,
-                    u=u,
-                )
-                h_node[:, mask_t] = h_node_out[0]
-                c_node[:, mask_t] = h_node_out[1]
-                h_edge[:, mask_t] = h_edge_out[0]
-                c_edge[:, mask_t] = h_edge_out[1]
-
-            # Update current velocity covariance matrix
-            sigma_x = torch.exp(delta_x[:, 2])
-            sigma_y = torch.exp(delta_x[:, 3])
-            cov_xy = torch.tanh(delta_x[:, 4]) * sigma_x * sigma_y
-            Sigma_vel[mask_t, 0, 0] = sigma_x ** 2
-            Sigma_vel[mask_t, 1, 1] = sigma_y ** 2
-            Sigma_vel[mask_t, 1, 0] = cov_xy
-            Sigma_vel[mask_t, 0, 1] = cov_xy
-
-            # Update position covariance matrix
-            Sigma_pos[t + 1, mask_t] = Sigma_pos[t, mask_t] + 0.01 * Sigma_vel[mask_t]
-
-            # Sample velocities
-            vel = torch.distributions.MultivariateNormal(loc=delta_x[:, self.pos_index],
-                                                         covariance_matrix=Sigma_vel[mask_t]).sample()
-            pos = batch.x[mask_t, t][:, self.pos_index] + 0.1 * vel
-            predicted_graph = torch.cat([pos, vel, static_features[mask_t]], dim=-1)
-            predicted_graph = predicted_graph.type_as(batch.x)
-
-            # Save predictions and targets
-            y_hat[t, mask_t, :] = predicted_graph
-            # y_target[t, mask_t, :] = torch.cat(
-            #     [batch.x[mask_t, t + 1, :], batch.type[mask_t]], dim=1
-            # )
-            y_target[t, mask_t, :] = batch.x[mask_t, t + 1, :]
-
-        ######################
-        # Future             #
-        ######################
-
-        for t in range(11, (prediction_horizon - 1)):
-
-            ######################
-            # Graph construction #
-            ######################
-
-            x_t = predicted_graph.clone()
-
-            # Construct edges
-            edge_index = torch_geometric.nn.radius_graph(
-                x=x_t[:, :2],
-                r=self.min_dist,
-                batch=batch.batch,
-                loop=self.self_loop,
-                max_num_neighbors=self.n_neighbours,
-                flow="source_to_target",
-            )
-
-            # Remove duplicates and sort
-            edge_index = torch_geometric.utils.coalesce(
-                edge_index, num_nodes=x_t.shape[0]
-            )
-
-            # Create edge_attr if specified
-            if self.edge_weight:
-                # Encode distance between nodes as edge_attr
-                row, col = edge_index
-                edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
-                edge_attr = edge_attr.type_as(batch.x)
-
-            #######################
-            # Map encoding 2/2    #
-            #######################
-
-            # Find closest pixels in x and y directions
-            center_pixel_x = (
-                torch.argmax(
-                    (interval_x[batch.batch] > x_t[:, 0].unsqueeze(-1)).float(),
-                    dim=1,
-                ).type(torch.LongTensor)
-                - 1
-            )
-            center_pixel_y = (
-                torch.argmax(
-                    (interval_y[batch.batch] > x_t[:, 1].unsqueeze(-1)).float(),
-                    dim=1,
-                ).type(torch.LongTensor)
-                - 2
-            )
-
-            # Compute pixel boundaries
-            idx_x_low = center_pixel_y + self.local_map_resolution_half
-            idx_x_high = (
-                center_pixel_y
-                + self.local_map_resolution_half
-                + self.local_map_resolution
-                + 1
-            )
-            idx_y_low = center_pixel_x + self.local_map_resolution_half
-            idx_y_high = (
-                center_pixel_x
-                + self.local_map_resolution_half
-                + self.local_map_resolution
-                + 1
-            )
-
-            # Extract local maps for all agents in current time-step
-            for node_idx, graph_idx in enumerate(batch.batch):
-                if not (
-                    center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2
-                ):
-                    u_local[node_idx] = batch.u[
-                        graph_idx,
-                        :,
-                        idx_x_low[node_idx] : idx_x_high[node_idx],
-                        idx_y_low[node_idx] : idx_y_high[node_idx],
-                    ]
-
-            # Perform map encoding
-            u = self.map_encoder(u_local)
-
-            ######################
-            # Predictions 2/2    #
-            ######################
-
-            # Normalise input graph
-            if self.normalise:
-                # Center node positions
-                x_t[:, self.pos_index] -= batch.loc[batch.batch][:, self.pos_index]
-                # Scale all features (except yaws) with global scaler
-                x_t[:, self.norm_index] /= self.global_scale
-                if edge_attr is not None:
-                    # Scale edge attributes
-                    edge_attr /= self.global_scale
-
-            # Obtain normalised predicted delta dynamics
-            if self.rnn_type == "GRU":
-                delta_x, (h_node, h_edge) = self.model(
-                    x=x_t,
-                    edge_index=edge_index,
-                    edge_attr=edge_attr,
-                    batch=batch.batch,
-                    hidden=(h_node, h_edge),
-                    u=u,
-                )
+                h_node = h_node.type_as(batch.x)
+                h_edge = h_edge.type_as(batch.x)
+                c_node, c_edge = None, None
             else:
-                delta_x, ((h_node, c_node), (h_edge, c_edge)) = self.model(
-                    x=x_t,
-                    edge_index=edge_index,
-                    edge_attr=edge_attr,
-                    batch=batch.batch,
-                    hidden=((h_node, c_node), (h_edge, c_edge)),
-                    u=u,
+                h_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
+                h_edge = torch.zeros(
+                    (self.model.num_layers, n_nodes, self.model.rnn_edge_size)
                 )
+                h_node = h_node.type_as(batch.x)
+                h_edge = h_edge.type_as(batch.x)
+                c_node = torch.zeros((self.model.num_layers, n_nodes, self.model.rnn_size))
+                c_edge = torch.zeros(
+                    (self.model.num_layers, n_nodes, self.model.rnn_edge_size)
+                )
+                c_node = c_node.type_as(batch.x)
+                c_edge = c_edge.type_as(batch.x)
 
-            # Update current velocity covariance matrix
-            sigma_x = torch.exp(delta_x[:, 2])
-            sigma_y = torch.exp(delta_x[:, 3])
-            cov_xy = torch.tanh(delta_x[:, 4]) * sigma_x * sigma_y
-            Sigma_vel[:, 0, 0] = sigma_x ** 2
-            Sigma_vel[:, 1, 1] = sigma_y ** 2
-            Sigma_vel[:, 1, 0] = cov_xy
-            Sigma_vel[:, 0, 1] = cov_xy
+                ######################
+                # History            #
+                ######################
 
-            # Compute likelihood of current estimates
-            Sigma_pos[t + 1] = Sigma_pos[t] + 0.01 * Sigma_vel
+                for t in range(11):
 
-            # Sample velocities
-            vel = torch.distributions.MultivariateNormal(loc=delta_x[:, self.pos_index],
-                                                         covariance_matrix=Sigma_vel).sample()
-            pos = predicted_graph[:, self.pos_index] + 0.1 * vel
-            predicted_graph = torch.cat([pos, vel, static_features], dim=-1)
-            predicted_graph = predicted_graph.type_as(batch.x)
+                    ######################
+                    # Graph construction #
+                    ######################
 
-            # Save prediction alongside true value (next time step state)
-            y_hat[t, :, :] = predicted_graph
-            # y_target[t, :, :] = torch.cat([batch.x[:, t + 1, :], batch.type], dim=1)
-            y_target[t, :, :] = batch.x[:, t + 1, :]
+                    mask_t = mask[:, t]
+                    # x_t = torch.cat([batch.x[mask_t, t, :], batch.type[mask_t]], dim=1)
+                    x_t = batch.x[mask_t, t, :]
 
-        return y_hat, y_target, mask, Sigma_pos[1:]
+                    # Construct edges
+                    edge_index = torch_geometric.nn.radius_graph(
+                        x=x_t[:, :2],
+                        r=self.min_dist,
+                        batch=batch.batch[mask_t],
+                        loop=self.self_loop,
+                        max_num_neighbors=self.n_neighbours,
+                        flow="source_to_target",
+                    )
+
+                    # Remove duplicates and sort
+                    edge_index = torch_geometric.utils.coalesce(
+                        edge_index, num_nodes=x_t.shape[0]
+                    )
+
+                    # Create edge_attr if specified
+                    if self.edge_weight:
+                        # Encode distance between nodes as edge_attr
+                        row, col = edge_index
+                        edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
+                        edge_attr = edge_attr.type_as(batch.x)
+
+                    #######################
+                    # Map encoding 1/2    #
+                    #######################
+
+                    # Find closest pixels in x and y directions
+                    center_pixel_x = (
+                            torch.argmax(
+                                (interval_x[batch.batch[mask_t]] > x_t[:, 0].unsqueeze(-1)).float(),
+                                dim=1,
+                            ).type(torch.LongTensor)
+                            - 1
+                    )
+                    center_pixel_y = (
+                            torch.argmax(
+                                (interval_y[batch.batch[mask_t]] > x_t[:, 1].unsqueeze(-1)).float(),
+                                dim=1,
+                            ).type(torch.LongTensor)
+                            - 2
+                    )
+
+                    # Compute pixel boundaries
+                    idx_x_low = center_pixel_y + self.local_map_resolution_half
+                    idx_x_high = (
+                            center_pixel_y
+                            + self.local_map_resolution_half
+                            + self.local_map_resolution
+                            + 1
+                    )
+                    idx_y_low = center_pixel_x + self.local_map_resolution_half
+                    idx_y_high = (
+                            center_pixel_x
+                            + self.local_map_resolution_half
+                            + self.local_map_resolution
+                            + 1
+                    )
+
+                    # Extract local maps for all agents in current time-step
+                    for node_idx, graph_idx in enumerate(batch.batch[mask_t]):
+                        if not (
+                                center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2
+                        ):
+                            u_local[node_idx] = batch.u[
+                                                graph_idx,
+                                                :,
+                                                idx_x_low[node_idx]: idx_x_high[node_idx],
+                                                idx_y_low[node_idx]: idx_y_high[node_idx],
+                                                ]
+
+                    # Perform map encoding
+                    u = self.map_encoder(u_local[mask_t])
+
+                    ######################
+                    # Predictions 1/2    #
+                    ######################
+
+                    # Normalise input graph
+                    if self.normalise:
+                        # Center node positions
+                        x_t[:, self.pos_index] -= batch.loc[batch.batch][mask_t][
+                                                  :, self.pos_index
+                                                  ]
+                        # Scale all features (except yaws) with global scaler
+                        x_t[:, self.norm_index] /= self.global_scale
+                        if edge_attr is not None:
+                            # Scale edge attributes
+                            edge_attr /= self.global_scale
+
+                    # Obtain normalised predicted delta dynamics
+                    if self.rnn_type == "GRU":
+                        hidden_in = (h_node[:, mask_t], h_edge[:, mask_t])
+                        delta_x, h_t = self.model(
+                            x=x_t,
+                            edge_index=edge_index,
+                            edge_attr=edge_attr,
+                            batch=batch.batch[mask_t],
+                            hidden=hidden_in,
+                            u=u,
+                        )
+                        # Update hidden states
+                        h_node[:, mask_t] = h_t[0]
+                        h_edge[:, mask_t] = h_t[1]
+
+                    else:  # LSTM
+                        hidden_in = (
+                            (h_node[:, mask_t], c_node[:, mask_t]),
+                            (h_edge[:, mask_t], c_edge[:, mask_t]),
+                        )
+                        delta_x, (h_node_out, h_edge_out) = self.model(
+                            x=x_t,
+                            edge_index=edge_index,
+                            edge_attr=edge_attr,
+                            batch=batch.batch[mask_t],
+                            hidden=hidden_in,
+                            u=u,
+                        )
+                        h_node[:, mask_t] = h_node_out[0]
+                        c_node[:, mask_t] = h_node_out[1]
+                        h_edge[:, mask_t] = h_edge_out[0]
+                        c_edge[:, mask_t] = h_edge_out[1]
+
+                    # Update current velocity covariance matrix
+                    sigma_x = torch.exp(delta_x[:, 2])
+                    sigma_y = torch.exp(delta_x[:, 3])
+                    cov_xy = torch.tanh(delta_x[:, 4]) * sigma_x * sigma_y
+                    Sigma_vel[mask_t, 0, 0] = sigma_x ** 2
+                    Sigma_vel[mask_t, 1, 1] = sigma_y ** 2
+                    Sigma_vel[mask_t, 1, 0] = cov_xy
+                    Sigma_vel[mask_t, 0, 1] = cov_xy
+
+                    # Update position covariance matrix
+                    Sigma_pos[t + 1, mask_t] = Sigma_pos[t, mask_t] + 0.01 * Sigma_vel[mask_t]
+
+                    # Sample velocities
+                    vel = delta_x[:, [0, 1]]
+                    pos = batch.x[mask_t, t][:, self.pos_index] + 0.1 * vel
+                    predicted_graph = torch.cat([pos, vel, static_features[mask_t]], dim=-1)
+                    predicted_graph = predicted_graph.type_as(batch.x)
+
+                    # Save predictions and targets
+                    y_hat[t, n, mask_t, :] = predicted_graph
+                    # y_target[t, mask_t, :] = torch.cat(
+                    #     [batch.x[mask_t, t + 1, :], batch.type[mask_t]], dim=1
+                    # )
+                    y_target[t, mask_t, :] = batch.x[mask_t, t + 1, :]
+
+                ######################
+                # Future             #
+                ######################
+
+                for t in range(11, (prediction_horizon - 1)):
+
+                    ######################
+                    # Graph construction #
+                    ######################
+
+                    x_t = predicted_graph.clone()
+
+                    # Construct edges
+                    edge_index = torch_geometric.nn.radius_graph(
+                        x=x_t[:, :2],
+                        r=self.min_dist,
+                        batch=batch.batch,
+                        loop=self.self_loop,
+                        max_num_neighbors=self.n_neighbours,
+                        flow="source_to_target",
+                    )
+
+                    # Remove duplicates and sort
+                    edge_index = torch_geometric.utils.coalesce(
+                        edge_index, num_nodes=x_t.shape[0]
+                    )
+
+                    # Create edge_attr if specified
+                    if self.edge_weight:
+                        # Encode distance between nodes as edge_attr
+                        row, col = edge_index
+                        edge_attr = (x_t[row, :2] - x_t[col, :2]).norm(dim=-1).unsqueeze(1)
+                        edge_attr = edge_attr.type_as(batch.x)
+
+                    #######################
+                    # Map encoding 2/2    #
+                    #######################
+
+                    # Find closest pixels in x and y directions
+                    center_pixel_x = (
+                            torch.argmax(
+                                (interval_x[batch.batch] > x_t[:, 0].unsqueeze(-1)).float(),
+                                dim=1,
+                            ).type(torch.LongTensor)
+                            - 1
+                    )
+                    center_pixel_y = (
+                            torch.argmax(
+                                (interval_y[batch.batch] > x_t[:, 1].unsqueeze(-1)).float(),
+                                dim=1,
+                            ).type(torch.LongTensor)
+                            - 2
+                    )
+
+                    # Compute pixel boundaries
+                    idx_x_low = center_pixel_y + self.local_map_resolution_half
+                    idx_x_high = (
+                            center_pixel_y
+                            + self.local_map_resolution_half
+                            + self.local_map_resolution
+                            + 1
+                    )
+                    idx_y_low = center_pixel_x + self.local_map_resolution_half
+                    idx_y_high = (
+                            center_pixel_x
+                            + self.local_map_resolution_half
+                            + self.local_map_resolution
+                            + 1
+                    )
+
+                    # Extract local maps for all agents in current time-step
+                    for node_idx, graph_idx in enumerate(batch.batch):
+                        if not (
+                                center_pixel_x[node_idx] == -1 or center_pixel_y[node_idx] == -2
+                        ):
+                            u_local[node_idx] = batch.u[
+                                                graph_idx,
+                                                :,
+                                                idx_x_low[node_idx]: idx_x_high[node_idx],
+                                                idx_y_low[node_idx]: idx_y_high[node_idx],
+                                                ]
+
+                    # Perform map encoding
+                    u = self.map_encoder(u_local)
+
+                    ######################
+                    # Predictions 2/2    #
+                    ######################
+
+                    # Normalise input graph
+                    if self.normalise:
+                        # Center node positions
+                        x_t[:, self.pos_index] -= batch.loc[batch.batch][:, self.pos_index]
+                        # Scale all features (except yaws) with global scaler
+                        x_t[:, self.norm_index] /= self.global_scale
+                        if edge_attr is not None:
+                            # Scale edge attributes
+                            edge_attr /= self.global_scale
+
+                    # Obtain normalised predicted delta dynamics
+                    if self.rnn_type == "GRU":
+                        delta_x, (h_node, h_edge) = self.model(
+                            x=x_t,
+                            edge_index=edge_index,
+                            edge_attr=edge_attr,
+                            batch=batch.batch,
+                            hidden=(h_node, h_edge),
+                            u=u,
+                        )
+                    else:
+                        delta_x, ((h_node, c_node), (h_edge, c_edge)) = self.model(
+                            x=x_t,
+                            edge_index=edge_index,
+                            edge_attr=edge_attr,
+                            batch=batch.batch,
+                            hidden=((h_node, c_node), (h_edge, c_edge)),
+                            u=u,
+                        )
+
+                    # Update current velocity covariance matrix
+                    sigma_x = torch.exp(delta_x[:, 2])
+                    sigma_y = torch.exp(delta_x[:, 3])
+                    cov_xy = torch.tanh(delta_x[:, 4]) * sigma_x * sigma_y
+                    Sigma_vel[:, 0, 0] = sigma_x ** 2
+                    Sigma_vel[:, 1, 1] = sigma_y ** 2
+                    Sigma_vel[:, 1, 0] = cov_xy
+                    Sigma_vel[:, 0, 1] = cov_xy
+
+                    # Compute likelihood of current estimates
+                    Sigma_pos[t + 1] = Sigma_pos[t] + 0.01 * Sigma_vel
+
+                    # Sample velocities
+                    vel = torch.distributions.MultivariateNormal(loc=delta_x[:, self.pos_index],
+                                                                 covariance_matrix=Sigma_vel).sample()
+                    pos = predicted_graph[:, self.pos_index] + 0.1 * vel
+                    predicted_graph = torch.cat([pos, vel, static_features], dim=-1)
+                    predicted_graph = predicted_graph.type_as(batch.x)
+
+                    # Save prediction alongside true value (next time step state)
+                    y_hat[t, n, :, :] = predicted_graph
+                    # y_target[t, :, :] = torch.cat([batch.x[:, t + 1, :], batch.type], dim=1)
+                    y_target[t, :, :] = batch.x[:, t + 1, :]
+
+
+
+        return y_hat, y_target, mask #, Sigma_pos[1:]
 
     def configure_optimizers(self):
         return torch.optim.Adam(
@@ -5713,6 +5793,7 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
 
         # Allocate target/prediction tensors
         n_nodes = batch.num_nodes
+        collision_tracker = torch.zeros(n_nodes)
         y_hat = torch.zeros((self.prediction_horizon - 11, n_nodes, self.out_features))
         y_target = torch.zeros(
             (self.prediction_horizon - 11, n_nodes, self.out_features)
@@ -5736,6 +5817,20 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
         for t in range(11, self.prediction_horizon - 1):
             predicted_pos += delta_pos
             predicted_graph = torch.cat([predicted_pos, last_vel], dim=1)
+
+            # Detect collisions
+            edge_index_collisions = torch_geometric.nn.radius_graph(
+                x=predicted_graph[:, :2],
+                r=1.0,
+                batch=batch.batch,
+                loop=False,
+                max_num_neighbors=100,
+                flow="source_to_target",
+            )
+
+            if edge_index_collisions.numel() > 0:
+                collision_tracker[edge_index_collisions[0]] = 1
+
             y_hat[t - 10, :, :] = predicted_graph[:, : self.out_features]
             y_target[t - 10, :, :] = batch.x[:, t + 1, : self.out_features]
 
@@ -5781,6 +5876,10 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
         self.log("val_fde_ttp_loss", fde_ttp_loss)
         self.log("val_ade_ttp_loss", ade_ttp_loss)
 
+        self.log("val_collision_counter", collision_tracker.sum(), reduce_fx=torch.sum)
+        self.log("val_trajectory_counter", n_nodes, reduce_fx=torch.sum)
+        self.log("val_collision/trajectory", collision_tracker.sum() / n_nodes)
+
         return loss
 
     def test_step(self, batch: Batch, batch_idx: int):
@@ -5817,6 +5916,7 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
 
         # Allocate target/prediction tensors
         n_nodes = batch.num_nodes
+        collision_tracker = torch.zeros(n_nodes)
         y_hat = torch.zeros((self.prediction_horizon - 11, n_nodes, self.out_features))
         y_target = torch.zeros(
             (self.prediction_horizon - 11, n_nodes, self.out_features)
@@ -5840,6 +5940,20 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
         for t in range(11, self.prediction_horizon - 1):
             predicted_pos += delta_pos
             predicted_graph = torch.cat([predicted_pos, last_vel], dim=1)
+
+            # Detect collisions
+            edge_index_collisions = torch_geometric.nn.radius_graph(
+                x=predicted_graph[:, :2],
+                r=1.0,
+                batch=batch.batch,
+                loop=False,
+                max_num_neighbors=100,
+                flow="source_to_target",
+            )
+
+            if edge_index_collisions.numel() > 0:
+                collision_tracker[edge_index_collisions[0]] = 1
+
             y_hat[t - 10, :, :] = predicted_graph[:, : self.out_features]
             y_target[t - 10, :, :] = batch.x[:, t + 1, : self.out_features]
 
@@ -5882,6 +5996,11 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
         self.log("test_vel_loss", vel_loss)
         self.log("test_fde_ttp_loss", fde_ttp_loss)
         self.log("test_ade_ttp_loss", ade_ttp_loss)
+
+        self.log("test_collision_counter", collision_tracker.sum(), reduce_fx=torch.sum)
+        self.log("test_trajectory_counter", n_nodes, reduce_fx=torch.sum)
+        self.log("test_collision/trajectory", collision_tracker.sum() / n_nodes)
+
 
         return ade_loss
 
@@ -5935,7 +6054,7 @@ class ConstantPhysicalBaselineModule(pl.LightningModule):
             predicted_graph = torch.cat([predicted_pos, last_vel], dim=-1)
             y_hat[t, mask_t, :] = predicted_graph
 
-        for t in range(11, prediction_horizon-1):
+        for t in range(11, prediction_horizon - 1):
             last_pos = predicted_pos
             predicted_pos = last_pos + delta_pos
             predicted_graph = torch.cat([predicted_pos, last_vel], dim=-1)
@@ -6005,7 +6124,7 @@ def main(config):
         trainer.validate(regressor, datamodule=datamodule, ckpt_path="best" if config["misc"]["regressor_type"] != "ConstantPhysicalBaselineModule" else None)
 
     if config["misc"]["test"]:
-        trainer.test(regressor, datamodule=datamodule, ckpt_path="best")
+        trainer.test(regressor, datamodule=datamodule, ckpt_path="best"  if config["misc"]["regressor_type"] != "ConstantPhysicalBaselineModule" else None)
 
 
 if __name__ == "__main__":

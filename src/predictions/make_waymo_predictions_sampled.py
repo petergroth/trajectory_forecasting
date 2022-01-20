@@ -9,12 +9,13 @@ import pytorch_lightning as pl
 import torch
 import yaml
 # from models import ConstantModel
+from matplotlib import rc
 from matplotlib.patches import Circle, Ellipse, Rectangle
 from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning.utilities.seed import seed_everything
 
 from src.data.dataset_waymo import OneStepWaymoDataModule
-from src.training_modules.train_waymo_gauss_exp import *
+from src.training_modules.train_waymo_model import *
 
 
 def make_sampled_predictions(path, config, n_steps=51, sequence_idx=0, seed=0):
@@ -33,7 +34,7 @@ def make_sampled_predictions(path, config, n_steps=51, sequence_idx=0, seed=0):
         regressor = eval(config["misc"]["regressor_type"])(**config["regressor"])
         # Setup
     regressor.eval()
-    datamodule.setup()
+    datamodule.setup("test")
     dataset = datamodule.test_dataset
     # Extract batch and add missing attributes
     batch = dataset.__getitem__(sequence_idx)
@@ -41,20 +42,11 @@ def make_sampled_predictions(path, config, n_steps=51, sequence_idx=0, seed=0):
     batch.num_graphs = 1
 
     # Make and return predictions
-    y_hat, y_target, mask, Sigma, pos_loc = regressor.sample_trajectories(
-        batch, prediction_horizon=n_steps
-    )
-    return y_hat.detach(), y_target, mask, batch, Sigma.detach(), pos_loc.detach()
-
-
-def eigsorted(cov):
-    # Source:
-    # Ben from https://stackoverflow.com/questions/20126061/
-    # creating-a-confidence-ellipses-in-a-sccatterplot-using-matplotlib?noredirect=1&lq=1
-
-    vals, vecs = np.linalg.eigh(cov)
-    order = vals.argsort()[::-1]
-    return vals[order], vecs[:, order]
+    with torch.no_grad():
+        y_hat, y_target, mask = regressor.sample_trajectories(
+            batch, prediction_horizon=n_steps, n_trajectories=10
+        )
+    return y_hat.detach(), y_target, mask, batch
 
 
 def plot_time_step(ax, t, states, alpha, colors, n_steps):
@@ -73,19 +65,19 @@ def plot_time_step(ax, t, states, alpha, colors, n_steps):
         edgecolors=edgecolors,
     )
     # Draw velocity arrows at first and final future predictions
-    if t == 10 or t == n_steps - 2:
-        ax.quiver(
-            states[t, :, 0].detach().numpy(),
-            states[t, :, 1].detach().numpy(),
-            states[t, :, 2].detach().numpy(),
-            states[t, :, 3].detach().numpy(),
-            width=0.003,
-            headwidth=5,
-            angles="xy",
-            scale_units="xy",
-            scale=1.0,
-            color="lightgrey" if t == 10 else "k",
-        )
+    # if t == 10 or t == n_steps - 2:
+    #     ax.quiver(
+    #         states[t, :, 0].detach().numpy(),
+    #         states[t, :, 1].detach().numpy(),
+    #         states[t, :, 2].detach().numpy(),
+    #         states[t, :, 3].detach().numpy(),
+    #         width=0.003,
+    #         headwidth=5,
+    #         angles="xy",
+    #         scale_units="xy",
+    #         scale=1.0,
+    #         color="lightgrey" if t == 10 else "k",
+    #     )
 
     return ax
 
@@ -162,6 +154,7 @@ def main():
     parser.add_argument("output_path")
     parser.add_argument("sequence_idx", type=int)
     parser.add_argument("n_steps", type=int, default=51)
+    parser.add_argument("format", type=str)
     args = parser.parse_args()
 
     # Load config file
@@ -169,15 +162,19 @@ def main():
         config = yaml.safe_load(f)
 
     # Make predictions
-    y_hat, y_target, mask, batch, Sigma, pos_loc = make_sampled_predictions(
+    y_hat, y_target, mask, batch = make_sampled_predictions(
         path=args.ckpt_path,
         config=config,
         sequence_idx=args.sequence_idx,
         n_steps=args.n_steps,
     )
+    # Create directory for visualisations
+    output_dir = f"visualisations/seq_{args.sequence_idx:04}"
+    os.makedirs(output_dir, exist_ok=True)
+    prediction_path = output_dir+f"/{args.output_path}_sampled_alt.{args.format}"
     # Extract sequence information and roadmap
     n_steps = args.n_steps
-    _, n_agents, n_features = y_hat.shape
+    _, n_trajectories, n_agents, n_features = y_hat.shape
     roadgraph = batch.u.squeeze().numpy()
     # Remove zero-padding
     roadgraph = roadgraph[:, 40:-40, 40:-40]
@@ -193,11 +190,20 @@ def main():
         loc_y + width / 2,
     )
     x_min, x_max, y_min, y_max = extent
-    # Create directory for visualisations
-    os.makedirs(args.output_path, exist_ok=True)
+
+    # Plotting options
+    rc("text", usetex=True)
+    rc("font", **{"family": "serif", "serif": ["Computer Modern Roman"]})
+
+    ticksize = 30
+    titlesize = 35
+    plt.rcParams["axes.labelsize"] = titlesize
+    plt.rcParams["axes.titlesize"] = titlesize
+    plt.rcParams["xtick.labelsize"] = ticksize
+    plt.rcParams["ytick.labelsize"] = ticksize
 
     # Create figure
-    fig, ax = plt.subplots(1, 2, figsize=(20, 10))
+    fig, ax = plt.subplots(figsize=(10, 10), constrained_layout=True)
 
     # Plot each map channel separately using different colors/opacities
     layer_colors = [
@@ -213,18 +219,18 @@ def main():
     layer_alphas = [0.2, 0.3, 0.5, 1, 0.5, 1, 1, 1]
     for layer_id in range(8):
         layer_mask = roadgraph[layer_id].astype(float)
-        for i in range(2):
-            ax[i].imshow(
-                layer_mask,
-                aspect="equal",
-                cmap=layer_colors[layer_id],
-                norm=colors.Normalize(vmin=-2, vmax=1.0),
-                extent=extent,
-                origin="lower",
-                alpha=layer_mask * layer_alphas[layer_id],
-                # interpolation="bessel"
-            )
 
+        ax.imshow(
+            layer_mask,
+            aspect="equal",
+            cmap=layer_colors[layer_id],
+            norm=colors.Normalize(vmin=-2, vmax=1.0),
+            extent=extent,
+            origin="lower",
+            alpha=layer_mask * layer_alphas[layer_id],
+            # interpolation="bessel"
+        )
+    np.random.seed(5)
     # Create colors and opacities for all agents in scene
     agent_colors = [
         (np.random.random(), np.random.random(), np.random.random())
@@ -232,67 +238,27 @@ def main():
     ]
     alphas = np.linspace(0.1, 1, n_steps)
 
-    # Number of standard deviations for covariance matric to visualise
-    nstd = 1
-
     # Main loop
     for t in range(n_steps - 1):
-        # Plot groundtruth
-        ax[0] = plot_time_step(
-            ax=ax[0],
-            t=t,
-            states=y_target,
-            alpha=alphas[t],
-            colors=agent_colors,
-            n_steps=n_steps,
-        )
-        ax[1] = plot_time_step(
-            ax=ax[1],
-            t=t,
-            states=y_hat,
-            alpha=alphas[t],
-            colors=agent_colors,
-            n_steps=n_steps,
-        )
-
-        loc = pos_loc[t].numpy()
-        # Visualise covariance matrices for all agents
-        for agent in range(n_agents):
-            vals, vecs = eigsorted(Sigma[t, agent].detach().numpy())
-            theta = np.degrees(np.arctan2(*vecs[:, 0][::-1]))
-            w, h = 2 * nstd * np.sqrt(vals)
-            ell = Ellipse(
-                xy=loc[agent],
-                width=w,
-                height=h,
-                angle=theta,
-                color=agent_colors[agent],
-                alpha=0.2,
+        for n in range(n_trajectories):
+            ax = plot_time_step(
+                ax=ax,
+                t=t,
+                states=y_hat[:, n],
+                alpha=alphas[t],
+                colors=agent_colors,
+                n_steps=n_steps,
             )
-            ax[1].add_artist(ell)
-            # print(Sigma[t, agent].detach().numpy())
 
-        # ax[1] = plot_edges_single_agent(ax=ax[1], t=t, states=y_hat, alpha=alphas[t], agent=3, mask=mask)
-        # ax[1] = plot_edges_all_agents(
-        #     ax=ax[1],
-        #     t=t,
-        #     states=y_hat,
-        #     dist=config["regressor"]["min_dist"],
-        #     n_neighbours=config["regressor"]["n_neighbours"],
-        # )
-        # ax[1] = plot_edges_single_agent(ax=ax[1], t=t, states=y_hat, alpha=alphas[t], agent=0, mask=mask)
 
-    ax[0].axis("equal")
-    ax[0].set_xlim((x_min, x_max))
-    ax[0].set_ylim((y_min, y_max))
-    ax[1].axis("equal")
-    ax[1].set_xlim((x_min, x_max))
-    ax[1].set_ylim((y_min, y_max))
-    ax[0].set_title("Groundtruth trajectories")
-    ax[1].set_title("Predicted trajectories")
+    ax.axis("equal")
+    ax.set_xlim((x_min, x_max))
+    ax.set_ylim((y_min, y_max))
+    # ax[0].set_title("Groundtruth trajectories")
+    # ax[1].set_title("Predicted trajectories")
 
-    plt.show()
-    # fig.savefig(f"{args.output_path}/sequence_{args.sequence_idx:04}_{n_steps}_sig_{nstd}.png")
+    # plt.show()
+    fig.savefig(prediction_path)
 
 
 if __name__ == "__main__":
