@@ -1461,15 +1461,6 @@ class WaymoLocalModule(pl.LightningModule):
                 map_ranges[i, 2], map_ranges[i, 3], 150 * 2 + 1
             )
 
-        # Allocate local map tensor
-        u_local = torch.zeros(
-            n_nodes,
-            batch.u.size(1),
-            self.local_map_resolution + 1,
-            self.local_map_resolution + 1
-        )
-        u_local = u_local.type_as(batch.x)
-
         ######################
         # History            #
         ######################
@@ -1523,6 +1514,15 @@ class WaymoLocalModule(pl.LightningModule):
             # Map encoding 1/2    #
             #######################
 
+            # Allocate local map tensor
+            u_local = torch.zeros(
+                x_t.size(0),
+                batch.u.size(1),
+                self.local_map_resolution + 1,
+                self.local_map_resolution + 1
+            )
+            u_local = u_local.type_as(batch.x)
+
             # Find closest pixels in x and y directions
             center_pixel_x = (
                 torch.argmax(
@@ -1568,7 +1568,7 @@ class WaymoLocalModule(pl.LightningModule):
                     ]
 
             # Perform map encoding
-            u = self.map_encoder(u_local[mask_t])
+            u = self.map_encoder(u_local)
 
             #######################
             # Training 1/2        #
@@ -1676,6 +1676,15 @@ class WaymoLocalModule(pl.LightningModule):
             #######################
             # Map encoding 2/2    #
             #######################
+
+            # Allocate local map tensor
+            u_local = torch.zeros(
+                x_t.size(0),
+                batch.u.size(1),
+                self.local_map_resolution + 1,
+                self.local_map_resolution + 1
+            )
+            u_local = u_local.type_as(batch.x)
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
@@ -3338,15 +3347,6 @@ class WaymoLocalUAModule(pl.LightningModule):
                 map_ranges[i, 2], map_ranges[i, 3], 150 * 2 + 1
             )
 
-        # Allocate local map tensor
-        u_local = torch.zeros(
-            n_nodes,
-            batch.u.size(1),
-            self.local_map_resolution + 1,
-            self.local_map_resolution + 1
-        )
-        u_local = u_local.type_as(batch.x)
-
         ######################
         # History            #
         ######################
@@ -3402,6 +3402,15 @@ class WaymoLocalUAModule(pl.LightningModule):
             # Map encoding 1/2    #
             #######################
 
+            # Allocate local map tensor
+            u_local = torch.zeros(
+                x_t.size(0),
+                batch.u.size(1),
+                self.local_map_resolution + 1,
+                self.local_map_resolution + 1
+            )
+            u_local = u_local.type_as(batch.x)
+
             # Find closest pixels in x and y directions
             center_pixel_x = (
                 torch.argmax(
@@ -3447,7 +3456,7 @@ class WaymoLocalUAModule(pl.LightningModule):
                     ]
 
             # Perform map encoding
-            u = self.map_encoder(u_local[mask_t])
+            u = self.map_encoder(u_local)
 
             #######################
             # Training 1/2        #
@@ -3572,6 +3581,15 @@ class WaymoLocalUAModule(pl.LightningModule):
             #######################
             # Map encoding 2/2    #
             #######################
+
+            # Allocate local map tensor
+            u_local = torch.zeros(
+                x_t.size(0),
+                batch.u.size(1),
+                self.local_map_resolution + 1,
+                self.local_map_resolution + 1
+            )
+            u_local = u_local.type_as(batch.x)
 
             # Find closest pixels in x and y directions
             center_pixel_x = (
@@ -5984,7 +6002,7 @@ def main(config):
         trainer.fit(model=regressor, datamodule=datamodule)
 
     if config["misc"]["validate"]:
-        trainer.validate(regressor, datamodule=datamodule, ckpt_path="best")
+        trainer.validate(regressor, datamodule=datamodule, ckpt_path="best" if config["misc"]["regressor_type"] != "ConstantPhysicalBaselineModule" else None)
 
     if config["misc"]["test"]:
         trainer.test(regressor, datamodule=datamodule, ckpt_path="best")

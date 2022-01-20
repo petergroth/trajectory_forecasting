@@ -2,8 +2,6 @@ import numpy as np
 import pandas as pd
 
 
-
-
 if __name__ == '__main__':
     path = f"results/nbody/nbody_results_01.csv"
     df = pd.read_csv(path)

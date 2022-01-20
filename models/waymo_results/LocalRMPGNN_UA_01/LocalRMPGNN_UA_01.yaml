@@ -44,11 +44,11 @@ trainer:
   gradient_clip_val: 5.0
 logger:
   offline: false
-  version: LocalRMPGNN_UA_02
+  version: LocalRMPGNN_UA_01
   project: Waymo_finalised_results
-  name: LocalRMPGNN_UA_02
+  name: LocalRMPGNN_UA_01
 misc:
-  seed: 1
+  seed: 0
   model_type: LocalRMPGNN
   dm_type: SequentialWaymoDataModule
   regressor_type: WaymoLocalUAModule

@@ -1,0 +1,42 @@
+datamodule:
+  batch_size: 8
+  shuffle: true
+  val_batch_size: 8
+model: {}
+regressor:
+  out_features: 4
+  noise: null
+  lr: 0.0001
+  weight_decay: 0.0
+  min_dist: 10
+  n_neighbours: 15
+  edge_weight: true
+  normalise: false
+  node_features: 15
+  edge_features: 1
+  teacher_forcing_ratio: 0.0
+  prediction_horizon: 51
+trainer:
+  check_val_every_n_epoch: 1
+  max_epochs: 5
+  deterministic: false
+  num_sanity_val_steps: 2
+  precision: 32
+  val_check_interval: 1.0
+  gpus: 0
+  default_root_dir: logs
+  detect_anomaly: false
+logger:
+  offline: false
+  version: Constant_baseline
+  project: Waymo_finalised_results
+  name: Constant_baseline
+misc:
+  seed: 2
+  model_type: none
+  dm_type: SequentialWaymoDataModule
+  regressor_type: ConstantPhysicalBaselineModule
+  train: false
+  validate: true
+  test: true
+  log_freq: 10

@@ -53,6 +53,7 @@ if __name__ == '__main__':
     n_steps = 51
     n_agents = states.shape[1]
 
+
     # Create colors and opacities for all agents in scene
     np.random.seed(5)
     agent_colors = [
@@ -93,40 +94,32 @@ if __name__ == '__main__':
     # Plot all channels together
     for layer_id in range(8):
         layer_mask = roadgraph[layer_id].astype(np.float)
+        local_layer = layer_mask[140:181, 144:185]
         ax.imshow(
-            layer_mask,
+            local_layer,
             aspect="equal",
             cmap=layer_colors[layer_id],
             norm=colors.Normalize(vmin=-2, vmax=1.0),
             extent=extent,
             origin="lower",
-            alpha=layer_mask * layer_alphas[layer_id],
-        )
-
-        # Main loop
-    for t in range(n_steps - 1):
-        # Plot groundtruth
-        ax = plot_time_step(
-            ax=ax,
-            t=t,
-            states=states,
-            alpha=alphas[t],
-            colors=agent_colors,
-            n_steps=n_steps,
+            alpha=local_layer * layer_alphas[layer_id],
         )
 
     ax.axis("equal")
-    ax.set_xlim((x_min, x_max))
-    ax.set_ylim((y_min, y_max))
+    ax.set_xticks([])
+    ax.set_yticks([])
+
+    # ax.set_xlim((x_min, x_max))
+    # ax.set_ylim((y_min, y_max))
     # ax[0].set_title("Groundtruth trajectories")
     # ax[1].set_title("Predicted trajectories")
 
     # plt.tight_layout()
     # plt.show()
-
+    #
     plt.savefig(
-        f"../../thesis/graphics/waymo/map_example_w_cars.pdf"
+        f"../../thesis/graphics/waymo/local_map.pdf"
     )
     plt.savefig(
-        f"visualisations/waymo/map_example_w_cars.pdf"
+        f"visualisations/waymo/local_map.pdf"
     )

@@ -571,6 +571,7 @@ class node_gcn(nn.Module):
 
 
 class road_encoder(nn.Module):
+    # Architecture is based on the Trajectron++'s map encoder
     def __init__(
         self, width: int = 300, hidden_size: int = 41, in_map_channels: int = 8
     ):

@@ -9,17 +9,17 @@ model:
   edge_features: 1
   rnn_size: 32
   rnn_edge_size: 16
-  out_features: 5
+  out_features: 2
   num_layers: 1
   rnn_type: LSTM
   latent_edge_features: 16
   map_encoding_size: 32
 regressor:
-  out_features: 7
+  out_features: 4
   noise: null
   lr: 0.001
   weight_decay: 0.0
-  min_dist: 10
+  min_dist: 0.001
   n_neighbours: 20
   edge_weight: true
   normalise: true
@@ -44,15 +44,15 @@ trainer:
   gradient_clip_val: 5.0
 logger:
   offline: false
-  version: LocalRMPGNN_UA_02
+  version: LocalRMPGNN_01
   project: Waymo_finalised_results
-  name: LocalRMPGNN_UA_02
+  name: LocalRMPGNN_01
 misc:
-  seed: 1
+  seed: 0
   model_type: LocalRMPGNN
   dm_type: SequentialWaymoDataModule
-  regressor_type: WaymoLocalUAModule
+  regressor_type: WaymoLocalModule
   train: true
-  validate: false
-  test: false
+  validate: true
+  test: true
   log_freq: 10

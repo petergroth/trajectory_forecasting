@@ -19,7 +19,7 @@ regressor:
   noise: null
   lr: 0.001
   weight_decay: 0.0
-  min_dist: 10
+  min_dist: 0.001
   n_neighbours: 20
   edge_weight: true
   normalise: true
@@ -44,11 +44,11 @@ trainer:
   gradient_clip_val: 5.0
 logger:
   offline: false
-  version: LocalRMPGNN_UA_02
+  version: LocalRMPGNN_UA_no_dist
   project: Waymo_finalised_results
-  name: LocalRMPGNN_UA_02
+  name: LocalRMPGNN_UA_no_dist
 misc:
-  seed: 1
+  seed: 0
   model_type: LocalRMPGNN
   dm_type: SequentialWaymoDataModule
   regressor_type: WaymoLocalUAModule
