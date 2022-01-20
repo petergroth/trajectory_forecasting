@@ -9,6 +9,7 @@ import pytorch_lightning as pl
 import torch
 import yaml
 # from models import ConstantModel
+from matplotlib import rc
 from matplotlib.patches import Circle, Ellipse, Rectangle
 from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning.utilities.seed import seed_everything
@@ -17,7 +18,8 @@ from src.data.dataset_waymo import OneStepWaymoDataModule
 from src.training_modules.train_waymo_model import *
 
 
-def make_predictions(path, config, n_steps=51, sequence_idx=0):
+def make_predictions(path: str, config: str, n_steps: int = 51, sequence_idx: int = 0, covariance: bool = False,
+                     **kwargs):
     # Set seed
     seed_everything(config["misc"]["seed"], workers=True)
     # Load datamodule
@@ -27,13 +29,14 @@ def make_predictions(path, config, n_steps=51, sequence_idx=0):
     datamodule = eval(config["misc"]["dm_type"])(**config["datamodule"])
 
     # Load correct model
-    if config["misc"]["model_type"] != "ConstantModel":
+    if config["misc"]["regressor_type"] != "ConstantPhysicalBaselineModule":
         regressor = eval(config["misc"]["regressor_type"]).load_from_checkpoint(path)
     else:
         regressor = eval(config["misc"]["regressor_type"])(**config["regressor"])
-        # Setup
+
+    # Setup
     regressor.eval()
-    datamodule.setup()
+    datamodule.setup("test")
     dataset = datamodule.test_dataset
     # Extract batch and add missing attributes
     batch = dataset.__getitem__(sequence_idx)
@@ -41,10 +44,16 @@ def make_predictions(path, config, n_steps=51, sequence_idx=0):
     batch.num_graphs = 1
 
     # Make and return predictions
-    y_hat, y_target, mask, Sigma = regressor.predict_step(
-        batch, prediction_horizon=n_steps
-    )
-    return y_hat.detach(), y_target, mask, batch, Sigma.detach()
+    if not covariance:
+        y_hat, y_target, mask = regressor.predict_step(
+            batch, prediction_horizon=n_steps, **kwargs
+        )
+        return y_hat.detach(), y_target, mask, batch
+    else:
+        y_hat, y_target, mask, Sigma = regressor.predict_step(
+            batch, prediction_horizon=n_steps
+        )
+        return y_hat.detach(), y_target, mask, batch, Sigma.detach()
 
 
 def eigsorted(cov):
@@ -65,11 +74,11 @@ def plot_time_step(ax, t, states, alpha, colors, n_steps):
         y=states[t, :, 1].numpy(),
         s=50,
         color=colors,
-        alpha=alpha,
+        alpha=alpha if t != 10 else 0.5,
         edgecolors=edgecolors,
     )
     # Draw velocity arrows at first and final future predictions
-    if t == 10 or t == n_steps - 2:
+    if t == n_steps - 2:
         ax.quiver(
             states[t, :, 0].detach().numpy(),
             states[t, :, 1].detach().numpy(),
@@ -80,7 +89,7 @@ def plot_time_step(ax, t, states, alpha, colors, n_steps):
             angles="xy",
             scale_units="xy",
             scale=1.0,
-            color="lightgrey" if t == 10 else "k",
+            color="k",
         )
 
     return ax
@@ -165,7 +174,7 @@ def main():
         config = yaml.safe_load(f)
 
     # Make predictions
-    y_hat, y_target, mask, batch, Sigma = make_predictions(
+    y_hat, y_target, mask, batch = make_predictions(
         path=args.ckpt_path,
         config=config,
         sequence_idx=args.sequence_idx,
@@ -176,7 +185,19 @@ def main():
     _, n_agents, n_features = y_hat.shape
     roadgraph = batch.u.squeeze().numpy()
     # Remove zero-padding
-    roadgraph = roadgraph[:, 40:-40, 40:-40]
+    if roadgraph.shape[1] != 300:
+        roadgraph = roadgraph[:, 40:-40, 40:-40]
+
+    # Plotting options
+    rc("text", usetex=True)
+    rc("font", **{"family": "serif", "serif": ["Computer Modern Roman"]})
+
+    ticksize = 30
+    titlesize = 35
+    plt.rcParams["axes.labelsize"] = titlesize
+    plt.rcParams["axes.titlesize"] = titlesize
+    plt.rcParams["xtick.labelsize"] = ticksize
+    plt.rcParams["ytick.labelsize"] = ticksize
 
     # Extract map information
     loc_x = batch.loc[:, 0].squeeze().numpy()
@@ -208,7 +229,7 @@ def main():
     ]
     layer_alphas = [0.2, 0.3, 0.5, 1, 0.5, 1, 1, 1]
     for layer_id in range(8):
-        layer_mask = roadgraph[layer_id].astype(np.float)
+        layer_mask = roadgraph[layer_id].astype(float)
         for i in range(2):
             ax[i].imshow(
                 layer_mask,
@@ -222,14 +243,12 @@ def main():
             )
 
     # Create colors and opacities for all agents in scene
+    np.random.seed(42)
     agent_colors = [
         (np.random.random(), np.random.random(), np.random.random())
         for _ in range(n_agents)
     ]
     alphas = np.linspace(0.1, 1, n_steps)
-
-    # Number of standard deviations for covariance matric to visualise
-    nstd = 1
 
     # Main loop
     for t in range(n_steps - 1):
@@ -251,22 +270,6 @@ def main():
             n_steps=n_steps,
         )
 
-        # Visualise covariance matrices for all agents
-        for agent in range(n_agents):
-            vals, vecs = eigsorted(Sigma[t, agent].detach().numpy())
-            theta = np.degrees(np.arctan2(*vecs[:, 0][::-1]))
-            w, h = 2 * nstd * np.sqrt(vals)
-            loc = y_hat[t, agent, :2].numpy()
-            ell = Ellipse(
-                xy=loc,
-                width=w,
-                height=h,
-                angle=theta,
-                color=agent_colors[agent],
-                alpha=0.2,
-            )
-            ax[1].add_artist(ell)
-
         # ax[1] = plot_edges_single_agent(ax=ax[1], t=t, states=y_hat, alpha=alphas[t], agent=3, mask=mask)
         # ax[1] = plot_edges_all_agents(
         #     ax=ax[1],
@@ -286,8 +289,8 @@ def main():
     ax[0].set_title("Groundtruth trajectories")
     ax[1].set_title("Predicted trajectories")
 
-    plt.show()
-    # fig.savefig(f"{args.output_path}/sequence_{args.sequence_idx:04}_{n_steps}.png")
+    # plt.show()
+    fig.savefig(f"{args.output_path}/sequence_{args.sequence_idx:04}_{n_steps}.png")
 
 
 if __name__ == "__main__":
