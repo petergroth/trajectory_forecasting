@@ -108,4 +108,3 @@ todo.txt
 *.ckpt
 /configs/waymo/old_configs/
 /configs/nbody/model/old_configs/
-/visualisations/
