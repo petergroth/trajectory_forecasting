@@ -15,6 +15,9 @@ def generate_fully_connected_edges(n_nodes: int):
 
 
 def parse_sequence(data):
+    # This function is taken from the Waymo Open Dataset Motion Tutorial:
+    # https://github.com/waymo-research/waymo-open-dataset/blob/master/tutorial/tutorial_motion.ipynb
+
     # Example field definition
     roadgraph_features = {
         "roadgraph_samples/dir": tf.io.FixedLenFeature(

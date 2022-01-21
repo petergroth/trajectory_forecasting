@@ -44,8 +44,8 @@ def main():
 
     # Load trainer
     trainer = pl.Trainer(**config["trainer"])
-    # datamodule.setup("validate")
-    # trainer.validate(regressor, ckpt_path=args.ckpt_path, datamodule=datamodule)
+    datamodule.setup("validate")
+    trainer.validate(regressor, ckpt_path=args.ckpt_path, datamodule=datamodule)
 
     # Test
     datamodule.setup("test")
