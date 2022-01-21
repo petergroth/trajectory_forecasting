@@ -8,6 +8,7 @@ import numpy as np
 import pytorch_lightning as pl
 import torch
 import yaml
+
 # from models import ConstantModel
 from matplotlib import rc
 from matplotlib.patches import Circle, Ellipse, Rectangle
@@ -18,8 +19,14 @@ from src.data.dataset_waymo import OneStepWaymoDataModule
 from src.training_modules.train_waymo_model import *
 
 
-def make_predictions(path: str, config: str, n_steps: int = 51, sequence_idx: int = 0, covariance: bool = False,
-                     **kwargs):
+def make_predictions(
+    path: str,
+    config: str,
+    n_steps: int = 51,
+    sequence_idx: int = 0,
+    covariance: bool = False,
+    **kwargs,
+):
     # Set seed
     seed_everything(config["misc"]["seed"], workers=True)
     # Load datamodule

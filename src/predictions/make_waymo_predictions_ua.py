@@ -8,6 +8,7 @@ import numpy as np
 import pytorch_lightning as pl
 import torch
 import yaml
+
 # from models import ConstantModel
 from matplotlib.patches import Circle, Ellipse, Rectangle
 from omegaconf import DictConfig, OmegaConf
@@ -291,7 +292,9 @@ def main():
     ax[1].set_title("Predicted trajectories")
 
     # plt.show()
-    fig.savefig(f"{args.output_path}/sequence_{args.sequence_idx:04}_{n_steps}_sig_{nstd}.png")
+    fig.savefig(
+        f"{args.output_path}/sequence_{args.sequence_idx:04}_{n_steps}_sig_{nstd}.png"
+    )
 
 
 if __name__ == "__main__":

@@ -16,8 +16,7 @@ from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.utilities.seed import seed_everything
 from torch_geometric.data import Batch
 
-from src.data.dataset_waymo import (OneStepWaymoDataModule,
-                                    SequentialWaymoDataModule)
+from src.data.dataset_waymo import OneStepWaymoDataModule, SequentialWaymoDataModule
 from src.models.model import *
 from src.models.train_waymo_model_angle_param import *
 

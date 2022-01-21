@@ -15,10 +15,11 @@ from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning.utilities.seed import seed_everything
 
 from src.data.dataset_waymo import SequentialWaymoDataModule
+
 # from src.training_modules.train_waymo_model import *
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
 
     # Setup datamodule
     dm = SequentialWaymoDataModule()
@@ -69,8 +70,16 @@ if __name__ == '__main__':
 
     fig, ax = plt.subplots(1, 1, figsize=(10, 10))
 
-    titles = ["LaneCenters", "BikeLaneCenter", "BrokenWhite", "SolidWhite",
-              "BrokenYellow", "SolidYellow", "Boundaries", "Stopsign/Crosswalk/SpeedBump"]
+    titles = [
+        "LaneCenters",
+        "BikeLaneCenter",
+        "BrokenWhite",
+        "SolidWhite",
+        "BrokenYellow",
+        "SolidYellow",
+        "Boundaries",
+        "Stopsign/Crosswalk/SpeedBump",
+    ]
 
     # Plot all channels together
     for layer_id in range(8):
@@ -86,12 +95,8 @@ if __name__ == '__main__':
         )
 
     plt.tight_layout()
-    plt.savefig(
-        f"../../thesis/graphics/waymo/map_example.pdf"
-    )
-    plt.savefig(
-        f"visualisations/waymo/map_example.pdf"
-    )
+    plt.savefig(f"../../thesis/graphics/waymo/map_example.pdf")
+    plt.savefig(f"visualisations/waymo/map_example.pdf")
 
     # Setup grid plotting
     rc("text", usetex=True)
@@ -103,7 +108,6 @@ if __name__ == '__main__':
     plt.rcParams["axes.titlesize"] = titlesize
     plt.rcParams["xtick.labelsize"] = ticksize
     plt.rcParams["ytick.labelsize"] = ticksize
-
 
     # Plot all channels together
     fig, ax = plt.subplots(2, 2, figsize=(20, 20))
@@ -120,14 +124,9 @@ if __name__ == '__main__':
         )
         ax.flatten()[layer_id].set_title(titles[layer_id])
 
-
     plt.tight_layout()
-    plt.savefig(
-        f"../../thesis/graphics/waymo/map_example_grid_1of2.pdf"
-    )
-    plt.savefig(
-        f"visualisations/waymo/map_example_grid_1of2.pdf"
-    )
+    plt.savefig(f"../../thesis/graphics/waymo/map_example_grid_1of2.pdf")
+    plt.savefig(f"visualisations/waymo/map_example_grid_1of2.pdf")
 
     # Plot all channels together
     fig, ax = plt.subplots(2, 2, figsize=(20, 20))
@@ -145,9 +144,5 @@ if __name__ == '__main__':
         ax.flatten()[layer_id - 4].set_title(titles[layer_id])
 
     plt.tight_layout()
-    plt.savefig(
-        f"../../thesis/graphics/waymo/map_example_grid_2of2.pdf"
-    )
-    plt.savefig(
-        f"visualisations/waymo/map_example_grid_2of2.pdf"
-    )
+    plt.savefig(f"../../thesis/graphics/waymo/map_example_grid_2of2.pdf")
+    plt.savefig(f"visualisations/waymo/map_example_grid_2of2.pdf")

@@ -187,7 +187,7 @@ class AttentionalGNN(nn.Module):
         middle_gat: bool = False,
         out_features: int = 4,
         edge_features: int = 1,
-        norm: bool = False
+        norm: bool = False,
     ):
         super(AttentionalGNN, self).__init__()
         self.hidden_size = hidden_size
@@ -201,7 +201,7 @@ class AttentionalGNN(nn.Module):
                 heads=heads,
                 out_features=hidden_size,
                 edge_features=edge_features,
-                norm=norm
+                norm=norm,
             ),
         )
 
@@ -213,7 +213,7 @@ class AttentionalGNN(nn.Module):
                     heads=heads,
                     out_features=hidden_size,
                     edge_features=edge_features,
-                    norm=norm
+                    norm=norm,
                 ),
             )
             # Apply skip connection across this layer. Compute new input size
