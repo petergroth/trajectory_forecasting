@@ -12,7 +12,6 @@ from torch_geometric.nn.norm import BatchNorm, PairNorm
 from torch_geometric.utils import dropout_adj
 from torch_scatter import scatter_add, scatter_mean
 
-# from torch_geometric_temporal.nn import GConvLSTM, GCLSTM, TGCN
 
 
 class node_mlp_1(nn.Module):
@@ -571,7 +570,8 @@ class node_gcn(nn.Module):
 
 
 class road_encoder(nn.Module):
-    # Architecture is based on the Trajectron++'s map encoder
+    # Architecture is based on the Trajectron++'s map encoder:
+    # https://github.com/StanfordASL/Trajectron-plus-plus
     def __init__(
         self, width: int = 300, hidden_size: int = 41, in_map_channels: int = 8
     ):

@@ -57,6 +57,8 @@ def make_predictions(path: str, config: str, n_steps: int = 51, sequence_idx: in
 
 
 def eigsorted(cov):
+    # Function taken from https://stackoverflow.com/questions/20126061/creating-a-confidence-ellipses-in-a-sccatterplot-using-matplotlib
+    # User: Ben
     vals, vecs = np.linalg.eigh(cov)
     order = vals.argsort()[::-1]
     return vals[order], vecs[:, order]
