@@ -6,7 +6,6 @@ from matplotlib.patches import Circle
 from src.utils import load_simulations
 
 
-
 if __name__ == "__main__":
     rc("text", usetex=True)
     rc("font", **{"family": "serif", "serif": ["Computer Modern Roman"]})
@@ -19,7 +18,7 @@ if __name__ == "__main__":
     plt.rcParams["ytick.labelsize"] = ticksize
 
     # Visualise grid of 6 sequences
-    sequence_idxs = [2, 4, 7, 6] #, 8, 9]
+    sequence_idxs = [2, 4, 7, 6]  # , 8, 9]
     fig, ax = plt.subplots(2, 2, figsize=(20, 20))
 
     n_steps = 51
@@ -90,7 +89,6 @@ if __name__ == "__main__":
         ax.flatten()[counter].set_xlim((-100, 100))
         ax.flatten()[counter].set_ylim((-100, 100))
 
-
         # plt.title(r"Simulation of $\textit{n}$-body problem")
         # ax.set_xlabel(r"$\textit{x}$")
         # ax.set_ylabel(r"$\textit{y}$", rotation="horizontal")
@@ -156,7 +154,6 @@ if __name__ == "__main__":
 
     plt.tight_layout()
     # plt.show()
-
 
     plt.savefig(f"../../thesis/graphics/synthetic/nbody_example.pdf")
     plt.savefig(f"visualisations/nbody/nbody_example.pdf")

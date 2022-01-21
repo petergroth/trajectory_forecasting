@@ -8,6 +8,7 @@ import numpy as np
 import pytorch_lightning as pl
 import torch
 import yaml
+
 # from models import ConstantModel
 from matplotlib import rc
 from matplotlib.patches import Circle, Ellipse, Rectangle
@@ -171,7 +172,7 @@ def main():
     # Create directory for visualisations
     output_dir = f"visualisations/seq_{args.sequence_idx:04}"
     os.makedirs(output_dir, exist_ok=True)
-    prediction_path = output_dir+f"/{args.output_path}_sampled_alt.{args.format}"
+    prediction_path = output_dir + f"/{args.output_path}_sampled_alt.{args.format}"
     # Extract sequence information and roadmap
     n_steps = args.n_steps
     _, n_trajectories, n_agents, n_features = y_hat.shape
@@ -249,7 +250,6 @@ def main():
                 colors=agent_colors,
                 n_steps=n_steps,
             )
-
 
     ax.axis("equal")
     ax.set_xlim((x_min, x_max))

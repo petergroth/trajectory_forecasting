@@ -8,13 +8,13 @@ import numpy as np
 import pytorch_lightning as pl
 import torch
 import yaml
+
 # from models import ConstantModel
 from matplotlib.patches import Circle, Ellipse, Rectangle
 from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning.utilities.seed import seed_everything
 
-from src.data.dataset_nbody import (OneStepNBodyDataModule,
-                                    SequentialNBodyDataModule)
+from src.data.dataset_nbody import OneStepNBodyDataModule, SequentialNBodyDataModule
 from src.training_modules.train_nbody_model import *
 
 

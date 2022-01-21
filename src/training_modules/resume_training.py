@@ -17,8 +17,7 @@ from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.utilities.seed import seed_everything
 from torch_geometric.data import Batch
 
-from src.data.dataset_waymo import (OneStepWaymoDataModule,
-                                    SequentialWaymoDataModule)
+from src.data.dataset_waymo import OneStepWaymoDataModule, SequentialWaymoDataModule
 from src.training_modules.train_waymo_nodel import *
 
 
@@ -64,7 +63,9 @@ def main():
 
     # Create trainer, fit, and validate
     trainer = pl.Trainer(
-        logger=wandb_logger, **config["trainer"], callbacks=[checkpoint_callback, summary_callback]
+        logger=wandb_logger,
+        **config["trainer"],
+        callbacks=[checkpoint_callback, summary_callback],
     )
 
     trainer.fit(model=regressor, datamodule=datamodule, ckpt_path=args.ckpt_path)

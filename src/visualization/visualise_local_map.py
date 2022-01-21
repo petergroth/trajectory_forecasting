@@ -18,7 +18,7 @@ from src.data.dataset_waymo import SequentialWaymoDataModule
 from src.predictions.make_waymo_predictions import plot_time_step
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
 
     # Setup datamodule
     dm = SequentialWaymoDataModule()
@@ -52,7 +52,6 @@ if __name__ == '__main__':
     states = batch.x.permute(1, 0, 2)
     n_steps = 51
     n_agents = states.shape[1]
-
 
     # Create colors and opacities for all agents in scene
     np.random.seed(5)
@@ -88,8 +87,16 @@ if __name__ == '__main__':
 
     fig, ax = plt.subplots(1, 1, figsize=(10, 10))
 
-    titles = ["LaneCenters", "BikeLaneCenter", "BrokenWhite", "SolidWhite",
-              "BrokenYellow", "SolidYellow", "Boundaries", "Stopsign/Crosswalk/SpeedBump"]
+    titles = [
+        "LaneCenters",
+        "BikeLaneCenter",
+        "BrokenWhite",
+        "SolidWhite",
+        "BrokenYellow",
+        "SolidYellow",
+        "Boundaries",
+        "Stopsign/Crosswalk/SpeedBump",
+    ]
 
     # Plot all channels together
     for layer_id in range(8):
@@ -117,9 +124,5 @@ if __name__ == '__main__':
     # plt.tight_layout()
     # plt.show()
     #
-    plt.savefig(
-        f"../../thesis/graphics/waymo/local_map.pdf"
-    )
-    plt.savefig(
-        f"visualisations/waymo/local_map.pdf"
-    )
+    plt.savefig(f"../../thesis/graphics/waymo/local_map.pdf")
+    plt.savefig(f"visualisations/waymo/local_map.pdf")

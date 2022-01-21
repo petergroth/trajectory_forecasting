@@ -8,6 +8,7 @@ import pytorch_lightning as pl
 import torch
 import yaml
 from matplotlib import rc
+
 # from models import ConstantModel
 from matplotlib.patches import Circle, Rectangle
 from omegaconf import DictConfig, OmegaConf
@@ -15,8 +16,14 @@ from pytorch_lightning.utilities.seed import seed_everything
 
 from src.data.dataset_nbody import *
 from src.training_modules.train_nbody_model import (
-    ConstantPhysicalBaselineModule, OneStepModule, SequentialModule)
-from src.predictions.make_waymo_predictions import plot_edges_all_agents, plot_edges_single_agent
+    ConstantPhysicalBaselineModule,
+    OneStepModule,
+    SequentialModule,
+)
+from src.predictions.make_waymo_predictions import (
+    plot_edges_all_agents,
+    plot_edges_single_agent,
+)
 
 
 def make_predictions(path: str, config: dict, n_steps: int = 51, sequence_idx: int = 0):
@@ -65,7 +72,6 @@ def main():
     plt.rcParams["axes.titlesize"] = titlesize
     plt.rcParams["xtick.labelsize"] = ticksize
     plt.rcParams["ytick.labelsize"] = ticksize
-
 
     # Load yaml
     with open(args.config) as f:
@@ -163,9 +169,15 @@ def main():
             # ax[1] = plot_edges_all_agents(ax[1], t, torch.Tensor(positions).permute(1, 0, 2),
             #                               dist=config["regressor"]["min_dist"],
             #                               n_neighbours=config["regressor"]["n_neighbours"])
-            ax[1] = plot_edges_single_agent(ax[1], t, torch.Tensor(positions).permute(1, 0, 2), 2, torch.ones_like(torch.Tensor(positions))[:, :, 0],
-                                          dist=config["regressor"]["min_dist"],
-                                          n_neighbours=config["regressor"]["n_neighbours"])
+            ax[1] = plot_edges_single_agent(
+                ax[1],
+                t,
+                torch.Tensor(positions).permute(1, 0, 2),
+                2,
+                torch.ones_like(torch.Tensor(positions))[:, :, 0],
+                dist=config["regressor"]["min_dist"],
+                n_neighbours=config["regressor"]["n_neighbours"],
+            )
 
     # Show final velocities
     if not args.edges:
@@ -198,9 +210,7 @@ def main():
     plt.savefig(
         f"../../thesis/graphics/synthetic/{args.output_path}_{args.sequence_idx}.pdf"
     )
-    plt.savefig(
-        f"visualisations/nbody/{args.output_path}_{args.sequence_idx}.pdf"
-    )
+    plt.savefig(f"visualisations/nbody/{args.output_path}_{args.sequence_idx}.pdf")
 
 
 if __name__ == "__main__":
