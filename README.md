@@ -1,7 +1,7 @@
 Trajectory Forecasting with Graph Neural Networks
 ==============================
 
-Master's Thesis in Mathematical Modelling and Computation (MSc.) at the Technical University of Denmark
+Repository for Master's Thesis in Mathematical Modelling and Computation (MSc.) at the Technical University of Denmark
 
 Project Organization
 ------------
