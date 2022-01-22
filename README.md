@@ -51,6 +51,8 @@ Project Organization
     |   |                                      update functions and full models. Type: torch.nn.Module
     │   │
     │   ├── predictions
+    │   │   ├── compile_nbody_results.py    <- Script to process results
+    │   │   ├── compile_waymo_results.py    <- Script to process results
     │   │   ├── evaluate_nbody.py           <- Script to validate and test n-body models
     │   │   ├── evaluate_waymo.py           <- Script to validate and test Waymo models
     │   │   ├── make_nbody_predictions.py   <- Script to predict and visualise n-body models
@@ -59,15 +61,19 @@ Project Organization
     │   │   └── make_waymo_predictions_ua.py <- Script to predict and visualise Waymo models
     │   │
     │   ├── training_modules
+    │   │   ├── unused_models               <- Dir with various developmental/discontinued files
     │   │   ├── resume_training.py          <- Script to continue training of models. 
     │   │   ├── training_nbody_model.py     <- Script to train/validate/test/predict nbody models. 
     |   |   |                                  Type: pl.LightningModule
     │   │   └── training_waymo_model.py     <- Script to train/validate/test/predict waymo models. 
     |   |                                      Type: pl.LightningModule
     │   │   
-    │   ├── visualization  
-    │   |   └── visualize_nbody_sequence.py <- Script to visualise 1 and 4 n-body simulations
-    │   |
+    │   ├── visualization                   <- Dir with various visualisation scripts
+    │   |   ├── visualise_local_map.py
+    │   |   ├── visualise_maps.py
+    │   |   ├── visualise_maps_w_cars.py
+    │   |   └── visualize_nbody_sequence.py
+    │   │   
     |   └── utils.py                        <- Various helper functions in data generation
     |
     └── visualisations                      <- All visualisations used in the thesis
