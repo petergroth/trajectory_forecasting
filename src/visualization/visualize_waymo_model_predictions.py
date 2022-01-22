@@ -16,8 +16,11 @@ from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning.utilities.seed import seed_everything
 
 from src.data.dataset_waymo import OneStepWaymoDataModule
+from src.predictions.make_waymo_predictions import (eigsorted,
+                                                    make_predictions,
+                                                    plot_edges_single_agent,
+                                                    plot_time_step)
 from src.training_modules.train_waymo_model import *
-from src.predictions.make_waymo_predictions import make_predictions, eigsorted, plot_time_step, plot_edges_single_agent
 
 
 def main():
@@ -27,10 +30,10 @@ def main():
     parser.add_argument("output_path")
     parser.add_argument("sequence_idx", type=int)
     parser.add_argument("n_steps", type=int, default=51)
-    parser.add_argument("--groundtruth", action='store_true')
+    parser.add_argument("--groundtruth", action="store_true")
     parser.add_argument("seed", type=int)
     parser.add_argument("format", type=str)
-    parser.add_argument("--covariance", action='store_true')
+    parser.add_argument("--covariance", action="store_true")
     # parser.add_argument("--remove_edges", action='store_true')
     # parser.add_argument("agent", type=int)
     args = parser.parse_args()
@@ -54,7 +57,7 @@ def main():
             config=config,
             sequence_idx=args.sequence_idx,
             n_steps=args.n_steps,
-            covariance=args.covariance
+            covariance=args.covariance,
         )
         nstd = 1
 
@@ -94,8 +97,8 @@ def main():
     # Create directory for visualisations
     output_dir = f"visualisations/seq_{args.sequence_idx:04}"
     os.makedirs(output_dir, exist_ok=True)
-    groundtruth_path = output_dir+f"/groundtruth.{args.format}"
-    prediction_path = output_dir+f"/{args.output_path}.{args.format}"
+    groundtruth_path = output_dir + f"/groundtruth.{args.format}"
+    prediction_path = output_dir + f"/{args.output_path}.{args.format}"
 
     # Plot each map channel separately using different colors/opacities
     layer_colors = [
@@ -143,7 +146,6 @@ def main():
                 colors=agent_colors,
                 n_steps=n_steps,
             )
-
 
         ax.axis("equal")
         ax.set_xlim((x_min, x_max))

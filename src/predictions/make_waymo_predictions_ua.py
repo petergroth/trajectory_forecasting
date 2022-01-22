@@ -8,7 +8,6 @@ import numpy as np
 import pytorch_lightning as pl
 import torch
 import yaml
-
 # from models import ConstantModel
 from matplotlib.patches import Circle, Ellipse, Rectangle
 from omegaconf import DictConfig, OmegaConf

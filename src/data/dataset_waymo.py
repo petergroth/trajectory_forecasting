@@ -5,14 +5,11 @@ from typing import Optional
 
 import numpy as np
 import pytorch_lightning as pl
-
 # import tensorflow as tf
 import torch
 from torch.nn.functional import one_hot
 from torch_geometric.data import Data, Dataset, InMemoryDataset
 from torch_geometric.loader import DataLoader
-
-from typing import Optional
 
 # from src.utils import parse_sequence
 

@@ -4,12 +4,11 @@ import os
 import hydra
 import matplotlib.colors as colors
 import matplotlib.pyplot as plt
-from matplotlib import rc
 import numpy as np
 import pytorch_lightning as pl
 import torch
 import yaml
-
+from matplotlib import rc
 from matplotlib.patches import Circle, Ellipse, Rectangle
 from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning.utilities.seed import seed_everything

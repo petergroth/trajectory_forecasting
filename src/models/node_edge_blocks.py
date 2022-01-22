@@ -4,16 +4,10 @@ import torch
 import torch.nn.functional as F
 import torch_geometric.utils
 from torch import Tensor, nn
-from torch_geometric.nn import (
-    GATConv,
-    GatedGraphConv,
-    GCNConv,
-    MessagePassing,
-    Sequential,
-)
+from torch_geometric.nn import (GATConv, GatedGraphConv, GCNConv,
+                                MessagePassing, Sequential)
 from torch_geometric.nn.meta import MetaLayer
 from torch_geometric.nn.norm import BatchNorm, PairNorm
-
 # from src.data.dataset import SequentialNBodyDataModule, OneStepNBodyDataModule
 from torch_geometric.utils import dropout_adj
 from torch_scatter import scatter_add, scatter_mean

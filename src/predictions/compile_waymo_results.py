@@ -1,8 +1,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from matplotlib import rc
 import seaborn as sns
+from matplotlib import rc
 
 if __name__ == '__main__':
     ticksize = 30

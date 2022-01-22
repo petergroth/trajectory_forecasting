@@ -8,22 +8,16 @@ import pytorch_lightning as pl
 import torch
 import yaml
 from matplotlib import rc
-
 # from models import ConstantModel
 from matplotlib.patches import Circle, Rectangle
 from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning.utilities.seed import seed_everything
 
 from src.data.dataset_nbody import *
+from src.predictions.make_waymo_predictions import (plot_edges_all_agents,
+                                                    plot_edges_single_agent)
 from src.training_modules.train_nbody_model import (
-    ConstantPhysicalBaselineModule,
-    OneStepModule,
-    SequentialModule,
-)
-from src.predictions.make_waymo_predictions import (
-    plot_edges_all_agents,
-    plot_edges_single_agent,
-)
+    ConstantPhysicalBaselineModule, OneStepModule, SequentialModule)
 
 
 def make_predictions(path: str, config: dict, n_steps: int = 51, sequence_idx: int = 0):

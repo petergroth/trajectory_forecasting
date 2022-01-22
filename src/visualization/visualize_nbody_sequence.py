@@ -5,7 +5,6 @@ from matplotlib.patches import Circle
 
 from src.utils import load_simulations
 
-
 if __name__ == "__main__":
     rc("text", usetex=True)
     rc("font", **{"family": "serif", "serif": ["Computer Modern Roman"]})
