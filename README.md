@@ -26,6 +26,10 @@ Project Organization
     |       ├── trainer                     <- Dir with yaml configuration files for pl.Trainer
     |       └── config.yaml                 <- Default config file
     |    
+    |── models                              <- Full yaml files for all models
+    |   ├── nBody_results                   
+    |   └── waymo_results
+    |    
     ├── src                                 <- Source code for use in this project.
     │   ├── __init__.py                     <- Makes src a Python module
     │   │
@@ -66,7 +70,7 @@ Project Organization
     │   |
     |   └── utils.py                        <- Various helper functions in data generation
     |
-    └── visualisations
+    └── visualisations                      <- All visualisations used in the thesis
         ├── nbody
         └── waymo    
 
