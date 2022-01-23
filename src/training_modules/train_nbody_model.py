@@ -15,7 +15,8 @@ from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.utilities.seed import seed_everything
 from torch_geometric.data import Batch, Data
 
-from src.data.dataset_nbody import OneStepNBodyDataModule, SequentialNBodyDataModule
+from src.data.dataset_nbody import (OneStepNBodyDataModule,
+                                    SequentialNBodyDataModule)
 from src.models.model import *
 
 

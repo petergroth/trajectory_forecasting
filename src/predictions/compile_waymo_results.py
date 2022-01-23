@@ -1,8 +1,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from matplotlib import rc
 import seaborn as sns
+from matplotlib import rc
 
 if __name__ == '__main__':
     ticksize = 30
@@ -24,8 +24,8 @@ if __name__ == '__main__':
 
 
     # Define model names
-    model_types = ["Constant baseline", "MPGNN", "RMPGNN", "RMPGNN (RG)", "RMPGNN (RG, UA)"]
-    vals = processed_results.values[[6, 4, 5, 2, 3]]
+    model_types = ["Constant baseline", "Node MLP", "MPGNN", "RMPGNN", "RMPGNN (RG)", "RMPGNN (RG, UA)"]
+    vals = processed_results.values[[8, 5, 4, 7, 2, 3]]
     columns = ["ade_mean", "ade_std", "fde_mean", "fde_std", "or_mean", "or_std", "ade_ttp_mean",
                "ade_ttp_std", "fde_ttp_mean", "fde_ttp_std"]
     df_clean = pd.DataFrame(vals[:, [0, 1, 2, 3, 6, 7, 10, 11, 12, 13]], index=model_types,
@@ -68,7 +68,7 @@ if __name__ == '__main__':
         # )
         if not i:
             ax.legend(loc='upper left', framealpha=0.8, facecolor='w', frameon=True,
-                        bbox_to_anchor=(1, 0.4) )
+                        bbox_to_anchor=(1, 0.45))
         else:
             ax.legend([])
         ax.set_title(titles[i])
